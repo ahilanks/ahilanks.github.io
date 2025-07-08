@@ -43,10 +43,11 @@
       }
 
       .profile-img {
-        width: 220px;
-        height: 220px;
-        object-fit: cover;
-        border-radius: 20px;
+        width: 220px;          /* fixed width */
+        aspect-ratio: 1 / 1;   /* forces a perfect square */
+        height: auto;          /* derives height from aspect ratio */
+        object-fit: cover;     /* crops to fill the square */
+        border-radius: 20px;   /* rounded corners */
       }
 
       h1 {

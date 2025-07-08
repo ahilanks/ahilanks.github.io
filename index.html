@@ -129,7 +129,7 @@
       }
 
       .project-item h3 {
-        margin: 0 0 0.25rem; /* tighter spacing below header */
+        margin: 0 0 1rem; /* tighter spacing below header */
         font-size: 1.25rem;
         font-weight: 600;
       }
@@ -177,6 +177,49 @@
       .projects-section > p {
         margin: 0 0 1.5rem; /* increase space before first project item */
       }
+
+      /* Hover enlarge effect for images */
+      .project-media,
+      .profile-img {
+        cursor: pointer;
+        transition: transform 0.3s ease;
+      }
+
+      .project-media:hover,
+      .profile-img:hover {
+        transform: scale(1.05);
+      }
+
+      /* Image modal styles */
+      .img-modal {
+        display: none;          /* hidden by default */
+        position: fixed;
+        z-index: 10000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+      }
+
+      .img-modal-content {
+        max-width: 90%;
+        max-height: 90%;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        border-radius: 8px;
+      }
+
+      .img-modal-close {
+        position: absolute;
+        top: 20px;
+        right: 30px;
+        font-size: 2.5rem;
+        color: #ffffff;
+        cursor: pointer;
+        user-select: none;
+      }
     </style>
   </head>
   <body>
@@ -184,19 +227,23 @@
       <section>
         <h1>Ahilan Karuppusami</h1>
         <p>
-        I'm a third year undergraduate at UC Berkeley studying Computer Science and Economics. Interested
-        in making LLMS more accessible and personalized through routing and memory. <br>
+        I'm a third year undergraduate at UC Berkeley studying Computer Science and Economics. I'm interested
+        in making LLMS cheaper and more personalized through routing, memory, and cross-model caching. <br>
         <br>
-        In my freetime, I love trying new food, traveling, and playing badminton.
+        In my freetime, I love trying new food, watching OxfordUnion, and learning how to cad.
         </p>
 
         <div class="social-links">
           <!--- 
           <a href="mailto:ahilanks101@gmail.com"><i class="fa-solid fa-envelope"></i>Email</a>-->
-          <a href="https://www.linkedin.com/in/ahilanks/" aria-label="LinkedIn profile">
+          <a href="https://www.linkedin.com/in/ahilanks/"
+             aria-label="LinkedIn profile"
+             target="_blank" rel="noopener noreferrer">
             <img src="media/linkedin.png" alt="LinkedIn logo" class="social-logo" />
           </a>
-          <a href="https://github.com/ahilanks" aria-label="GitHub profile">
+          <a href="https://github.com/ahilanks"
+             aria-label="GitHub profile"
+             target="_blank" rel="noopener noreferrer">
             <img src="media/github.png" alt="GitHub logo" class="social-logo" />
           </a>
         </div>
@@ -227,11 +274,57 @@
       <div class="project-item">
         <div>
           <h3>Oski Eats</h3>
-          <p>The dining hall website wasn't good. Built an app for myself and now over 500+ Berkeley students use it.</p>
+          <p>The college dining website was bad. So I built an app for myself and now over 500 Berkeley students use it everyday.</p>
           <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
         </div>
         <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
       </div>
+
+      <div class="project-item">
+        <div>
+          <h3>Introspect AI</h3>
+          <p>AI Chats have become an extension of our minds. Dev, Neel and I created this to vizualize this second brain. </p>
+          <a href="https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B" target="_blank" class="project-link">Link</a>
+        </div>
+        <img src="media/introspect.png" alt="Project 2 media" class="project-media" />
+      </div>
+
+
     </section>
+
+    <!-- Image Modal -->
+    <div id="img-modal" class="img-modal">
+      <span id="img-modal-close" class="img-modal-close">&times;</span>
+      <img id="img-modal-content" class="img-modal-content" src="" alt="Expanded view" />
+    </div>
+
+    <script>
+      (function () {
+        const modal = document.getElementById('img-modal');
+        const modalImg = document.getElementById('img-modal-content');
+        const modalClose = document.getElementById('img-modal-close');
+
+        // Attach click listeners to all images we want enlargeable
+        const clickableImgs = document.querySelectorAll('.project-media, .profile-img');
+        clickableImgs.forEach((img) => {
+          img.addEventListener('click', () => {
+            modalImg.src = img.src;
+            modal.style.display = 'flex';
+          });
+        });
+
+        // Close on X click
+        modalClose.addEventListener('click', () => {
+          modal.style.display = 'none';
+        });
+
+        // Close on outside click
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.style.display = 'none';
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

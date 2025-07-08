@@ -77,6 +77,13 @@
         margin-right: 0.35rem;
       }
 
+      .social-logo {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+        vertical-align: middle;
+      }
+
       @media (max-width: 700px) {
         .container {
           flex-direction: column-reverse;
@@ -89,30 +96,143 @@
           height: 180px;
         }
       }
+
+      /* Projects Section */
+      .projects-section {
+        max-width: 960px;
+        margin: 4rem auto;
+      }
+
+      .projects-section h2 {
+        font-size: 2rem; /* slightly smaller than main header */
+        margin-bottom: .25rem;
+        font-weight: 600;
+      }
+
+      .project-item {
+        display: flex;
+        align-items: flex-start;   /* align tops */
+        justify-content: space-between; /* push image/text to edges */
+        gap: 3rem;                    /* horizontal space between them */
+        margin-bottom: 3rem;
+      }
+
+      /* Keep the same left-to-right order for all items */
+      .project-item:nth-child(even) {
+        flex-direction: row;
+      }
+
+      .project-media {
+        width: 350px;         /* fixed width */
+        height: auto;         /* natural height based on image */
+        object-fit: contain;  /* show full image without cropping */
+        border-radius: 12px;
+      }
+
+      .project-item h3 {
+        margin: 0 0 0.25rem; /* tighter spacing below header */
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      /* Button-style link under each project */
+      .project-link {
+        display: inline-block;
+        margin-top: 0.75rem;
+        background: #fff;     /* default white fill */
+        color: #000;          /* black text */
+        padding: 0.35rem 0.85rem;
+        border: 1px solid #000;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        text-decoration: none;
+        transition: background 0.25s, color 0.25s;
+      }
+
+      .project-link:hover {
+        background: #000;     /* black fill on hover */
+        color: #fff;          /* white text on hover */
+        text-decoration: none; /* prevent underline */
+      }
+
+      .project-item p {
+        margin: 0;
+      }
+
+      @media (max-width: 700px) {
+        .project-item,
+        .project-item:nth-child(even) {
+          flex-direction: column;
+          text-align: center;
+        }
+
+        .project-media {
+          width: 100%;
+        }
+        .project-item {
+          margin-bottom: 4rem;
+        }
+      }
+
+      /* Extra space below the section subtitle */
+      .projects-section > p {
+        margin: 0 0 1.5rem; /* increase space before first project item */
+      }
     </style>
   </head>
   <body>
-    <main class="container">
+    <main class="container"> 
       <section>
         <h1>Ahilan Karuppusami</h1>
         <p>
-        Hi! I’m a third year undergraduate at UC Berkeley studying Computer Science and Economics.
+        Hi! I'm a third year undergraduate at UC Berkeley studying Computer Science and Economics. Interested
+        in making LLMS more accessible and personalized through routing and memory. <br>
+        <br>
         In my freetime, I love trying new food, traveling, and playing badminton.
         </p>
 
         <div class="social-links">
-          <a href="mailto:ahilanks101@gmail.com"><i class="fa-solid fa-envelope"></i>Email</a>
-          <a href="https://www.linkedin.com/in/ahilanks/"><i class="fa-brands fa-linkedin"></i>LinkedIn</a>
-          <a href="https://github.com/ahilanks"><i class="fa-brands fa-twitter"></i>Github</a>
+          <!--- 
+          <a href="mailto:ahilanks101@gmail.com"><i class="fa-solid fa-envelope"></i>Email</a>-->
+          <a href="https://www.linkedin.com/in/ahilanks/" aria-label="LinkedIn profile">
+            <img src="media/linkedin.png" alt="LinkedIn logo" class="social-logo" />
+          </a>
+          <a href="https://github.com/ahilanks" aria-label="GitHub profile">
+            <img src="media/github.png" alt="GitHub logo" class="social-logo" />
+          </a>
         </div>
       </section>
 
       <!-- Replace 'profile.jpg' with the actual path to your photo -->
       <img
-        src="ahilan.JPG"
+        src="media/ahilan.JPG"
         alt="Portrait of Ahilan Karuppusami"
         class="profile-img"
       />
     </main>
+
+    <!-- Projects Section -->
+    <section class="projects-section">
+      <h2>projects</h2>
+      <p>Things I've developed</p>
+
+      <div class="project-item">
+        <div>
+          <h3>Orchestrator</h3>
+          <p>Send your query to the best (and cheapest) LLM and inference provider.</p>
+          <a href="https://orchestrator.live" target="_blank" class="project-link">Link</a>
+        </div>
+        <img src="media/orchestrator.png" alt="Project 1 media" class="project-media" />
+      </div>
+
+      <div class="project-item">
+        <div>
+          <h3>Oski Eats</h3>
+          <p>The dining hall website wasn't good. Built an app for myself and now over 500+ Berkeley students use it.</p>
+          <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
+        </div>
+        <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
+      </div>
+    </section>
   </body>
 </html>

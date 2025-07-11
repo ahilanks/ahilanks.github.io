@@ -39,6 +39,7 @@
         margin: 6rem auto;     /* reduce top whitespace */
         display: flex;
         align-items: flex-start;
+        position: relative;   /* for absolutely positioned writing link */
       }
 
       .profile-img {
@@ -48,6 +49,7 @@
         object-fit: cover;     /* crops to fill the square */
         border-radius: 20px;   /* rounded corners */
         margin-left: 4rem;     /* reduced horizontal space */
+        margin-top: 6rem;   /* align top with first description line */
       }
 
       h1 {
@@ -82,6 +84,21 @@
         height: 20px;
         object-fit: contain;
         vertical-align: middle;
+      }
+
+      /* Writings link positioned above photo */
+      .writings-link {
+        position: absolute;
+        top: 1.5rem;
+        right: 0;
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-color); /* black/dark text */
+        text-decoration: underline; /* always underlined */
+      }
+
+      .writings-link:hover {
+        text-decoration: underline;
       }
 
       @media (max-width: 700px) {
@@ -222,14 +239,15 @@
     </style>
   </head>
   <body>
-    <main class="container"> 
+    <main class="container"> 
+      <a href="writings.html" class="writings-link">Writings</a>
       <section>
         <h1>Ahilan Karuppusami</h1>
         <p>
         I'm a third year undergraduate at UC Berkeley studying Computer Science and Economics. I'm interested
         in making LLMs cheaper and more personalized through routing, persistent-memory, and cross-model caching. <br>
         <br>
-        In my freetime, I love learning how to cad, watching OxfordUnion, and trying new food.
+        In my freetime, I enjoy learning cad, playing badminton, and trying new food.
         </p>
 
         <div class="social-links">

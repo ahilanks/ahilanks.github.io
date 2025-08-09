@@ -27,7 +27,7 @@
 
       .container {
         max-width: 820px;
-        margin: 4rem auto;
+        margin: 6rem auto;
       }
 
       h1 {
@@ -35,6 +35,7 @@
         font-size: 2.5rem;
         font-weight: 700;
         margin: 0 0 2rem;
+        position: relative;
       }
 
       .description {
@@ -60,18 +61,28 @@
       a:hover {
         text-decoration: underline;
       }
+
+      .back-link {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1rem;
+        font-weight: 400;
+        color: black;
+      }
     </style>
   </head>
   <body>
     <main class="container">
-      <h1>Writings</h1>
+      <h1><a class="back-link" href="index.html">Back</a>Writings</h1>
       <p class="description">
         A written reflection of my thoughts. Some random, others more thought out; all about questions that keep me up at night. Putting them out there with the hope to share something new.
       </p>
 
       <ul>
         <li>
-          <a href="information-consumption.html" target="_self">Information Consumption</a> — 07/11/25
+          <a href="https://ahilanks.substack.com/p/finding-good-donuts" target="_blank">Finding Good Donuts</a> — 08/09/25
         </li>
 
       </ul>

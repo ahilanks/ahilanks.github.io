@@ -146,10 +146,25 @@
         border-radius: 12px;
       }
 
+      .project-header {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        margin: 0 0 1rem;
+      }
+
       .project-item h3 {
-        margin: 0 0 1rem; /* tighter spacing below header */
+        margin: 0;
         font-size: 1.25rem;
         font-weight: 600;
+      }
+
+      .project-date {
+        color: #666;
+        font-size: 0.9rem;
+        font-style: italic;
+        margin: 0;
+        flex-shrink: 0;
       }
 
       /* Button-style link under each project */
@@ -281,7 +296,10 @@
 
       <div class="project-item">
         <div>
-          <h3>Orchestrator</h3>
+          <div class="project-header">
+            <h3>Orchestrator</h3>
+            <p class="project-date">May 2025</p>
+          </div>
           <p>Finds the best (and cheapest) LLM based on each individual query. 50-90% cheaper while only 2-3% quality loss.</p>
           <a href="https://orchestrator.live" target="_blank" class="project-link">Link</a>
         </div>
@@ -290,22 +308,27 @@
 
       <div class="project-item">
         <div>
-          <h3>Oski Eats</h3>
-          <p>Filter dietary preferences and track caloires. 500+ Berkeley active students users.</p>
-          <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
-        </div>
-        <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
-      </div>
-
-      <div class="project-item">
-        <div>
-          <h3>Introspect AI</h3>
-          <p>AI Chats have become an extension of our minds. <a href="https://www.linkedin.com/in/devpatelio/" target="_blank" rel="noopener noreferrer">Dev</a>, <a href="https://www.linkedin.com/in/neel-gajare/" target="_blank" rel="noopener noreferrer">Neel</a> and I created Introspect to visualize this second brain.</p>
-          <a href="https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B" target="_blank" class="project-link">Link</a>
+          <div class="project-header">
+            <h3>Introspect AI</h3>
+            <p class="project-date">June 2025</p>
+          </div>
+          <p><a href="https://www.linkedin.com/in/devpatelio/" target="_blank" rel="noopener noreferrer">Dev</a>, <a href="https://www.linkedin.com/in/neel-gajare/" target="_blank" rel="noopener noreferrer">Neel</a>, and I built Introspect to map our AI conversations into an interactive 3D space, letting us explore patterns, topics, and the types of questions we asked.</p>
+          <a href="https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B" target="_blank" class="project-link">Demo</a>
         </div>
         <img src="media/introspect.png" alt="Project 2 media" class="project-media" />
       </div>
 
+      <div class="project-item">
+        <div>
+          <div class="project-header">
+            <h3>Oski Eats</h3>
+            <p class="project-date">November 2024</p>
+          </div>
+          <p>An app for Berkeley dining halls. 700+ student users.</p>
+          <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
+        </div>
+        <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
+      </div>
 
     </section>
 

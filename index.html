@@ -366,5 +366,37 @@
         });
       })();
     </script>
+    <div id="visitor-map-container"
+    style="position: fixed;
+          bottom: 20px;
+          right: 20px;
+          width: 20px;
+          height: 30px;
+          overflow: hidden;
+          z-index: 9999;
+          display: none;">
+      <script
+        type="text/javascript"
+        id="mapmyvisitors"
+        src="https://mapmyvisitors.com/map.js?d=pg82-gbLvDl6D-SjQuiyddQcM1XT71iBFvO0yNhUP4s&cl=ffffff&w=a"
+      ></script>
+    </div>
+    <script>
+      // Show map only when user is near the bottom
+      window.addEventListener('scroll', () => {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const windowHeight = window.innerHeight;
+        const documentHeight = document.documentElement.scrollHeight;
+    
+        const map = document.getElementById('visitor-map-container');
+    
+        // If scrolled within 200px of bottom, show; otherwise hide
+        if (scrollTop + windowHeight >= documentHeight - 200) {
+          map.style.display = 'block';
+        } else {
+          map.style.display = 'none';
+        }
+      });
+    </script>    
   </body>
 </html>

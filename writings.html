@@ -45,63 +45,21 @@
       }
 
       ul {
-        list-style: none;
+        list-style: disc inside;
         padding-left: 0;
-        margin: 0;
       }
 
       li {
-        margin-bottom: 1rem;
-      }
-
-      .writing-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 1rem 1.15rem;
-        border: 1px solid #e7ecf2;
-        border-radius: 14px;
-        background: linear-gradient(135deg, #f8fbff 0%, #f1f5fb 100%);
-        box-shadow: 0 12px 28px rgba(15, 122, 229, 0.08);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
-
-      .writing-item:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 16px 32px rgba(15, 122, 229, 0.12);
-      }
-
-      .writing-main {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
       }
 
       a {
-        color: var(--text-color);
-        font-weight: 600;
-        text-decoration: none;
+        color: var(--link-color);
+        text-decoration: underline;
       }
 
       a:hover {
-        color: var(--link-color);
-      }
-
-      .dot {
-        color: #9aa5b5;
-        font-size: 1rem;
-      }
-
-      .time,
-      .date {
-        color: #607087;
-        font-size: 0.95rem;
-      }
-
-      .date {
-        white-space: nowrap;
-        margin-left: 0.5rem;
+        text-decoration: underline;
       }
 
       .back-link {
@@ -124,25 +82,12 @@
 
       <ul>
         <li>
-          <div class="writing-item">
-            <div class="writing-main">
-              <a href="https://ahilanks.substack.com/p/finding-good-donuts" target="_blank">Information Consumption</a>
-              <span class="dot">·</span>
-              <span class="time">3min</span>
-            </div>
-            <span class="date">08/09/25</span>
-          </div>
+          <a href="https://ahilanks.substack.com/p/finding-good-donuts" target="_blank">Information Consumption</a> — 08/09/25 · 3 min
         </li>
         <li>
-          <div class="writing-item">
-            <div class="writing-main">
-              <a href="https://ahilanks.substack.com/p/why-ai-is-eating-software" target="_blank">Why AI is eating software</a>
-              <span class="dot">·</span>
-              <span class="time">4min</span>
-            </div>
-            <span class="date">02/06/26</span>
-          </div>
+          <a href="https://ahilanks.substack.com/p/why-ai-is-eating-software" target="_blank">Why AI is Eating Software</a> — 02/06/26 · 4 min
         </li>
+
       </ul>
     </main>
   </body>

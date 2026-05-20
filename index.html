@@ -8,7 +8,7 @@
 
     <!-- Google Font -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <!--  Font Awesome for icons  -->
@@ -24,6 +24,7 @@
       :root {
         --text-color: #27323f;
         --link-color: #0f7ae5;
+        --bg-color: #f1ebdf;
       }
 
       body {
@@ -31,12 +32,13 @@
         padding: 0 1.5rem;
         font-family: "Inter", sans-serif;
         color: var(--text-color);
+        background-color: var(--bg-color);
         line-height: 1.6;
       }
 
       .container {
         max-width: 820px;      /* slightly narrower overall */
-        margin: 6rem auto;     /* reduce top whitespace */
+        margin: 3rem auto;     /* reduce top whitespace */
         display: flex;
         align-items: flex-start;
         position: relative;   /* for absolutely positioned writing link */
@@ -49,18 +51,19 @@
         object-fit: cover;     /* crops to fill the square */
         border-radius: 20px;   /* rounded corners */
         margin-left: 4rem;     /* reduced horizontal space */
-        margin-top: 6rem;   /* align top with first description line */
+        margin-top: 4.5rem;   /* align top with first description line */
       }
 
       h1 {
         margin-top: 0;
-        font-weight: 700;
-        font-size: 2.5rem;
+        font-weight: 600;
+        font-size: 2rem;
       }
 
       a {
-        color: var(--link-color);
-        text-decoration: none;
+        color: var(--text-color);
+        text-decoration: underline;
+        text-decoration-skip-ink: none;
       }
 
       a:hover {
@@ -88,7 +91,7 @@
 
       .x-logo {
         filter: grayscale(1);
-        opacity: 0.42;
+        opacity: 0.55;
         border-radius: 4px;
       }
 
@@ -96,10 +99,10 @@
         filter: grayscale(1) brightness(0.45);
       }
 
-      /* Writings link positioned above photo */
+      /* Writings link aligned with the name heading */
       .writings-link {
         position: absolute;
-        top: 1.5rem;
+        top: 0.6rem;
         right: 0;
         font-weight: 600;
         font-size: 1rem;
@@ -127,7 +130,7 @@
       /* Projects Section */
       .projects-section {
         max-width: 820px; /* match container width for aligned left edges */
-        margin: 4rem auto;
+        margin: 1rem auto 4rem;
       }
 
       .projects-section h2 {
@@ -181,7 +184,7 @@
       .project-link {
         display: inline-block;
         margin-top: 0.75rem;
-        background: #fff;     /* default white fill */
+        background: var(--bg-color); /* cream fill, matches page */
         color: #000;          /* black text */
         padding: 0.35rem 0.85rem;
         border: 1px solid #000;
@@ -264,15 +267,14 @@
     </style>
   </head>
   <body>
-    <main class="container"> 
-      <a href="writings.html" class="writings-link">Writings</a>
+    <main class="container">
       <section>
         <h1>Ahilan Karuppusami</h1>
         <p>
         I'm a third year undergraduate at UC Berkeley. I'm interested
         in making LLMs cheaper and more personalized through routing, persistent-memory, and cross-model caching. <br>
         <br>
-        In my freetime, I enjoy poker, playing badminton, and trying new food.
+        I enjoy playing badminton and <a href="writings.html">writing</a>.
         </p>
 
         <div class="social-links">
@@ -334,7 +336,7 @@
             <h3>Oski Eats</h3>
             <p class="project-date">November 2024</p>
           </div>
-          <p>An app for Berkeley dining students. 3k daily users. 1M+ total app impressions.</p>
+          <p>An iOS app for Berkeley dining students. 3k daily users. 1.5M+ total uses.</p>
           <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
         </div>
         <img src="media/oski2.png" alt="Project 2 media" class="project-media" />

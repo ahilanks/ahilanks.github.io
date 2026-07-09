@@ -1,0 +1,21 @@
+{
+  "name": "ahilan-writing-editor",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Local-only writing editor (TipTap v3). Build once with `npm run build`; the python server just serves the committed vendor/ bundle. No build at launch.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3",
+    "@tiptap/pm": "^3",
+    "@tiptap/starter-kit": "^3",
+    "katex": "0.16.11",
+    "mathlive": "0.110.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "@tiptap/core": "3.27.3",
+  "@tiptap/starter-kit": "3.27.3",
+  "katex": "0.16.11",
+  "mathlive": "0.110.0",
+  "builtWith": "esbuild 0.24.2"
+}

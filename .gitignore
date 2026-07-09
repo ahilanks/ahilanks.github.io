@@ -1,6 +1,18 @@
-# Local-only writing editor — never published to the website
+# Local-only v1 editor + launcher — never published to the website
 editor.html
+editor.html.bak-*
 run-editor.command
+.editor-drafts.json
+.editor-drafts.json.tmp
+
+# Editor v2 (TipTap) is committed to this repo — but NOT its deps or the big source map
+editor/node_modules/
+editor/vendor/*.map
+__pycache__/
+.claude-fix-fragment.html
+
+# Private drafts — tracked in a SEPARATE private repo, never on the public site
+drafts/
 
 # Secrets — never publish to the website
 .env

@@ -77,6 +77,7 @@ function reconcile(serverDrafts, serverDeleted) {
  */
 export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, setDocId }) {
   const scrollArea = $('scrollArea')
+  let didInitialRefresh = false // guards the one-time boot re-apply after the first server pull
 
   /* ---- persist the live draft to LS (used at switch/new boundaries; main.js
      also autosaves on edit — same shape, so either path is safe) ---- */
@@ -285,10 +286,11 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     let status = null
     const render = () => {
       if (!status) return
-      const when = status.last_push_ts ? 'last pushed ' + ago(status.last_push_ts) : 'not backed up yet'
-      if (status.ok === false) show('⚠ ' + (status.detail || 'push failed').slice(0, 80) + ' · ' + when, '#c0392b')
-      else if (status.synced) show('☁ Up to date', '#999')
-      else show('☁ ' + when, '#999')
+      const t = status.last_push_ts ? ago(status.last_push_ts) : 'not backed up'
+      // cloud icon goes green when everything is pushed (up to date), gray otherwise
+      if (btn) btn.classList.toggle('synced', status.ok !== false && !!status.synced)
+      if (status.ok === false) show('⚠ ' + t, '#c0392b')
+      else show(t, '#999') // just "6m ago", gray
     }
     const refresh = async () => {
       try { status = await (await fetch('/api/push', { cache: 'no-store' })).json() }
@@ -313,7 +315,20 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
   setupPushStatus()
   if (!SANDBOX) {
     // fold in other devices' drafts, then keep syncing in the background
-    SYNC.pull().then((changed) => { if (changed) renderDraftsList() })
+    SYNC.pull().then((changed) => {
+      if (changed) renderDraftsList()
+      // First pull after boot only: main.js's load() painted the doc from LOCAL
+      // storage, which can be stale (e.g. an old v1 copy left in this browser).
+      // Refresh the visible doc to the server's reconciled version now, while
+      // nothing has been edited yet, so a stale copy can't be re-saved over the
+      // canonical one. Later background polls intentionally do NOT re-apply (that
+      // would clobber an in-progress edit) — this runs exactly once.
+      if (!didInitialRefresh) {
+        didInitialRefresh = true
+        const cur = getDrafts()[getDocId()]
+        if (cur && !editor.isFocused) applySnapshot(cur)
+      }
+    })
     SYNC.start()
     SYNC.schedulePush() // seed this device's existing drafts up to the shared store
   }

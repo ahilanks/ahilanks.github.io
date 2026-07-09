@@ -130,7 +130,12 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .doc-body h2 { font-size: 1.7rem; font-weight: 700; margin: 2rem 0 0.8rem; letter-spacing: -0.01em; }
 .doc-body h3 { font-size: 1.32rem; font-weight: 600; margin: 1.7rem 0 0.6rem; }
 .doc-body h4 { font-size: 1.12rem; font-weight: 700; margin: 1.4rem 0 0.5rem; }
-.doc-body blockquote { margin: 1.5rem 0; padding: 0.2rem 0 0.2rem 1.2rem; border-left: 3px solid var(--accent); color: var(--text); font-style: italic; font-size: 1.18rem; }
+/* Not force-italic: quotes are set off by the border/size/color, and italic stays a
+   real mark you control (so italicizing text inside a quote actually shows and the
+   toolbar button reads correctly). */
+.doc-body blockquote { margin: 1.5rem 0; padding: 0.2rem 0 0.2rem 1.2rem; color: var(--text); font-size: 1.18rem; position: relative; }
+/* the accent bar is a pseudo-element inset from top/bottom, so it's a little shorter than the quote */
+.doc-body blockquote::before { content: ""; position: absolute; left: 0; top: 0.4rem; bottom: 0.4rem; width: 3px; border-radius: 2px; background: var(--accent); }
 .doc-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; }
 .doc-body hr { border: none; border-top: 1px solid var(--line); margin: 2.2rem auto; width: 40%; }
 .doc-body ul, .doc-body ol { padding-left: 1.4rem; }
@@ -156,7 +161,11 @@ figure.img-block:hover::after, figure.video-block:hover::after { opacity: 0.5; }
 figure.resizing::after { opacity: 0.85 !important; }
 figure.resizing { user-select: none; }
 figure.img-block figcaption, figure.video-block figcaption { margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted); text-align: center; outline: none; }
-figure.img-block figcaption:empty::before, figure.video-block figcaption:empty::before { content: "Write a caption…"; color: var(--faint); }
+/* Caption placeholder. An "empty" caption isn't `:empty` — ProseMirror puts a
+   <br class="ProseMirror-trailingBreak"> in it for the caret — so match that too. */
+figure.img-block figcaption:empty::before, figure.video-block figcaption:empty::before,
+figure.img-block figcaption:has(> br.ProseMirror-trailingBreak:only-child)::before,
+figure.video-block figcaption:has(> br.ProseMirror-trailingBreak:only-child)::before { content: "Write a caption…"; color: var(--faint); pointer-events: none; }
 
 /* math nodes */
 .math-inline, .math-block { cursor: pointer; border-radius: 5px; transition: background 0.12s; }
@@ -185,7 +194,18 @@ math-field.math-edit {
 .fn-ref { color: var(--text); font-weight: 600; font-size: 0.72em; vertical-align: super; line-height: 0; cursor: pointer; padding: 0 1px; user-select: none; }
 
 /* footnotes section */
-.doc-footnotes { margin-top: 3rem; }
+.doc-footnotes { margin-top: 0; }
+/* the editor surface + its last paragraph shouldn't pad the space before the footnotes */
+.doc-body-pm { margin-bottom: 0; }
+.doc-body-pm > p:last-child { margin-bottom: 0; }
+/* Toolbar chrome hidden per request: Write/Source toggle, Settings gear, and the
+   "Saved" status pill. The underlying code stays wired — these are just not shown. */
+#viewToggle, #settingsBtn, #saveStatus { display: none; }
+/* backup cloud icon: gray by default, green when drafts are fully pushed to GitHub */
+#pushBtn { color: #a8a49b; }
+#pushBtn.synced { color: #5a9e63; }
+/* no selection popup menu — the main toolbar has every command */
+#bubble { display: none !important; }
 .doc-footnotes hr { border: none; border-top: 1px solid var(--line); margin: 0 0 1.2rem; }
 .doc-footnotes .fn-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-bottom: 0.6rem; }
 ol.fn-list { list-style: none; margin: 0; padding: 0; }

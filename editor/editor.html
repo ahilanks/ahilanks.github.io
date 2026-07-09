@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Writing Editor</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Vendored, offline: KaTeX + MathLive styles (built by `npm run build`) -->
+    <link rel="stylesheet" href="vendor/katex.min.css" />
+    <link rel="stylesheet" href="vendor/mathlive-fonts.css" />
+    <link rel="stylesheet" href="src/editor.css" />
+  </head>
+
+  <body>
+    <!-- ===================== TOP BAR ===================== -->
+    <header class="topbar">
+      <button class="icon-btn" id="draftsBtn" title="Drafts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </button>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <select class="tb-select" id="formatSelect" title="Paragraph style">
+          <option value="paragraph">Normal</option>
+          <option value="h2">Heading</option>
+          <option value="h3">Subheading</option>
+          <option value="h4">Sub-subheading</option>
+          <option value="blockquote">Quote</option>
+        </select>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn bold" data-cmd="bold" title="Bold (⌘B)">B</button>
+        <button class="tb-btn italic" data-cmd="italic" title="Italic (⌘I)">I</button>
+        <button class="tb-btn" id="linkBtn" title="Link (⌘K)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.41 1.41"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.41-1.41"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" id="imageBtn" title="Insert image">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </button>
+        <button class="tb-btn" id="videoBtn" title="Upload video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 9l6-3v12l-6-3"/></svg>
+        </button>
+        <button class="tb-btn" id="footnoteBtn" title="Insert footnote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9"/><path d="M4 12h7"/><path d="M4 19h13"/><text x="15.5" y="11" font-size="9" font-weight="700" fill="currentColor" stroke="none">1</text></svg>
+        </button>
+        <button class="tb-btn" id="quoteBtn" title="Quote (blockquote)">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6.5 7C4.6 7 3 8.6 3 10.5S4.6 14 6.5 14c.2 0 .4 0 .5-.05C6.7 15.1 5.7 16 4.3 16.3l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C9 8.6 7.4 7 6.5 7zm9 0C13.6 7 12 8.6 12 10.5S13.6 14 15.5 14c.2 0 .4 0 .5-.05-.3 1.15-1.3 2.05-2.7 2.35l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C18 8.6 16.4 7 15.5 7z"/></svg>
+        </button>
+        <button class="tb-btn ai" id="mathBtn" title="Insert math with AI (describe it)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14l-7 8 7 8H5"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-spacer"></div>
+
+      <div class="seg" id="viewToggle">
+        <button data-view="write" class="active">Write</button>
+        <button data-view="source">Source</button>
+      </div>
+
+      <button class="icon-btn" id="settingsBtn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+
+      <span id="pushText" style="font:500 12px/1 system-ui,-apple-system,sans-serif;color:#999;white-space:nowrap;margin:0 4px;"></span>
+      <button class="icon-btn" id="pushBtn" title="Back up drafts to private GitHub (ahilanks/writing-drafts)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+      </button>
+
+      <span class="save-status" id="saveStatus"><span class="save-dot"></span><span id="saveText">Saved</span></span>
+      <button class="btn-primary" id="publishBtn">Publish</button>
+    </header>
+
+    <!-- ===================== WRITE VIEW ===================== -->
+    <div class="scroll" id="scrollArea">
+      <main class="surface font-serif" id="surface">
+        <div class="doc-title" id="docTitle" contenteditable="true" data-placeholder="Title"></div>
+        <div class="doc-subtitle" id="docSubtitle" contenteditable="true" data-placeholder="Add a subtitle…"></div>
+        <div class="doc-body" id="docBody"></div>
+
+        <!-- footnote bodies (contenteditable, outside the ProseMirror doc); numbered by reconcile -->
+        <section class="doc-footnotes" id="footnotes" hidden>
+          <hr />
+          <div class="fn-label">Footnotes</div>
+          <ol class="fn-list" id="fnList"></ol>
+        </section>
+      </main>
+
+      <!-- ===================== SOURCE VIEW ===================== -->
+      <div class="source-view" id="sourceView" hidden>
+        <p class="source-hint">Read-only Markdown + LaTeX source. Edit in the Write view.</p>
+        <pre id="sourcePre"></pre>
+      </div>
+    </div>
+
+    <!-- ===================== FLOATING: bubble menu ===================== -->
+    <div class="bubble" id="bubble">
+      <button class="bold" data-cmd="bold" title="Bold">B</button>
+      <button class="italic" data-cmd="italic" title="Italic">I</button>
+      <span class="bsep"></span>
+      <button id="bubbleLink" title="Link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.41 1.41"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.41-1.41"/></svg>
+      </button>
+      <button id="bubbleFootnote" title="Footnote">fn</button>
+      <span class="bsep"></span>
+      <button class="ai" id="bubbleAI" title="Add math with AI">∑ Math</button>
+    </div>
+
+    <!-- ===================== FLOATING: link preview chip ===================== -->
+    <div class="link-preview" id="linkPreview">
+      <a id="linkPreviewUrl" href="#" target="_blank" rel="noopener"></a>
+      <button class="lp-btn" id="linkPreviewEdit" type="button">Edit</button>
+    </div>
+
+    <!-- ===================== FLOATING: link popover ===================== -->
+    <div class="popover hidden" id="linkPop">
+      <label>Link URL</label>
+      <input type="text" id="linkInput" placeholder="https://…" />
+      <div class="row">
+        <button class="pop-btn ghost grow" id="linkRemove">Remove</button>
+        <button class="pop-btn grow" id="linkApply">Apply</button>
+      </div>
+    </div>
+
+    <!-- ===================== FLOATING: AI math popover ===================== -->
+    <div class="popover hidden" id="aiPop">
+      <label>Describe the math to add</label>
+      <div class="ctx hidden" id="aiCtx"></div>
+      <textarea id="aiInput" placeholder="e.g. the sum of 1 over n squared from 1 to infinity"></textarea>
+      <div class="math-preview hidden" id="aiPreview"></div>
+      <div class="row">
+        <label style="margin:0;display:flex;align-items:center;gap:0.35rem;font-size:0.8rem;">
+          <input type="checkbox" id="aiDisplay" style="width:auto;" /> Force block
+        </label>
+        <span class="grow"></span>
+        <button class="pop-btn ghost" id="aiCancel">Cancel</button>
+        <button class="pop-btn" id="aiGenerate">Generate</button>
+      </div>
+      <div class="pop-spin" id="aiSpin">Asking the model…</div>
+      <div class="pop-msg" id="aiMsg"></div>
+    </div>
+
+    <!-- ===================== DRAFTS MENU ===================== -->
+    <div class="drafts-menu hidden" id="draftsMenu">
+      <button class="drafts-new" id="newDraftBtn">+ New draft</button>
+      <div id="draftsList"></div>
+    </div>
+
+    <!-- ===================== SETTINGS MODAL ===================== -->
+    <div class="overlay hidden" id="settingsOverlay">
+      <div class="modal">
+        <h2>Settings</h2>
+        <p class="sub">Stored only in this browser. Never committed or uploaded anywhere but OpenAI.</p>
+        <div class="field">
+          <label for="apiKey">OpenAI API key</label>
+          <input type="password" id="apiKey" placeholder="sk-…" autocomplete="off" />
+          <p class="desc">Used directly from your browser for the math feature. Stays in localStorage.</p>
+        </div>
+        <div class="field">
+          <label for="modelName">Model</label>
+          <input type="text" id="modelName" placeholder="gpt-5.4-mini" />
+          <p class="desc">Set the exact model id your account supports.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="pop-btn ghost" id="settingsClose">Close</button>
+          <button class="pop-btn" id="settingsSave">Save</button>
+        </div>
+        <div class="modal-msg" id="settingsMsg"></div>
+      </div>
+    </div>
+
+    <!-- ===================== PUBLISH MODAL ===================== -->
+    <div class="overlay hidden" id="publishOverlay">
+      <div class="modal">
+        <h2>Publish to writings/</h2>
+        <p class="sub">Writes a standalone article into your <code>writings/</code> folder and adds it to the writings list.</p>
+        <div class="field">
+          <label for="pubSlug">Filename (slug)</label>
+          <input type="text" id="pubSlug" placeholder="my-article" />
+          <p class="desc">Saved as <code>writings/&lt;slug&gt;.html</code></p>
+        </div>
+        <div class="field">
+          <label for="pubDate">Date</label>
+          <input type="text" id="pubDate" placeholder="May 28, 2026" />
+        </div>
+        <div class="field">
+          <label>Thumbnail for the writings list (optional)</label>
+          <div class="thumb-drop" id="thumbDrop">Click to choose an image</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;">
+          <input type="checkbox" id="pubUpdateList" checked style="width:auto;" />
+          Add to writings.html list
+        </label>
+        <div class="modal-actions">
+          <button class="pop-btn ghost" id="publishClose">Cancel</button>
+          <button class="pop-btn" id="publishConfirm">Publish</button>
+        </div>
+        <div class="modal-msg" id="publishMsg"></div>
+      </div>
+    </div>
+
+    <!-- corner math-keyboard toggle (positioned + wired in JS) -->
+    <button class="mathkbd-toggle corner-right" id="mathKbdToggle" title="Math keyboard" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+      <span>Math keyboard</span>
+    </button>
+
+    <input type="file" id="imageFileInput" accept="image/*" hidden />
+    <input type="file" id="videoFileInput" accept="video/*" hidden />
+    <div class="toast" id="toast"></div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>

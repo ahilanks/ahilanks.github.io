@@ -1,7 +1,7 @@
 /* main.js — boots the editor. (Phase 1: core editing + toolbar + scroll + minimal
  * sandboxed persistence. Later phases add math, footnotes, figures, publish, sync.) */
 
-import { Editor, StarterKit, Placeholder, NodeSelection, TextSelection } from '../vendor/lib.bundle.js'
+import { Editor, StarterKit, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
@@ -16,6 +16,13 @@ import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
 
 setupMathLive()
+
+// Block-level items that arrow keys can highlight-then-step-past (like inline math).
+// Excludes paragraphs/headings/lists so ordinary text navigation is untouched.
+const NAV_BLOCKS = new Set(['figure', 'blockMath', 'blockquote', 'horizontalRule', 'codeBlock'])
+function isNavigableBlock(node) {
+  return !!node && !node.isText && (NAV_BLOCKS.has(node.type.name) || (node.isAtom && node.isBlock))
+}
 
 /* ---------------------------------------------------------------- boot */
 const surface = $('surface')
@@ -34,7 +41,9 @@ export const editor = new Editor({
       link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener', target: '_blank' } },
       // keep it prose-focused; code block stays available
     }),
-    Placeholder.configure({ placeholder: 'Start writing…' }),
+    // Only prompt "Start writing…" when the whole document is empty — not on every
+    // blank paragraph inside an article that already has text.
+    Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? 'Start writing…' : '') }),
     InlineMath,
     BlockMath,
     FootnoteRef,
@@ -55,29 +64,49 @@ export const editor = new Editor({
       return selectAndEditMath(view, nodePos)
     },
     // Keyboard: Enter opens a selected equation; Left/Right arrows select an adjacent
-    // equation (highlight) and then step past it — in both directions — without editing.
+    // item — inline (math, footnote ref) or block (image/video, block math, quote, rule,
+    // code) — as a highlight, then step the caret past it, in both directions, without
+    // entering it. (Enter still opens a highlighted equation for editing.)
     handleKeyDown(view, event) {
       const { state } = view
-      const { selection } = state
+      const { selection, doc } = state
       if (event.key === 'Enter' && selection instanceof NodeSelection && isMathNode(selection.node)) {
         return selectAndEditMath(view, selection.from)
       }
-      if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') &&
-          !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        const dir = event.key === 'ArrowRight' ? 1 : -1
-        // math atom currently selected → move the caret just past it
-        if (selection instanceof NodeSelection && isMathNode(selection.node)) {
-          const at = dir > 0 ? selection.to : selection.from
-          view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, at)).scrollIntoView())
+      if ((event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') ||
+          event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false
+      const dir = event.key === 'ArrowRight' ? 1 : -1
+
+      // (1) a whole item is already highlighted → step the caret just past it.
+      if (selection instanceof NodeSelection) {
+        const at = dir > 0 ? selection.to : selection.from
+        view.dispatch(state.tr.setSelection(Selection.near(doc.resolve(at), dir)).scrollIntoView())
+        return true
+      }
+
+      // (2) a collapsed caret sitting right next to an item → highlight that item.
+      if (selection.empty) {
+        const $from = selection.$from
+        // 2a. an inline atom immediately beside the caret (inline math, footnote ref)
+        const inlineSide = dir > 0 ? $from.nodeAfter : $from.nodeBefore
+        if (inlineSide && inlineSide.isInline && inlineSide.isAtom && inlineSide.type.name !== 'hardBreak') {
+          const pos = dir > 0 ? selection.from : selection.from - inlineSide.nodeSize
+          view.dispatch(state.tr.setSelection(NodeSelection.create(doc, pos)).scrollIntoView())
           return true
         }
-        // caret sitting right next to a math atom → select it
-        if (selection.empty) {
-          const side = dir > 0 ? selection.$from.nodeAfter : selection.$from.nodeBefore
-          if (isMathNode(side)) {
-            const nodePos = dir > 0 ? selection.from : selection.from - side.nodeSize
-            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, nodePos)).scrollIntoView())
-            return true
+        // 2b. caret at a block edge → highlight the adjacent block item, if any
+        const atStart = $from.parentOffset === 0
+        const atEnd = $from.parentOffset === $from.parent.content.size
+        if ((dir < 0 && atStart) || (dir > 0 && atEnd)) {
+          const boundary = dir > 0 ? $from.after() : $from.before()
+          const $b = doc.resolve(boundary)
+          const blockSide = dir > 0 ? $b.nodeAfter : $b.nodeBefore
+          if (isNavigableBlock(blockSide)) {
+            const pos = dir > 0 ? boundary : boundary - blockSide.nodeSize
+            try {
+              view.dispatch(state.tr.setSelection(NodeSelection.create(doc, pos)).scrollIntoView())
+              return true
+            } catch (e) { /* not node-selectable here → fall back to default caret motion */ }
           }
         }
       }
@@ -196,6 +225,8 @@ function applySnapshot(s) {
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')
+  // Re-create video sources for the draft just displayed (IndexedDB → disk backup).
+  rehydrateVideos(editor, s.id || doc.id)
 }
 function load() {
   const drafts = JSON.parse(localStorage.getItem(LS.drafts) || '{}')
@@ -275,8 +306,7 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'm') { e.preventDefault(); insertAndEditMath(editor, { block: e.shiftKey }) }
 })
 
-load()
-rehydrateVideos(editor) // re-create blob: URLs for uploaded videos after the draft loads
+load() // applySnapshot (called by load) rehydrates the displayed draft's videos
 // Drafts menu + per-draft scroll restore + server sync (sync is inert while SANDBOX=true).
 const drafts = setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, setDocId })
 window.__drafts = drafts

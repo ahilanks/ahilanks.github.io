@@ -45,17 +45,36 @@ async function insertVideoFile(editor, file) {
   if (video) video.src = URL.createObjectURL(file)
 }
 
-/* Re-create blob: URLs for every uploaded video after a draft loads. Call this once
- * after main.js's load(). */
-export async function rehydrateVideos(editor) {
+/* Re-create blob: URLs for every uploaded video after a draft loads. Called from
+ * main.js's applySnapshot (so it runs for every draft that gets displayed).
+ *
+ * Two sources, in order:
+ *   1. this browser's IndexedDB (where a video uploaded here was stored), then
+ *   2. the server's durable on-disk backup at drafts/media/<draftId>/<vid>.<ext>.
+ * The disk fallback is what lets a video survive across browsers/devices and across
+ * the v1→v2 cutover (v1 kept blobs in a different IndexedDB, so IndexedDB alone would
+ * miss them). `draftId` is required for the fallback; without it only IndexedDB is used. */
+export async function rehydrateVideos(editor, draftId) {
   const figs = editor.view.dom.querySelectorAll('figure.video-block[data-vid]')
+  if (!figs.length) return
+  let serverFiles = null // lazily fetched list of this draft's disk-backed media
   for (const fig of figs) {
     const video = fig.querySelector('video')
     if (!video) continue
+    const vid = fig.dataset.vid
     try {
-      const m = await getMedia(fig.dataset.vid)
-      if (m && m.blob) video.src = URL.createObjectURL(m.blob)
-    } catch (e) { /* missing blob — leave the <video> empty */ }
+      const m = await getMedia(vid)
+      if (m && m.blob) { video.src = URL.createObjectURL(m.blob); continue }
+    } catch (e) { /* fall through to the disk backup */ }
+    if (!draftId) continue
+    try {
+      if (serverFiles === null) {
+        const r = await fetch('/api/media?draft=' + encodeURIComponent(draftId), { cache: 'no-store' })
+        serverFiles = r.ok ? ((await r.json()).files || []) : []
+      }
+      const name = serverFiles.find((f) => f === vid || f.startsWith(vid + '.'))
+      if (name) video.src = '/drafts/media/' + encodeURIComponent(draftId) + '/' + encodeURIComponent(name)
+    } catch (e) { /* missing everywhere — leave the <video> empty */ }
   }
 }
 

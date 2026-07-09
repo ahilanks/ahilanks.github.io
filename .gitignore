@@ -1,7 +1,8 @@
-# Local-only v1 editor + launcher — never published to the website
-editor.html
-editor.html.bak-*
-run-editor.command
+# Local-only v1 editor + launcher — never published to the website.
+# Anchored to root (/) so they do NOT also ignore the committed v2 editor/editor.html.
+/editor.html
+/editor.html.bak-*
+/run-editor.command
 .editor-drafts.json
 .editor-drafts.json.tmp
 

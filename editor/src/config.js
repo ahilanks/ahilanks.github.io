@@ -7,8 +7,10 @@ export const CONFIG = {
   font: 'serif',
 
   // Heading levels offered in the toolbar + kept by the schema.
-  // Technical writing uses more structure, so h2–h4 are all real levels.
-  headingLevels: [2, 3, 4],
+  // Technical writing uses more structure, so h2–h4 are all real levels; h5 is
+  // kept in the schema (not surfaced in the toolbar) so imported drafts that use
+  // an h5 sub-sub-subheading round-trip losslessly instead of demoting to a paragraph.
+  headingLevels: [2, 3, 4, 5],
 
   // KaTeX render options (used everywhere math is rendered).
   katex: { throwOnError: false, strict: false },
@@ -43,7 +45,12 @@ export const CONFIG = {
 // and does NOT sync to the server, so it can never touch the real v1 drafts during
 // development. Flip to false ONLY at cutover (then it reads/writes the real drafts
 // and syncs). This is the core safeguard for the irreplaceable drafts.
-export const SANDBOX = true
+//
+// CUTOVER 2026-07-09: v2 is now the default editor (run-editor.command opens it).
+// The two real drafts were migrated to v2's shape and round-trip verified before
+// this flip; the pre-cutover state is preserved at the drafts-repo tag
+// `pre-v2-cutover-20260709` and in each draft's git history.
+export const SANDBOX = false
 
 const PREFIX = SANDBOX ? 'ahilan.editor2.' : 'ahilan.editor.'
 

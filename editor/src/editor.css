@@ -187,6 +187,11 @@ math-field.math-edit {
   padding: 1px 4px; background: var(--bg);
   --caret-color: var(--link); --selection-background-color: rgba(15,122,229,0.18);
   font-size: 1em;
+  /* PM marks the selected atom draggable+contenteditable=false, which the rule above
+     (.ProseMirror [draggable][contenteditable="false"]) sets user-select:none on. That
+     inherits into the field and makes MathLive disable click-to-position (its pointer
+     handler is gated on user-select !== none). Force it back so clicking places the caret. */
+  user-select: text; -webkit-user-select: text;
 }
 .math-block math-field.math-edit { display: block; font-size: 1.15em; padding: 4px 8px; }
 

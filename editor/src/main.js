@@ -58,9 +58,13 @@ export const editor = new Editor({
       right: 0,
     },
     attributes: { class: 'doc-body-pm' },
-    // Click a math node → select it and open the in-place editor.
+    // Click a math node → select it and open the in-place editor. But if it's ALREADY
+    // open, let the click fall through to MathLive so it positions the caret where you
+    // clicked (otherwise re-selecting would swallow the click and jump to the end).
     handleClickOn(view, pos, node, nodePos, event, direct) {
       if (!direct || !isMathNode(node)) return false
+      const dom = view.nodeDOM(nodePos)
+      if (dom && dom.classList && dom.classList.contains('math-editing')) return false
       return selectAndEditMath(view, nodePos)
     },
     // Keyboard: Enter opens a selected equation; Left/Right arrows select an adjacent

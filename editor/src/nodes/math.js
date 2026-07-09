@@ -84,6 +84,12 @@ function mathNodeView(isBlock) {
       mf.addEventListener('keydown', onKey)
       mf.addEventListener('mount', focusField, { once: true })
       mf.addEventListener('focusout', onFocusOut)
+      // Let MathLive own pointer events: stop them bubbling to ProseMirror, which would
+      // otherwise treat the click as "select this atom" (managing focus/selection) and
+      // stop MathLive from placing the caret where you clicked. MathLive's own handlers
+      // run at the target first, so click-to-position still works; PM just never sees it.
+      const swallowPointer = (e) => e.stopPropagation()
+      ;['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach((t) => mf.addEventListener(t, swallowPointer))
       dom.appendChild(mf)
       focusField()
       setTimeout(focusField, 0)

@@ -3,8 +3,6 @@
 /editor.html
 /editor.html.bak-*
 /run-editor.command
-.editor-drafts.json
-.editor-drafts.json.tmp
 
 # Editor v2 (TipTap) is committed to this repo — but NOT its deps or the big source map
 editor/node_modules/

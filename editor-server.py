@@ -36,7 +36,7 @@ from urllib.parse import urlparse, parse_qs
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-STORE_PATH = os.path.join(ROOT, ".editor-drafts.json")
+STORE_PATH = os.path.join(ROOT, "drafts", ".editor-drafts.json")
 DRAFTS_DIR = os.path.join(ROOT, "drafts")
 MEDIA_DIR = os.path.join(DRAFTS_DIR, "media")
 LOCK = threading.Lock()      # serialize read-modify-write so concurrent saves can't clobber
@@ -457,6 +457,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        # Serve the editor at the clean URL /editor.html (the file lives at editor/editor.html;
+        # its <base href="/editor/"> keeps relative assets resolving correctly).
+        if path == "/editor.html":
+            self.path = self.path.replace("/editor.html", "/editor/editor.html", 1)
+            return super().do_GET()
         if path == "/api/drafts":
             with LOCK:
                 store = load_store()

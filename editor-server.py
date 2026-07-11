@@ -133,6 +133,14 @@ def strip_html(s):
     return htmlmod.unescape(re.sub(r"<[^>]+>", "", s or "")).strip()
 
 
+def slugify_title(title, fallback=""):
+    """Filename-safe slug from a draft title (falls back to `fallback` when empty)."""
+    t = strip_html(title or "").lower()
+    t = re.sub(r"[^a-z0-9]+", "-", t)
+    t = re.sub(r"-{2,}", "-", t).strip("-")
+    return t[:80].strip("-") or fallback
+
+
 def fmt_time(ms):
     if not ms:
         return "—"
@@ -241,6 +249,27 @@ def html_to_markdown(s):
     return s.strip()
 
 
+def parse_footnote_bodies(fn_html):
+    """Parse the serialized #fnList HTML (stored in a draft's `footnotes` field)
+    into {data_fn: body_html}. Each item looks like
+    <li data-fn="X"><span class="fn-num">1.</span><div class="fn-body">…</div></li>."""
+    out = {}
+    for m in re.finditer(r'<li[^>]*\bdata-fn="([^"]*)"[^>]*>(.*?)</li>', fn_html or "", re.S | re.I):
+        data_fn, inner = m.group(1), m.group(2)
+        # fn-body is the last element in the <li>; grab greedily to the final </div>
+        bm = re.search(r'<div[^>]*\bfn-body\b[^>]*>(.*)</div>', inner, re.S | re.I)
+        body = bm.group(1) if bm else re.sub(r'<span[^>]*\bfn-num\b[^>]*>.*?</span>', "", inner, flags=re.S | re.I)
+        out[data_fn] = body
+    return out
+
+
+def footnote_body_markdown(body_html):
+    """Footnotes are inline-sized: convert to markdown then collapse to one line so
+    the GFM `[^n]: …` definition stays valid on GitHub."""
+    md = html_to_markdown(body_html)
+    return re.sub(r"\s+", " ", md).strip()
+
+
 def draft_to_markdown(_id, d):
     title = strip_html(d.get("title") or "")
     subtitle = strip_html(d.get("subtitle") or "")
@@ -255,6 +284,26 @@ def draft_to_markdown(_id, d):
     ]
     ext_body, used = externalize_media(_id, d.get("body") or "")
     prune_media(_id, used)
+
+    # Footnotes: number the refs in first-appearance order and match each to its body
+    # by data-fn, so GitHub renders proper [^n] links + a definition list. (getHTML only
+    # serialises the ref as a bullet '•' and keeps the bodies in a separate `footnotes`
+    # field, so without this the .md loses footnotes entirely.)
+    fn_bodies = parse_footnote_bodies(d.get("footnotes") or "")
+    num_of = {}
+    ref_order = []
+
+    def _number_ref(m):
+        tag = m.group(0)
+        km = re.search(r'data-fn="([^"]*)"', tag)
+        key = km.group(1) if km else f"__{len(num_of)}"
+        if key not in num_of:
+            num_of[key] = len(num_of) + 1
+            ref_order.append(key)
+        return f"[^{num_of[key]}]"
+
+    ext_body = re.sub(r'<sup[^>]*\bfn-ref\b[^>]*>.*?</sup>', _number_ref, ext_body, flags=re.I | re.S)
+
     parts = []
     if title:
         parts.append(f"# {title}")
@@ -263,6 +312,14 @@ def draft_to_markdown(_id, d):
     body = html_to_markdown(ext_body)
     if body:
         parts.append(body)
+
+    if ref_order:
+        defs = []
+        for key in ref_order:
+            body_md = footnote_body_markdown(fn_bodies.get(key, ""))
+            defs.append(f"[^{num_of[key]}]: {body_md}" if body_md else f"[^{num_of[key]}]:")
+        parts.append("\n".join(defs))
+
     return "\n".join(fm) + "\n\n".join(parts).strip() + "\n"
 
 
@@ -279,33 +336,104 @@ def write_if_changed(path, content):
     return True
 
 
+def existing_id_files():
+    """Map draft id -> set of file stems (basename without .md/.json) already on disk,
+    read from each file's own id (json: the `id` key; md: the `id:` frontmatter line).
+    Lets us find a draft's current files after its title (and so its slug) changed."""
+    id_to_stems = {}
+    try:
+        names = os.listdir(DRAFTS_DIR)
+    except OSError:
+        return id_to_stems
+    for fn in names:
+        if fn.startswith("."):            # skip .editor-drafts.json, .DS_Store, etc.
+            continue
+        stem, ext = os.path.splitext(fn)
+        if ext not in (".md", ".json"):
+            continue
+        path = os.path.join(DRAFTS_DIR, fn)
+        _id = None
+        try:
+            if ext == ".json":
+                with open(path, "r", encoding="utf-8") as f:
+                    _id = (json.load(f) or {}).get("id")
+            else:
+                with open(path, "r", encoding="utf-8") as f:
+                    head = f.read(1000)
+                mm = re.search(r"(?m)^id:\s*(\S+)\s*$", head)
+                if mm:
+                    _id = mm.group(1)
+        except (OSError, ValueError):
+            _id = None
+        if _id:
+            id_to_stems.setdefault(_id, set()).add(stem)
+    return id_to_stems
+
+
+def assign_slugs(drafts):
+    """Deterministic id -> filename-stem map. Slug is the title; on a collision the
+    later id (sorted) keeps the plain slug and the other gets a `-<id>` suffix."""
+    taken = {}          # stem -> id
+    id_to_slug = {}
+    for _id, d in sorted(drafts.items()):
+        if not isinstance(d, dict):
+            continue
+        base = slugify_title(d.get("title") or "", fallback=_id)
+        slug = base
+        if taken.get(slug, _id) != _id:      # already claimed by a different draft
+            slug = f"{base}-{_id}"
+        taken[slug] = _id
+        id_to_slug[_id] = slug
+    return id_to_slug
+
+
 def sync_draft_files(data):
-    """Mirror the store into ./drafts/. Writes/updates a file for every present
-    draft; removes files ONLY for ids with an explicit tombstone. Never deletes a
-    file merely because it's absent from `drafts` (that's the anti-data-loss rule)."""
+    """Mirror the store into ./drafts/. Writes/updates a <title-slug>.md/.json for
+    every present draft; removes files ONLY for (a) a still-present draft whose slug
+    changed — after its new files are written — or (b) an id with an explicit tombstone.
+    Never deletes a file merely because it's absent from `drafts` (anti-data-loss)."""
     os.makedirs(DRAFTS_DIR, exist_ok=True)
     drafts = data.get("drafts", {}) or {}
     deleted = data.get("deleted", {}) or {}
 
+    id_to_slug = assign_slugs(drafts)
+    live_stems = set(id_to_slug.values())     # stems a present draft legitimately owns now
+    on_disk = existing_id_files()
+
+    # 1) write the current (slug-named) files for every present draft
     for _id, d in drafts.items():
         if not isinstance(d, dict):
             continue
-        write_if_changed(os.path.join(DRAFTS_DIR, f"{_id}.json"),
+        slug = id_to_slug[_id]
+        write_if_changed(os.path.join(DRAFTS_DIR, f"{slug}.json"),
                          json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-        write_if_changed(os.path.join(DRAFTS_DIR, f"{_id}.md"),
+        write_if_changed(os.path.join(DRAFTS_DIR, f"{slug}.md"),
                          draft_to_markdown(_id, d))
 
-    # explicit-tombstone-only deletion (of files + that draft's media folder)
-    for _id in deleted:
-        if _id in drafts:
-            continue
+    def _remove_stem(stem):
+        # never delete a stem another present draft currently owns
+        if stem in live_stems:
+            return
         for ext in (".json", ".md"):
-            p = os.path.join(DRAFTS_DIR, f"{_id}{ext}")
+            p = os.path.join(DRAFTS_DIR, f"{stem}{ext}")
             if os.path.exists(p):
                 try:
                     os.remove(p)
                 except OSError:
                     pass
+
+    # 2) rename cleanup: drop stale stems for a still-present draft (new files just written)
+    for _id, slug in id_to_slug.items():
+        for stem in on_disk.get(_id, set()):
+            if stem != slug:
+                _remove_stem(stem)
+
+    # 3) explicit-tombstone-only deletion (files + that draft's media folder)
+    for _id in deleted:
+        if _id in drafts:
+            continue
+        for stem in on_disk.get(_id, set()) | {_id}:   # include legacy id-named files
+            _remove_stem(stem)
         md = media_dir(_id)
         if os.path.isdir(md):
             shutil.rmtree(md, ignore_errors=True)
@@ -317,9 +445,10 @@ def sync_draft_files(data):
     else:
         for _id, d in sorted(drafts.items(), key=lambda kv: -((kv[1] or {}).get("updated") or 0)):
             title = strip_html(d.get("title") or "") or "(untitled)"
+            slug = id_to_slug[_id]
             lines.append(f"- **{title}** — {wordcount(d.get('body') or '')} words — "
                          f"updated {fmt_time(d.get('updated') or 0)} — "
-                         f"[`.md`]({_id}.md) · [`.json`]({_id}.json)")
+                         f"[`.md`]({slug}.md) · [`.json`]({slug}.json)")
     write_if_changed(os.path.join(DRAFTS_DIR, "index.md"), "\n".join(lines) + "\n")
 
 

@@ -114,8 +114,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .ProseMirror-gapcursor::after { content: ""; display: block; position: absolute; top: -2px; width: 20px; border-top: 1px solid var(--text); animation: pm-blink 1.1s steps(2, start) infinite; }
 @keyframes pm-blink { to { visibility: hidden; } }
 .ProseMirror-focused .ProseMirror-gapcursor { display: block; }
-/* atom node selection ring (math, footnote ref, figures) */
-.ProseMirror-selectednode { box-shadow: 0 0 0 2px rgba(15, 122, 229, 0.55); border-radius: 6px; }
+/* atom node selection ring (math, footnote ref, figures). Only ring while the editor actually
+   has focus, so the highlight can never linger after the caret/focus leaves the box (clicking the
+   title, the margins, another app, etc.) — the JS nets above also collapse the stale selection. */
+.ProseMirror-selectednode { border-radius: 6px; }
+.ProseMirror-focused .ProseMirror-selectednode { box-shadow: 0 0 0 2px rgba(15, 122, 229, 0.55); }
 .math-inline.ProseMirror-selectednode, .fn-ref.ProseMirror-selectednode { border-radius: 4px; }
 /* while the in-place field is open the field's own border is the affordance — hide the ring */
 .math-editing.ProseMirror-selectednode { box-shadow: none; }
@@ -186,6 +189,10 @@ math-field.math-edit {
   display: inline-block; border: 1px solid var(--link); border-radius: 6px;
   padding: 1px 4px; background: var(--bg);
   --caret-color: var(--link); --selection-background-color: rgba(15,122,229,0.18);
+  /* MathLive draws a "contains highlight" box around the group the caret is in (e.g. a
+     whole fraction). In OS dark mode it resolves to a dark gray that reads as a black
+     block against the light paper — kill it so moving the caret doesn't paint a chunk. */
+  --contains-highlight-background-color: transparent;
   font-size: 1em;
   /* PM marks the selected atom draggable+contenteditable=false, which the rule above
      (.ProseMirror [draggable][contenteditable="false"]) sets user-select:none on. That

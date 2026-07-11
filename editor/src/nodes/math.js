@@ -10,7 +10,7 @@
  * <math-field> (Desmos shortcuts ^ _ / sqrt; virtual keyboard) when you click into it.
  */
 
-import { Node, nodeInputRule, katex, NodeSelection } from '../../vendor/lib.bundle.js'
+import { Node, nodeInputRule, katex, NodeSelection, Selection } from '../../vendor/lib.bundle.js'
 window.__MATHLOG = window.__MATHLOG || []
 const mlog = (m) => { try { window.__MATHLOG.push(m) } catch (e) {} }
 import { CONFIG } from '../config.js'
@@ -110,6 +110,16 @@ function mathNodeView(isBlock) {
         if (a === mf || dom.contains(a)) return
         if (a && a.closest && a.closest('.ML__keyboard, .MLK__container, .ML__popover')) return
         commit()
+        // commit() re-renders KaTeX but leaves the atom node-selected, so the blue selection
+        // ring lingers after focus left the editor (this path only fires when focus escaped
+        // the editor entirely; an in-editor click goes through deselectNode). Collapse the
+        // selection to a caret past the node so the highlight clears. Focus is elsewhere now,
+        // so the view isn't focused and this won't steal it back.
+        const pos = getPos()
+        const sel = editor.state.selection
+        if (typeof pos === 'number' && sel instanceof NodeSelection && sel.from === pos) {
+          editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(pos + node.nodeSize))))
+        }
       }, 0)
     }
     // Leave edit mode by moving the outer selection off the node → deselectNode → commit.

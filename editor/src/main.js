@@ -24,6 +24,17 @@ function isNavigableBlock(node) {
   return !!node && !node.isText && (NAV_BLOCKS.has(node.type.name) || (node.isAtom && node.isBlock))
 }
 
+// A caret-style selection near `pos` (preferring `bias`: +1 forward, -1 back) that is NOT a
+// NodeSelection on an atom — selecting an atom would just move the blue ring instead of clearing
+// it. Falls back to the other direction. Used everywhere we "step off" a highlighted math box.
+function caretNear(doc, pos, bias) {
+  const clamp = (p) => Math.max(0, Math.min(p, doc.content.size))
+  const a = Selection.near(doc.resolve(clamp(pos)), bias)
+  if (!(a instanceof NodeSelection)) return a
+  const b = Selection.near(doc.resolve(clamp(pos)), -bias)
+  return b instanceof NodeSelection ? a : b
+}
+
 /* ---------------------------------------------------------------- boot */
 const surface = $('surface')
 const docTitle = $('docTitle')
@@ -77,14 +88,34 @@ export const editor = new Editor({
       if (event.key === 'Enter' && selection instanceof NodeSelection && isMathNode(selection.node)) {
         return selectAndEditMath(view, selection.from)
       }
+      // Backspace in an EMPTY trailing paragraph that sits right after a blockquote (or code
+      // block) → delete the whole line. ProseMirror's default instead pulls the empty paragraph
+      // up INTO the block before it, so it can never be removed — the "extra space you can't get
+      // rid of" between the last quote and the footnotes.
+      if (event.key === 'Backspace' && selection.empty && selection.$from.depth === 1) {
+        const $from = selection.$from
+        const para = $from.parent
+        const before = $from.before() > 0 ? doc.resolve($from.before()).nodeBefore : null
+        if (para.type.name === 'paragraph' && para.content.size === 0 &&
+            $from.after() === doc.content.size && doc.childCount > 1 &&
+            before && (before.type.name === 'blockquote' || before.type.name === 'codeBlock')) {
+          try {
+            const start = $from.before()
+            const tr = state.tr.delete(start, $from.after())
+            view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(start), -1)).scrollIntoView())
+            return true
+          } catch (e) { /* fall through to default */ }
+        }
+      }
       if ((event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') ||
           event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false
       const dir = event.key === 'ArrowRight' ? 1 : -1
 
-      // (1) a whole item is already highlighted → step the caret just past it.
+      // (1) a whole item is already highlighted → step the caret just past it (to a real caret,
+      // never onto the next atom — that would just carry the ring along).
       if (selection instanceof NodeSelection) {
         const at = dir > 0 ? selection.to : selection.from
-        view.dispatch(state.tr.setSelection(Selection.near(doc.resolve(at), dir)).scrollIntoView())
+        view.dispatch(state.tr.setSelection(caretNear(doc, at, dir)).scrollIntoView())
         return true
       }
 
@@ -297,6 +328,37 @@ $('scrollArea').addEventListener('mousedown', (e) => {
   if (!hit) return
   e.preventDefault()
   editor.chain().focus().setTextSelection(hit.pos).run()
+})
+
+// Arrow-selecting a math atom highlights it (blue ring) without opening a field. PM keeps
+// that ring on blur, so clicking out in the page — margins, title, chrome — leaves it stuck.
+// Drop it on any mousedown that lands outside the editor. Skip when an in-place field is open:
+// that case is owned by the field's own focus-out commit (nodes/math.js), which also respects
+// focus-preserving controls like the toolbar and corner keyboard toggle. Deferred so the click
+// lands (focus moves off the editor) before we collapse, avoiding a focus tug-of-war.
+document.addEventListener('mousedown', () => {
+  const sel = editor.state.selection
+  if (!(sel instanceof NodeSelection) || !isMathNode(sel.node)) return
+  if (document.querySelector('math-field.math-edit')) return   // a field is open → it owns teardown
+  const pos = sel.from
+  // Let the click settle, then if a math atom is STILL node-selected at the same spot (the click
+  // didn't move the caret off it), collapse it to a plain caret. This enforces "caret not on the
+  // box ⟹ no ring" for clicking elsewhere in the text, the margins, or off the editor entirely.
+  setTimeout(() => {
+    if (document.querySelector('math-field.math-edit')) return // a field opened from this click
+    const s = editor.state.selection
+    if (!(s instanceof NodeSelection) || !isMathNode(s.node) || s.from !== pos) return
+    editor.view.dispatch(editor.state.tr.setSelection(caretNear(editor.state.doc, s.to, 1)))
+  }, 0)
+}, true)
+
+// Same guarantee when focus leaves the editor without a mousedown we can see (Tab away, switch
+// apps, click the title/topbar): drop any lingering math ring on blur, unless a field is editing.
+editor.on('blur', () => {
+  const sel = editor.state.selection
+  if (sel instanceof NodeSelection && isMathNode(sel.node) && !document.querySelector('math-field.math-edit')) {
+    editor.view.dispatch(editor.state.tr.setSelection(caretNear(editor.state.doc, sel.to, 1)))
+  }
 })
 
 /* ---------------------------------------------------------------- keyboard shortcuts */

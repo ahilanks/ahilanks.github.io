@@ -198,6 +198,16 @@ function figureNodeView() {
       contentDOM: caption,
       update(next) {
         if (next.type !== node.type) return false
+        // The media element (an <img> or a <video>) is built once at creation and can't be
+        // mutated into the other kind, and a <video>'s bytes are re-sourced by vid — not by a
+        // plain src swap. So when PM reuses this node view across a draft switch (setContent),
+        // bail out and let it rebuild a fresh node view if the media KIND or the video source
+        // changed; otherwise a reused element keeps showing the previous draft's picture/video
+        // until a full page reload. rehydrateVideos() (run right after setContent) then points
+        // the fresh <video> at the right bytes. Same-kind image src changes still update in place.
+        const nextIsVideo = next.attrs.mediaType === 'video'
+        if (nextIsVideo !== isVideo) return false
+        if (nextIsVideo && next.attrs.vid !== node.attrs.vid) return false
         node = next
         applyWidth()
         if (!isVideo && media.src !== node.attrs.src && node.attrs.src) media.src = node.attrs.src

@@ -9,6 +9,7 @@
 
 import { Node } from '../../vendor/lib.bundle.js'
 import { $, uid, debounce } from '../dom.js'
+import { cleanPastedHTML, insertCleanHTML, insertPlain } from '../paste.js'
 
 /* ----------------------------------------------------------------- the node */
 export const FootnoteRef = Node.create({
@@ -72,6 +73,24 @@ function createFnEntry(id) {
   return li
 }
 
+/* ------------------------------------------------------- deleted-body graveyard
+ * Footnote BODIES live outside the ProseMirror doc, so PM's history knows nothing about
+ * them: undoing a deleted reference used to bring the ref back with an EMPTY body, losing
+ * the text. So a pruned <li> isn't thrown away — it's parked here by fnId and reused if
+ * that ref reappears (undo, or a cut-and-paste of the ref elsewhere). Bounded so a long
+ * session can't grow it forever; cleared on a draft switch (loadFootnotesHTML). */
+const GRAVE_MAX = 300
+const buried = new Map() // fnId → detached <li>
+function bury(id, li) {
+  buried.set(id, li)
+  while (buried.size > GRAVE_MAX) buried.delete(buried.keys().next().value)
+}
+function exhume(id) {
+  const li = buried.get(id)
+  if (li) buried.delete(id)
+  return li || null
+}
+
 let lastSig = ''
 export function reconcileFootnotes(editor) {
   const fnList = $('fnList'); const section = $('footnotes')
@@ -85,12 +104,17 @@ export function reconcileFootnotes(editor) {
 
   const entries = {}
   Array.from(fnList.children).forEach((li) => (entries[li.dataset.fn] = li))
-  Object.keys(entries).forEach((id) => { if (!seen.has(id)) { entries[id].remove(); delete entries[id] } })
+  // ref gone → park the body (undo can bring both back together), don't destroy it
+  Object.keys(entries).forEach((id) => {
+    if (seen.has(id)) return
+    const li = entries[id]
+    li.remove(); bury(id, li); delete entries[id]
+  })
   refs.forEach((ref, i) => {
     const n = i + 1
     ref.textContent = n
     let li = entries[ref.dataset.fn]
-    if (!li) { li = createFnEntry(ref.dataset.fn); entries[ref.dataset.fn] = li }
+    if (!li) { li = exhume(ref.dataset.fn) || createFnEntry(ref.dataset.fn); entries[ref.dataset.fn] = li }
     li.querySelector('.fn-num').textContent = n + '.'
     fnList.appendChild(li) // append in ref order → correct ordering
   })
@@ -112,7 +136,28 @@ export function setupFootnotes(editor, onFootnoteEdit) {
   const reconcile = () => reconcileFootnotes(editor)
   editor.on('update', debounce(reconcile, 120))
   const fnList = $('fnList')
-  if (fnList) fnList.addEventListener('input', () => onFootnoteEdit && onFootnoteEdit())
+  if (fnList) {
+    fnList.addEventListener('input', () => onFootnoteEdit && onFootnoteEdit())
+    // Paste into a footnote body: keep the words and inline formatting, drop the source
+    // page's styling. (These are raw contenteditable divs — the browser's default paste
+    // would inject its spans/fonts/colors verbatim, which normalizeFnBody only cleans up
+    // on the next reconcile.)
+    fnList.addEventListener('paste', (e) => {
+      const cd = e.clipboardData
+      if (!cd) return
+      const html = cd.getData('text/html')
+      e.preventDefault()
+      if (html) {
+        const tmp = document.createElement('div')
+        tmp.innerHTML = cleanPastedHTML(html)
+        normalizeFnBody(tmp) // footnote bodies allow inline formatting only
+        insertCleanHTML(tmp.innerHTML)
+      } else {
+        insertPlain(cd.getData('text/plain') || '')
+      }
+      if (onFootnoteEdit) onFootnoteEdit()
+    })
+  }
   // click a ref → focus its body
   editor.view.dom.addEventListener('click', (e) => {
     const ref = e.target.closest && e.target.closest('.fn-ref')
@@ -130,6 +175,7 @@ export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML 
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''
+  buried.clear() // bodies parked from the PREVIOUS draft must never leak into this one
   lastSig = '' // force a re-number on the next reconcile
   reconcileFootnotes(editor)
 }

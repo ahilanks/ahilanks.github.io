@@ -11,17 +11,20 @@ import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
+import { cleanPastedHTML, setupPlainTextPaste } from './paste.js'
 import { setupSourceView } from './source-view.js'
 import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
 
 setupMathLive()
 
-// Block-level items that arrow keys can highlight-then-step-past (like inline math).
-// Excludes paragraphs/headings/lists so ordinary text navigation is untouched.
-const NAV_BLOCKS = new Set(['figure', 'blockMath', 'blockquote', 'horizontalRule', 'codeBlock'])
+// Block-level items that arrow keys highlight-then-step-past, like inline math: media
+// figures, display equations, rules. Anything that holds ordinary TEXT — paragraphs,
+// headings, lists, quotes, code blocks — is deliberately absent: the caret has to walk
+// through those one character at a time, not hop over a whole quote in a single press.
+const NAV_BLOCKS = new Set(['figure', 'blockMath', 'horizontalRule'])
 function isNavigableBlock(node) {
-  return !!node && !node.isText && (NAV_BLOCKS.has(node.type.name) || (node.isAtom && node.isBlock))
+  return !!node && !node.isText && NAV_BLOCKS.has(node.type.name)
 }
 
 // A caret-style selection near `pos` (preferring `bias`: +1 forward, -1 back) that is NOT a
@@ -78,10 +81,30 @@ export const editor = new Editor({
       if (dom && dom.classList && dom.classList.contains('math-editing')) return false
       return selectAndEditMath(view, nodePos)
     },
+    // A click on a link OPENS it (new tab) — that's the only thing that does; hovering one
+    // shows nothing (see links.js). Hold any modifier to click "into" a link instead: that
+    // drops the caret inside it so ⌘K can edit the URL. Drag-selecting link text never gets
+    // here either (ProseMirror skips handleClick once the pointer has moved), so selecting
+    // a link and hitting ⌘K works too.
+    handleClick(view, pos, event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
+      const a = event.target && event.target.closest && event.target.closest('a[href]')
+      if (!a || !view.dom.contains(a)) return false
+      const href = a.getAttribute('href')
+      if (!href) return false
+      event.preventDefault()
+      window.open(href, '_blank', 'noopener')
+      return true
+    },
+    // Pasted (or dropped) content from another site adopts THIS editor's typography: the
+    // structure survives, the source page's presentation doesn't. Internal copy/paste is
+    // passed through untouched — see paste.js.
+    transformPastedHTML: (html) => cleanPastedHTML(html),
     // Keyboard: Enter opens a selected equation; Left/Right arrows select an adjacent
-    // item — inline (math, footnote ref) or block (image/video, block math, quote, rule,
-    // code) — as a highlight, then step the caret past it, in both directions, without
-    // entering it. (Enter still opens a highlighted equation for editing.)
+    // OBJECT — inline (math, footnote ref) or block (image/video, block math, rule) — as a
+    // highlight, then step the caret past it, in both directions, without entering it. Text
+    // blocks (quotes, lists, code) are not objects: the caret walks into them normally, one
+    // character per press. (Enter still opens a highlighted equation for editing.)
     handleKeyDown(view, event) {
       const { state } = view
       const { selection, doc } = state
@@ -122,9 +145,15 @@ export const editor = new Editor({
       // (2) a collapsed caret sitting right next to an item → highlight that item.
       if (selection.empty) {
         const $from = selection.$from
-        // 2a. an inline atom immediately beside the caret (inline math, footnote ref)
+        // 2a. an inline OBJECT immediately beside the caret (inline math, footnote ref).
+        // `!isText` is load-bearing: in ProseMirror's model a text node is a leaf, so
+        // `text.isAtom` is TRUE. Without the guard, every ordinary left/right press inside a
+        // word matched here ($from.nodeBefore mid-word is a text node) and node-selected the
+        // whole text run — which read as the caret "jumping" to the next link or block edge
+        // instead of moving one character.
         const inlineSide = dir > 0 ? $from.nodeAfter : $from.nodeBefore
-        if (inlineSide && inlineSide.isInline && inlineSide.isAtom && inlineSide.type.name !== 'hardBreak') {
+        if (inlineSide && inlineSide.isInline && !inlineSide.isText && inlineSide.isAtom &&
+            inlineSide.type.name !== 'hardBreak' && NodeSelection.isSelectable(inlineSide)) {
           const pos = dir > 0 ? selection.from : selection.from - inlineSide.nodeSize
           view.dispatch(state.tr.setSelection(NodeSelection.create(doc, pos)).scrollIntoView())
           return true
@@ -215,6 +244,7 @@ docSubtitle.addEventListener('keydown', (e) => {
 })
 ;[docTitle, docSubtitle].forEach((el) => {
   el.addEventListener('input', () => { refreshPlaceholders(); scheduleSave() })
+  setupPlainTextPaste(el) // these store innerHTML: paste text only, never a site's markup
 })
 function refreshPlaceholders() {
   ;[docTitle, docSubtitle].forEach((el) => el.classList.toggle('is-empty', el.textContent.trim() === ''))

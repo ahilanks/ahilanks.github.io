@@ -159,7 +159,17 @@ function mathNodeView(isBlock) {
       },
       // NOTE: intentionally NO selectNode() → editing is not tied to being node-selected, so
       // arrow keys can select the atom (highlight) and step past it without opening the field.
-      deselectNode() { commit() },
+      // But a custom deselectNode REPLACES ProseMirror's own (it's `spec.deselectNode ? … :
+      // super.deselectNode()`), so we have to undo what its selectNode did: drop the
+      // selection class and the draggable flag. Without this the blue ring stayed on every
+      // equation you had ever clicked, even while typing somewhere else — and the leftover
+      // [draggable] also pulled in the `user-select:none` rule that breaks MathLive's
+      // click-to-position.
+      deselectNode() {
+        dom.classList.remove('ProseMirror-selectednode')
+        dom.removeAttribute('draggable')
+        commit()
+      },
       // Never let PM draw a DOM Range around the selected atom — that browser selection
       // change is what blurs/tears down the freshly-mounted <math-field>.
       setSelection() {},

@@ -1,13 +1,14 @@
-/* links.js — the link mark UI: popover editor + hover/caret preview chip.
+/* links.js — the link mark UI: popover editor + caret preview chip.
  *
- * StarterKit's Link mark is already enabled in main.js (openOnClick:false, autolink:true,
- * target=_blank/rel=noopener). This module only wires the CHROME around it:
+ * StarterKit's Link mark is already enabled in main.js (autolink:true, target=_blank/
+ * rel=noopener). Opening a link is main.js's handleClick — a plain click on a link opens
+ * it in a new tab; hovering does nothing. This module only wires the CHROME around it:
  *
  *   • ⌘K / the toolbar #linkBtn / the bubble #bubbleLink open #linkPop near the selection,
  *     prefilled with the current href. Apply runs extendMarkRange('link').setLink({href})
  *     (href is normalised: a bare host gets https://; empty unsets). Remove unsets.
  *   • A #linkPreview chip shows the URL (as a real clickable <a target=_blank>) whenever the
- *     caret is inside a link or the mouse hovers one, with an Edit button back into the popover.
+ *     CARET is inside a link, with an Edit button back into the popover. Not on hover.
  *
  * Ported from v1's openLinkPop / positionPopover / linkPreview, adapted from raw contenteditable
  * + execCommand to TipTap commands (extendMarkRange/setLink/unsetLink) and ProseMirror geometry
@@ -184,22 +185,17 @@ export function setupLinks(editor) {
     lpAnchor = null
   }
 
-  // caret inside a link → show; caret left the link → hide
+  // caret inside a link → show; caret left the link → hide.
+  // Hover deliberately does NOT show the chip: a click opens the link (main.js's
+  // handleClick), so pointing at one has no side effect at all. The chip is the *editing*
+  // affordance — it appears once the caret is actually inside the link (modifier-click,
+  // arrow keys, or a drag-selection), and its Edit button opens the URL popover.
   editor.on('selectionUpdate', () => {
     const a = anchorAtSelection()
     if (a) showPreview(a)
     else if (lpAnchor) hidePreview()
   })
 
-  // hover a link → show; leaving it hides unless the caret is still parked inside a link
-  editor.view.dom.addEventListener('mouseover', (e) => {
-    const a = e.target.closest && e.target.closest('a[href]')
-    if (a) showPreview(a)
-  })
-  editor.view.dom.addEventListener('mouseout', (e) => {
-    const a = e.target.closest && e.target.closest('a[href]')
-    if (a && !anchorAtSelection()) hidePreview()
-  })
   // keep the chip alive while the pointer is on it (so Edit stays clickable)
   linkPreview.addEventListener('mouseenter', () => clearTimeout(lpHideTimer))
   linkPreview.addEventListener('mouseleave', () => hidePreview())

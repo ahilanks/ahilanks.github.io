@@ -139,7 +139,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .doc-body blockquote { margin: 1.5rem 0; padding: 0.2rem 0 0.2rem 1.2rem; color: var(--text); font-size: 1.18rem; position: relative; }
 /* the accent bar is a pseudo-element inset from top/bottom, so it's a little shorter than the quote */
 .doc-body blockquote::before { content: ""; position: absolute; left: 0; top: 0.4rem; bottom: 0.4rem; width: 3px; border-radius: 2px; background: var(--accent); }
-.doc-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; }
+/* a plain click opens the link (main.js handleClick), so show the pointer, not an I-beam */
+.doc-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; cursor: pointer; }
 .doc-body hr { border: none; border-top: 1px solid var(--line); margin: 2.2rem auto; width: 40%; }
 .doc-body ul, .doc-body ol { padding-left: 1.4rem; }
 .doc-body li { margin: 0.2rem 0; }

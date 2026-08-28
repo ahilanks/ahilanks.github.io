@@ -8,8 +8,27 @@
  * wiring/ rehydration comes in the next step.
  */
 
-import { Node } from '../../vendor/lib.bundle.js'
+import { Node, NodeSelection } from '../../vendor/lib.bundle.js'
 import { toast } from '../dom.js'
+
+/* Small scaled-down drag ghost so a full-width image doesn't blanket the text (and
+ * the drop-position line) while dragging. Chrome snapshots the element when
+ * setDragImage is called and needs it rendered in the DOM at that moment; it's
+ * removed right after. Any failure falls back to the browser's default ghost. */
+function setDragGhost(e, img) {
+  try {
+    const w = img.clientWidth, h = img.clientHeight
+    if (!w || !h || w <= 240) return
+    const c = document.createElement('canvas')
+    c.width = 240
+    c.height = Math.max(1, Math.round((h * 240) / w))
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+    c.style.cssText = 'position:fixed;left:-10000px;top:0;pointer-events:none;'
+    document.body.appendChild(c)
+    e.dataTransfer.setDragImage(c, Math.round(c.width / 2), 18)
+    setTimeout(() => c.remove(), 0)
+  } catch (err) { /* default ghost */ }
+}
 
 function figureNodeView() {
   return ({ node, editor, getPos }) => {
@@ -29,7 +48,35 @@ function figureNodeView() {
       if (node.attrs.alt) media.alt = node.attrs.alt
     }
     media.setAttribute('contenteditable', 'false')
-    media.setAttribute('draggable', 'false')
+    // Images are draggable: dragging the picture MOVES the whole figure (caption included)
+    // through the doc. Videos stay non-draggable — a draggable attr would turn every
+    // scrub/volume drag on the native controls into an element drag.
+    media.setAttribute('draggable', isVideo ? 'false' : 'true')
+
+    /* ── drag the image to move the figure ─────────────────────────────────────
+       Node-select the figure on dragstart and let ProseMirror's own drag pipeline do
+       the rest: it serializes the selection into the drag, the StarterKit dropcursor
+       draws the insertion line while dragging, and the drop MOVES the node (source
+       deleted, caption travels — it's the node's content). The node spec deliberately
+       stays draggable:false: spec-draggable arms native dragging for any mousedown
+       inside the figure (ProseMirror's mightDrag), which would turn drag-selecting
+       caption text into a figure drag. Wiring the <img> alone keeps captions editable. */
+    if (!isVideo) {
+      let draggingThis = false
+      media.addEventListener('dragstart', (e) => {
+        const pos = getPos()
+        if (!editor.isEditable || typeof pos !== 'number' || !e.dataTransfer ||
+            fig.classList.contains('resizing')) { e.preventDefault(); return }
+        const { state } = editor.view
+        editor.view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)))
+        setDragGhost(e, media)
+        // dim the source only AFTER the browser snapshots the drag ghost (which happens
+        // when this handler returns), so a small image's default ghost isn't dimmed too
+        draggingThis = true
+        setTimeout(() => { if (draggingThis) fig.classList.add('drag-source') }, 0)
+      })
+      media.addEventListener('dragend', () => { draggingThis = false; fig.classList.remove('drag-source') })
+    }
 
     const caption = document.createElement('figcaption')
     caption.dataset.placeholder = 'Write a caption…'

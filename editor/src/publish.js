@@ -141,8 +141,19 @@ function htmlToText(html) {
   return (d.textContent || '').trim()
 }
 
+// Stable, readable anchor for a heading: "sec-" + slugified text, deduped with a counter.
+function headingId(text, used) {
+  const base = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'section'
+  let id = 'sec-' + base
+  for (let i = 2; used.has(id); i++) id = 'sec-' + base + '-' + i
+  used.add(id)
+  return id
+}
+
 // Turn a detached clone of the serialised body into clean published HTML:
 // math nodes -> $..$ / $$..$$ text for KaTeX auto-render, footnote refs -> numbered anchors.
+// Also gives every non-empty H2/H3 an id and returns the contents-panel entries
+// ({ id, text, level, n }, where n is the §-number counted over H2s only).
 function bodyToPublishHtml(clone) {
   // inline math -> literal $tex$ text
   clone.querySelectorAll('.math-inline').forEach((m) => m.replaceWith(document.createTextNode('$' + (m.dataset.tex || '') + '$')))
@@ -176,7 +187,27 @@ function bodyToPublishHtml(clone) {
     f.removeAttribute('data-w')
     if (w < 100) f.setAttribute('style', 'width:' + w + '%;margin-left:auto;margin-right:auto;')
   })
-  return clone.innerHTML
+  // contents panel: anchor + collect every non-empty H2/H3/H4 (ids survive sanitizeNode
+  // above). Depth comes from the distinct levels actually used (a doc written all in H3s
+  // still gets §-numbered sections; H4s directly under H2s still nest one step): depth 0
+  // (level 2) is §-numbered, depths 1/2 (levels 3/4) are sub-entries the page script
+  // progressively discloses while their parent section / sub-section is being read.
+  const hs = []
+  clone.querySelectorAll('h2, h3, h4').forEach((h) => {
+    const text = (h.textContent || '').trim()
+    if (text) hs.push({ h, text, lvl: +h.tagName[1] })
+  })
+  const lvls = Array.from(new Set(hs.map((e) => e.lvl))).sort()
+  const toc = []
+  const usedIds = new Set()
+  let secN = 0
+  hs.forEach((e) => {
+    const depth = lvls.indexOf(e.lvl)
+    if (depth === 0) secN++
+    e.h.id = headingId(e.text, usedIds)
+    toc.push({ id: e.h.id, text: e.text, level: depth + 2, n: depth === 0 ? secN : 0 })
+  })
+  return { html: clone.innerHTML, toc }
 }
 
 // Split inline data-URI images out to media/ files and drop unresolvable videos, then
@@ -201,12 +232,14 @@ function buildBody(bodyHtml, slug) {
     const v = f.querySelector('video')
     if (!v || !v.getAttribute('src')) f.remove()
   })
-  return { html: bodyToPublishHtml(clone), files }
+  const { html, toc } = bodyToPublishHtml(clone)
+  return { html, files, toc }
 }
 
 // Pull the numbered footnote bodies from the live (already reconciled) #fnList.
+// Orphaned bodies (ref deleted in the text) are editor-only and never published.
 function buildFootnotesHtml(fnListEl) {
-  const items = fnListEl ? Array.from(fnListEl.children) : []
+  const items = fnListEl ? Array.from(fnListEl.children).filter((li) => !li.classList.contains('fn-orphan')) : []
   if (!items.length) return ''
   let html = '\n      <hr class="fn-divider" />\n      <ol class="footnotes">\n'
   items.forEach((li, idx) => {
@@ -222,9 +255,68 @@ function buildFootnotesHtml(fnListEl) {
 }
 
 // Build a full standalone article that matches the published site's aesthetic.
-function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bodyHtml, footHtml }) {
+function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bodyHtml, footHtml, toc }) {
   const title = escapeHtml(titleText)
   const subtitle = escapeHtml(subtitleText)
+  const hasToc = !!(toc && toc.length)
+
+  // Contents panel: fixed top-left, §-numbered H2s + indented H3s/H4s (sub-entries only
+  // shown while their parent section / sub-section is being read), active entry tracked
+  // by the tiny scrollspy script below. Hidden entirely when the viewport is too narrow.
+  const tocHtml = hasToc
+    ? '    <nav class="toc" aria-label="Contents">\n' +
+      '      <div class="toc-label">Contents</div>\n' +
+      '      <div class="toc-list">\n' +
+      toc.map((t) =>
+        '        <a class="toc-item lvl-' + t.level + '" href="#' + t.id + '">' +
+        (t.level === 2 ? '§' + t.n + ' · ' : '') + escapeHtml(t.text) + '</a>').join('\n') + '\n' +
+      '      </div>\n' +
+      '    </nav>'
+    : ''
+
+  const tocScript = hasToc
+    ? '    <script>\n' +
+      '      (function () {\n' +
+      '        var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));\n' +
+      '        if (!items.length) return;\n' +
+      '        // parent links by document order: lvl-2 = section, lvl-3 = sub, lvl-4 = sub-sub\n' +
+      '        var meta = [], sec = -1, sub = -1;\n' +
+      '        for (var m = 0; m < items.length; m++) {\n' +
+      '          var c = items[m].className;\n' +
+      '          var d = c.indexOf("lvl-4") >= 0 ? 2 : c.indexOf("lvl-3") >= 0 ? 1 : 0;\n' +
+      '          if (d === 0) { sec = m; sub = -1; }\n' +
+      '          if (d === 1) sub = m;\n' +
+      '          meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });\n' +
+      '          // a clicked entry stays disclosed even when the page is too short to scroll it to the top\n' +
+      '          items[m].addEventListener("click", (function (i) { return function () { pinned = i; update(); }; })(m));\n' +
+      '        }\n' +
+      '        var pinned = -1;\n' +
+      '        var ticking = false;\n' +
+      '        function update() {\n' +
+      '          ticking = false;\n' +
+      '          var active = 0;\n' +
+      '          for (var i = 0; i < items.length; i++) {\n' +
+      '            var h = document.getElementById(items[i].getAttribute("href").slice(1));\n' +
+      '            if (h && h.getBoundingClientRect().top <= 110) active = i;\n' +
+      '          }\n' +
+      '          // subs show only inside an open section, sub-subs only inside an open\n' +
+      '          // sub-section — open = being read (scroll) or last clicked (pinned)\n' +
+      '          var secs = [meta[active].sec], subs = [meta[active].sub];\n' +
+      '          if (pinned >= 0) { secs.push(meta[pinned].sec); subs.push(meta[pinned].sub); }\n' +
+      '          for (var j = 0; j < items.length; j++) {\n' +
+      '            items[j].classList.toggle("active", j === active);\n' +
+      '            var show = true;\n' +
+      '            if (meta[j].d === 1) show = meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0;\n' +
+      '            else if (meta[j].d === 2) show = (meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0) && (meta[j].sub === -1 || subs.indexOf(meta[j].sub) >= 0);\n' +
+      '            items[j].classList.toggle("hide", !show);\n' +
+      '          }\n' +
+      '        }\n' +
+      '        addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });\n' +
+      '        addEventListener("load", update);\n' + // re-check once KaTeX/images have shifted the layout
+      '        update();\n' +
+      '      })();\n' +
+      '    </script>'
+    : ''
   const fontFamily =
     font === 'serif' ? '"Newsreader", Georgia, serif'
       : font === 'mono' ? '"JetBrains Mono", monospace'
@@ -260,6 +352,11 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      .math-block.align-right, .math-block.align-right .katex-display { text-align:right; }',
     '      .katex { font-size: 1em; }',
     '      p, ul, ol { margin:0 0 1.25rem; }',
+    '      li { margin:0; }',
+    '      li > p, li > ul, li > ol { margin:0; }',
+    '      ul { list-style-type:disc; }',
+    '      ul ul { list-style-type:circle; }',
+    '      ul ul ul { list-style-type:square; }',
     '      h2 { font-size:1.7rem; margin:2rem 0 0.8rem; letter-spacing:-0.01em; }',
     '      h3 { font-size:1.32rem; margin:1.7rem 0 0.6rem; }',
     '      blockquote { margin:1.5rem 0; padding:0.2rem 0 0.2rem 1.2rem; position:relative; }',
@@ -277,9 +374,24 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }',
     '      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }',
     '      .fn-back { text-decoration:none; }',
+    hasToc ? '      html { scroll-behavior:smooth; }' : '',
+    hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
+    hasToc ? '      .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }' : '',
+    hasToc ? '      .toc::-webkit-scrollbar { display:none; }' : '',
+    hasToc ? '      .toc-label { font-family:system-ui, sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-color); margin:0 0 0.9rem 2px; }' : '',
+    hasToc ? '      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }' : '',
+    hasToc ? '      .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }' : '',
+    hasToc ? '      .toc-item:hover { color:var(--text-color); }' : '',
+    hasToc ? '      .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }' : '',
+    hasToc ? '      .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }' : '',
+    hasToc ? '      .toc-item.hide { display:none; }' : '',
+    hasToc ? '      .toc-item.active { color:var(--text-color); font-weight:700; }' : '',
+    hasToc ? '      .toc-item.active::before { content:""; position:absolute; left:-2px; top:0.18rem; bottom:0.18rem; width:3px; background:var(--text-color); border-radius:2px; }' : '',
+    hasToc ? '      @media (max-width:1250px) { .toc { display:none; } }' : '',
     '    </style>',
     '  </head>',
     '  <body>',
+    tocHtml,
     '    <main class="container">',
     '      <a class="back" href="../writings.html">← Writings</a>',
     '      <h1>' + title + '</h1>',
@@ -288,6 +400,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ' + bodyHtml,
     footHtml,
     '    </main>',
+    tocScript,
     '  </body>',
     '</html>',
     '',
@@ -390,7 +503,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       const writingsDir = await root.getDirectoryHandle('writings', { create: true })
 
       // 1) split inline data-URI images out to writings/media/<slug>-N.<ext>
-      const { html: bodyHtml, files } = buildBody(snap.body, slug)
+      const { html: bodyHtml, files, toc } = buildBody(snap.body, slug)
       const mediaDir = files.length ? await writingsDir.getDirectoryHandle('media', { create: true }) : null
       for (const f of files) await writeFile(mediaDir, f.name, f.blob)
 
@@ -404,6 +517,7 @@ export function setupPublish({ editor, currentSnapshot }) {
         font: snap.font,
         bodyHtml,
         footHtml: buildFootnotesHtml($('fnList')),
+        toc,
       })
       await writeFile(writingsDir, slug + '.html', new Blob([articleHtml], { type: 'text/html' }))
 

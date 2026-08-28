@@ -7,12 +7,14 @@ import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
 import { FootnoteRef, setupFootnotes, footnotesHTML, loadFootnotesHTML } from './nodes/footnote.js'
 import { Figure } from './nodes/figure.js'
+import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
 import { cleanPastedHTML, setupPlainTextPaste } from './paste.js'
 import { setupSourceView } from './source-view.js'
+import { setupToc } from './toc.js'
 import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
 
@@ -53,11 +55,15 @@ export const editor = new Editor({
     StarterKit.configure({
       heading: { levels: CONFIG.headingLevels },
       link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener', target: '_blank' } },
+      // the drop-position line shown while dragging a figure (or text) — match the
+      // node-selection ring blue so "what's selected" and "where it lands" read as one
+      dropcursor: { color: 'rgba(15, 122, 229, 0.8)', width: 3 },
       // keep it prose-focused; code block stays available
     }),
     // Only prompt "Start writing…" when the whole document is empty — not on every
     // blank paragraph inside an article that already has text.
     Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? 'Start writing…' : '') }),
+    SmartTypography,
     InlineMath,
     BlockMath,
     FootnoteRef,
@@ -290,6 +296,9 @@ function applySnapshot(s) {
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')
+  // setContent above runs with emitUpdate:false, so the contents panel won't hear about
+  // the swap through editor.on('update') — refresh it directly (toc is set up before load()).
+  if (toc) toc.refresh()
   // Re-create video sources for the draft just displayed (IndexedDB → disk backup).
   rehydrateVideos(editor, s.id || doc.id)
 }
@@ -342,8 +351,18 @@ setupLinks(editor)
 // Source view: the Write/Source toggle → read-only Markdown + LaTeX.
 setupSourceView(editor)
 
+// Contents panel: top-left §-numbered outline of the doc's headings (see toc.js).
+const toc = setupToc(editor)
+
 // Publish: build a standalone article and write it to writings/ via File System Access.
 setupPublish({ editor, currentSnapshot })
+
+// While a ProseMirror drag (an image figure, or dragged text) is in flight, a drop on any
+// OTHER editable surface — title, subtitle, footnote bodies — would natively paste the
+// dragged HTML into it. Swallow those: only the editor body may accept an editor drag.
+document.addEventListener('drop', (e) => {
+  if (editor.view.dragging && !editor.view.dom.contains(e.target)) e.preventDefault()
+}, true)
 
 // Click in the empty margin beside the text → place the caret at the start (left margin) or
 // end (right margin) of the line at that height, like a word processor.

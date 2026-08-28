@@ -248,6 +248,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     },
     async push() {
       if (SANDBOX) return
+      clearTimeout(this.pushTimer) // a direct push supersedes any scheduled one
       try {
         const r = await fetch(this.url, {
           method: 'PUT',
@@ -284,11 +285,13 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
       return Math.floor(h / 24) + 'd ago'
     }
     let status = null
+    let pushing = false // a manual backup is in flight → nothing may repaint the label until it resolves
     const render = () => {
-      if (!status) return
+      if (pushing || !status) return
       const t = status.last_push_ts ? ago(status.last_push_ts) : 'not backed up'
       // cloud icon goes green when everything is pushed (up to date), gray otherwise
       if (btn) btn.classList.toggle('synced', status.ok !== false && !!status.synced)
+      if (txt) txt.title = status.detail || ''
       if (status.ok === false) show('⚠ ' + t, '#c0392b')
       else show(t, '#999') // just "6m ago", gray
     }
@@ -298,10 +301,41 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
       render()
     }
     if (btn) btn.onclick = async () => {
-      show('Backing up…', '#999'); btn.disabled = true
-      try { await fetch('/api/push', { method: 'POST' }) }
-      catch (e) { show('⚠ backup error (is the server running?)', '#c0392b') }
+      if (pushing) return
+      pushing = true
+      btn.disabled = true
+      show('Backing up…', '#999')
+      try {
+        // Flush the live doc all the way to the server FIRST, so the commit that's about
+        // to happen contains what's on screen right now — not the state from the last
+        // debounced sync. Skip the save when nothing changed since the last one: saving
+        // anyway would bump `updated` for identical content, forcing a no-op commit and
+        // resorting the drafts list under the user. Then POST /api/push, which runs
+        // git add/commit/push synchronously and only responds when the push has actually
+        // finished. "Backing up…" holds for that whole span: the 30s/60s interval
+        // repaints are gated on `pushing`, so the label can't fall back to the previous
+        // time mid-push.
+        const s = currentSnapshot()
+        const drafts = getDrafts()
+        const cur = drafts[s.id]
+        const dirty = !cur || cur.title !== s.title || cur.subtitle !== s.subtitle ||
+                      cur.body !== s.body || cur.footnotes !== s.footnotes || cur.font !== s.font
+        if (dirty) { drafts[s.id] = s; putDraftsLocal(drafts); localStorage.setItem(LS.current, s.id) }
+        await SYNC.push()
+        const res = await (await fetch('/api/push', { method: 'POST' })).json()
+        if (res && res.ok === false) {
+          show('⚠ backup failed', '#c0392b')
+          if (txt) txt.title = res.detail || ''
+        } else {
+          show('Backed up ✓', '#3e8e53')
+          if (btn) btn.classList.add('synced')
+        }
+      } catch (e) {
+        show('⚠ backup error (is the server running?)', '#c0392b')
+      }
+      await new Promise((r) => setTimeout(r, 1800)) // let the result register before it ages into "just now"
       btn.disabled = false
+      pushing = false
       refresh()
     }
     refresh()

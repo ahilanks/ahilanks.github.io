@@ -4,7 +4,8 @@
  * The footnote BODIES live in a region below the article (`#fnList`, a contenteditable list),
  * OUTSIDE the ProseMirror doc — mirroring v1 so the stored `footnotes` field (fnList.innerHTML)
  * round-trips unchanged. The number N is NOT stored in the doc; `reconcileFootnotes()` walks the
- * refs in document order on every update, numbers them, and reorders/prunes the body list to match.
+ * refs in document order on every update, numbers them, and reorders the body list to match;
+ * bodies whose ref was deleted stay in the list unnumbered (see "orphaned bodies" below).
  */
 
 import { Node } from '../../vendor/lib.bundle.js'
@@ -73,23 +74,12 @@ function createFnEntry(id) {
   return li
 }
 
-/* ------------------------------------------------------- deleted-body graveyard
- * Footnote BODIES live outside the ProseMirror doc, so PM's history knows nothing about
- * them: undoing a deleted reference used to bring the ref back with an EMPTY body, losing
- * the text. So a pruned <li> isn't thrown away — it's parked here by fnId and reused if
- * that ref reappears (undo, or a cut-and-paste of the ref elsewhere). Bounded so a long
- * session can't grow it forever; cleared on a draft switch (loadFootnotesHTML). */
-const GRAVE_MAX = 300
-const buried = new Map() // fnId → detached <li>
-function bury(id, li) {
-  buried.set(id, li)
-  while (buried.size > GRAVE_MAX) buried.delete(buried.keys().next().value)
-}
-function exhume(id) {
-  const li = buried.get(id)
-  if (li) buried.delete(id)
-  return li || null
-}
+/* ---------------------------------------------------------- orphaned bodies
+ * Footnote BODIES live outside the ProseMirror doc, so deleting a reference must not
+ * destroy its text: the <li> stays in the list, unnumbered ("orphan"), and sinks below
+ * the numbered notes. Undoing the deletion re-attaches it by fnId; inserting a NEW
+ * footnote adopts the topmost orphan instead of starting empty. Orphans are part of
+ * fnList.innerHTML, so they persist with the draft — but are skipped at publish time. */
 
 let lastSig = ''
 export function reconcileFootnotes(editor) {
@@ -98,34 +88,45 @@ export function reconcileFootnotes(editor) {
   fnList.querySelectorAll('.fn-body').forEach((b) => normalizeFnBody(b))
   const refs = Array.from(editor.view.dom.querySelectorAll('.fn-ref'))
   const seen = new Set(refs.map((r) => r.dataset.fn))
+  // Number refs before any fast-path bail: a rebuilt nodeview (undo, paste, paragraph
+  // redraw) re-renders as the '•' placeholder even when the ref ORDER is unchanged.
+  refs.forEach((ref, i) => { ref.textContent = i + 1 })
   const sig = refs.map((r) => r.dataset.fn).join('|')
-  if (sig === lastSig && fnList.children.length === refs.length) { section.hidden = refs.length === 0; return }
+  const entryIds = new Set(Array.from(fnList.children, (li) => li.dataset.fn))
+  if (sig === lastSig && refs.every((r) => entryIds.has(r.dataset.fn))) {
+    section.hidden = fnList.children.length === 0
+    return
+  }
   lastSig = sig
 
   const entries = {}
   Array.from(fnList.children).forEach((li) => (entries[li.dataset.fn] = li))
-  // ref gone → park the body (undo can bring both back together), don't destroy it
-  Object.keys(entries).forEach((id) => {
-    if (seen.has(id)) return
-    const li = entries[id]
-    li.remove(); bury(id, li); delete entries[id]
+  // ref gone → keep the body, unnumbered; undo re-attaches it, a new insert adopts it
+  Object.values(entries).forEach((li) => {
+    if (seen.has(li.dataset.fn)) return
+    li.classList.add('fn-orphan')
+    li.querySelector('.fn-num').textContent = '•'
   })
   refs.forEach((ref, i) => {
-    const n = i + 1
-    ref.textContent = n
     let li = entries[ref.dataset.fn]
-    if (!li) { li = exhume(ref.dataset.fn) || createFnEntry(ref.dataset.fn); entries[ref.dataset.fn] = li }
-    li.querySelector('.fn-num').textContent = n + '.'
+    if (!li) { li = createFnEntry(ref.dataset.fn); entries[ref.dataset.fn] = li }
+    li.classList.remove('fn-orphan')
+    li.querySelector('.fn-num').textContent = (i + 1) + '.'
     fnList.appendChild(li) // append in ref order → correct ordering
   })
-  section.hidden = refs.length === 0
+  // orphans sink below the numbered notes, keeping their relative order
+  fnList.querySelectorAll('li.fn-orphan').forEach((li) => fnList.appendChild(li))
+  section.hidden = fnList.children.length === 0
 }
 
 export function insertFootnote(editor) {
   const id = uid()
-  editor.chain().focus().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
   const fnList = $('fnList')
-  if (fnList) fnList.appendChild(createFnEntry(id))
+  // an orphaned body (its ref was deleted) is adopted by the next new footnote
+  const orphan = fnList && fnList.querySelector('li.fn-orphan')
+  if (orphan) { orphan.dataset.fn = id; orphan.classList.remove('fn-orphan') }
+  else if (fnList) fnList.appendChild(createFnEntry(id))
+  editor.chain().focus().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
   reconcileFootnotes(editor)
   const li = fnList && fnList.querySelector(`li[data-fn="${id}"]`)
   if (li) li.querySelector('.fn-body').focus()
@@ -175,7 +176,6 @@ export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML 
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''
-  buried.clear() // bodies parked from the PREVIOUS draft must never leak into this one
   lastSig = '' // force a re-number on the next reconcile
   reconcileFootnotes(editor)
 }

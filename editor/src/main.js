@@ -17,8 +17,11 @@ import { setupSourceView } from './source-view.js'
 import { setupToc } from './toc.js'
 import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
+import { setupMobileViewport } from './mobile.js'
+import { setupMathAlign } from './math-align.js'
 
 setupMathLive()
+setupMobileViewport() // phones: size the shell to the visual viewport (keyboard-aware)
 
 // Block-level items that arrow keys highlight-then-step-past, like inline math: media
 // figures, display equations, rules. Anything that holds ordinary TEXT — paragraphs,
@@ -339,6 +342,9 @@ if (vk0) vk0.addEventListener('virtual-keyboard-toggle', () => {
 // Also wires the Settings modal + auto-loads the OpenAI key from /.env.
 window.__aiMath = setupAiMath(editor)
 
+// Floating Left/Center/Right chip above a selected/edited block equation.
+setupMathAlign(editor)
+
 // Footnotes: fn toolbar + bubble buttons, reconcile numbering, click-ref-to-body, save on edit.
 setupFootnotes(editor, scheduleSave)
 
@@ -385,7 +391,10 @@ $('scrollArea').addEventListener('mousedown', (e) => {
 // that case is owned by the field's own focus-out commit (nodes/math.js), which also respects
 // focus-preserving controls like the toolbar and corner keyboard toggle. Deferred so the click
 // lands (focus moves off the editor) before we collapse, avoiding a focus tug-of-war.
-document.addEventListener('mousedown', () => {
+document.addEventListener('mousedown', (e) => {
+  // the align chip operates ON the selected equation — clicking it must not collapse
+  // the very selection it targets
+  if (e.target && e.target.closest && e.target.closest('#mathAlignRow')) return
   const sel = editor.state.selection
   if (!(sel instanceof NodeSelection) || !isMathNode(sel.node)) return
   if (document.querySelector('math-field.math-edit')) return   // a field is open → it owns teardown

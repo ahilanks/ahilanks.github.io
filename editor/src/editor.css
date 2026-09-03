@@ -29,6 +29,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* track the REAL viewport on mobile (URL bar collapse); vh fallback above */
+  height: 100dvh;
   /* #scrollArea is the only scroller — the window itself must never scroll,
      or every viewport-anchored popover/bubble position breaks */
   overflow: hidden;
@@ -186,7 +188,7 @@ figure.video-block figcaption:has(> br.ProseMirror-trailingBreak:only-child)::be
 .math-inline, .math-block { cursor: pointer; border-radius: 5px; transition: background 0.12s; }
 .math-inline { padding: 0 1px; display: inline-block; }
 .math-inline:hover, .math-block:hover { background: rgba(15, 122, 229, 0.1); }
-.math-block { display: block; text-align: center; margin: 1.6rem 0; padding: 0.5rem 0.2rem; overflow-x: auto; overflow-y: hidden; }
+.math-block { display: block; text-align: center; margin: 0.5rem 0; padding: 0.15rem 0.2rem; overflow-x: auto; overflow-y: hidden; }
 .math-block .katex-display { margin: 0; }
 .math-block[data-align="left"], .math-block[data-align="left"] .katex-display { text-align: left; }
 .math-block[data-align="right"], .math-block[data-align="right"] .katex-display { text-align: right; }
@@ -327,10 +329,18 @@ ol.fn-list li.fn-orphan .fn-num { color: var(--faint); font-weight: 400; }
 .link-preview .lp-btn:hover { background: rgba(255,255,255,0.26); }
 
 .seg-align { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
-.seg-align button { border: none; background: var(--bg); color: var(--muted); padding: 3px 9px; font-size: 0.78rem; line-height: 1; }
+.seg-align button { border: none; background: var(--bg); color: var(--muted); padding: 3px 9px; font-size: 0.78rem; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .seg-align button + button { border-left: 1px solid var(--line); }
 .seg-align button.active { background: var(--text); color: #f1ebdf; }
+.seg-align svg { width: 15px; height: 15px; display: block; }
+/* the floating Left/Center/Right chip shown above a selected/edited block equation */
+#mathAlignRow { position: fixed; z-index: 85; transform: translate(-50%, -100%); box-shadow: var(--shadow); background: var(--bg-soft); }
+#mathAlignRow button { padding: 6px 11px; }
 #mathAlignRow.hidden { display: none; }
+@media (pointer: coarse) {
+  #mathAlignRow button { padding: 10px 14px; }
+  #mathAlignRow svg { width: 17px; height: 17px; }
+}
 
 .popover {
   position: fixed; z-index: 90; background: var(--bg-soft); border: 1px solid var(--line);
@@ -413,3 +423,68 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #f1ebdf; padding: 0.6rem 1.1rem; border-radius: 10px; font-size: 0.88rem; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 200; max-width: 80vw; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ----------------------------- TOUCH DEVICES ----------------------------- */
+@media (pointer: coarse) {
+  /* manipulation keeps pan + pinch-zoom but kills the 300ms double-tap-zoom delay,
+     so taps land fast and dblclick (figure crop / width reset) actually fires */
+  html, body { touch-action: manipulation; }
+  /* vertical panning stays native; a horizontal drag on a figure reaches our
+     pointer handlers (edge drag-resize in nodes/figure.js) instead of doing nothing */
+  figure.img-block, figure.video-block { touch-action: pan-y; }
+  /* no hover on touch: the resize grip must be visible to be discoverable/usable */
+  figure.img-block::after, figure.video-block::after { opacity: 0.45; width: 10px; height: 64px; }
+  /* same reason: the per-draft delete button can't wait for :hover */
+  .draft-item .d-del { opacity: 1; }
+  /* comfortable tap targets */
+  .tb-btn { min-width: 38px; height: 38px; }
+  .icon-btn { width: 38px; height: 38px; }
+  .tb-select, .btn-primary { height: 38px; }
+  .bubble button { height: 36px; min-width: 36px; }
+}
+
+/* ----------------------------- SMALL SCREENS (PHONE) ----------------------------- */
+@media (max-width: 720px) {
+  /* One-row toolbar that scrolls sideways; Drafts pins left, Publish pins right so
+     the two commands you always need never scroll away. */
+  .topbar { overflow-x: auto; scrollbar-width: none; padding: 0.5rem 0.6rem; gap: 0.3rem; }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar > * { flex-shrink: 0; }
+  .tb-spacer { flex: 1 0 12px; }
+  #draftsBtn {
+    position: sticky; left: 0; z-index: 2;
+    background: var(--bg); box-shadow: -12px 0 0 var(--bg); /* covers the padding sliver */
+  }
+  #publishBtn { position: sticky; right: 0; z-index: 2; box-shadow: 12px 0 0 var(--bg); }
+
+  .surface { margin: 1.4rem auto; padding: 0 1.1rem 40vh; }
+  .doc-title { font-size: 1.45rem; }
+  .doc-subtitle { font-size: 1.15rem; margin-bottom: 1.3rem; }
+  .doc-body { font-size: 1.05rem; }
+  .surface.font-serif .doc-body { font-size: 1.12rem; }
+  .doc-body h2 { font-size: 1.5rem; }
+  .doc-body h3 { font-size: 1.22rem; }
+  .doc-body blockquote { font-size: 1.08rem; padding-left: 1rem; }
+
+  /* floating UI must fit the phone viewport */
+  .popover { width: min(340px, calc(100vw - 20px)); }
+  .link-preview { max-width: calc(100vw - 24px); }
+  .drafts-menu { width: min(300px, calc(100vw - 16px)); max-height: 70vh; max-height: 70dvh; }
+
+  /* 16px inputs: anything smaller makes iOS Safari zoom the page on focus */
+  .popover input[type="text"], .popover textarea,
+  .field input, .field select, .field textarea { font-size: 16px; }
+
+  .overlay { padding: 0.9rem; }
+  .modal { padding: 1.25rem 1.1rem; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+
+  /* corner toggle: icon only, clear of the home-indicator */
+  .mathkbd-toggle { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 0 0.6rem; }
+  .mathkbd-toggle span { display: none; }
+  .mathkbd-toggle.corner-right { right: 10px; }
+  .mathkbd-toggle.corner-left { left: 10px; }
+  .toast { bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+
+  .source-view { margin: 1.4rem auto 4rem; padding: 0 1rem; }
+  .source-view pre { padding: 1rem; font-size: 0.8rem; }
+}

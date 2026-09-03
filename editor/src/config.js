@@ -12,8 +12,14 @@ export const CONFIG = {
   // an h5 sub-sub-subheading round-trip losslessly instead of demoting to a paragraph.
   headingLevels: [2, 3, 4, 5],
 
-  // KaTeX render options (used everywhere math is rendered).
-  katex: { throwOnError: false, strict: false },
+  // KaTeX render options (used everywhere math is rendered). The macros map
+  // MathLive-only commands (its dx/ee/ii shortcuts emit these) to plain letters
+  // so drafts saved before those shortcuts were disabled still render.
+  katex: {
+    throwOnError: false,
+    strict: false,
+    macros: { '\\differentialD': 'd', '\\exponentialE': 'e', '\\imaginaryI': 'i', '\\imaginaryJ': 'j' },
+  },
 
   // MathLive virtual-keyboard: which layers show, and where the toggle sits.
   mathKeyboard: {

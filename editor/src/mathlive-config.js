@@ -48,13 +48,40 @@ export function setupMathLive() {
   }
 }
 
-// Per-field options: manual keyboard (we drive it from the corner button), Desmos-style
-// inline shortcuts (^ _ / sqrt) are MathLive defaults; smart fence auto-closes brackets.
+// Per-field options: manual keyboard (we drive it from the corner button) on desktop;
+// on touch devices there is no hardware keyboard to type LaTeX shortcuts with, so 'auto'
+// pops the virtual keyboard the moment a math field gains focus. Desmos-style inline
+// shortcuts (^ _ / sqrt) are MathLive defaults; smart fence auto-closes brackets.
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+
+// MathLive's default dx/dy/dt/ee/ii/jj shortcuts insert \differentialD, \exponentialE,
+// \imaginaryI/J — commands KaTeX doesn't know, so they publish as red errors (and typing
+// a word like "dynamics" silently mutates its "dy"). Plain italic letters are fine.
+const MATHLIVE_ONLY_SHORTCUTS = ['dx', 'dy', 'dt', 'ee', 'ii', 'jj']
+
 export function configureMathfield(mf) {
-  mf.mathVirtualKeyboardPolicy = 'manual'
+  mf.mathVirtualKeyboardPolicy = TOUCH ? 'auto' : 'manual'
   mf.smartFence = true
   mf.smartMode = false
   mf.removeExtraneousParentheses = true
+  // inlineShortcuts throws until the field is mounted; configureMathfield runs
+  // before the element is appended, so fall back to the 'mount' event.
+  const dropMathliveOnlyShortcuts = () => {
+    const shortcuts = { ...mf.inlineShortcuts }
+    for (const k of MATHLIVE_ONLY_SHORTCUTS) delete shortcuts[k]
+    mf.inlineShortcuts = shortcuts
+  }
+  try { dropMathliveOnlyShortcuts() } catch (e) { mf.addEventListener('mount', dropMathliveOnlyShortcuts, { once: true }) }
+}
+
+// Rewrite any MathLive-only commands that still slip through (older saved math, paste)
+// into KaTeX-renderable plain letters before the LaTeX is stored.
+export function toKatexTex(tex) {
+  return tex
+    .replace(/\\differentialD\s?/g, 'd')
+    .replace(/\\exponentialE\s?/g, 'e')
+    .replace(/\\imaginaryI\s?/g, 'i')
+    .replace(/\\imaginaryJ\s?/g, 'j')
 }
 
 export function mathKeyboard() { return getMathVirtualKeyboard() }

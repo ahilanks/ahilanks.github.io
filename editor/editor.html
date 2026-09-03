@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- Resolve all relative assets (and document.baseURI, which font loading uses) under
          /editor/ so the page works served either as /editor.html or /editor/editor.html. -->
     <base href="/editor/" />
@@ -123,6 +123,19 @@
       <button id="bubbleFootnote" title="Footnote">fn</button>
       <span class="bsep"></span>
       <button class="ai" id="bubbleAI" title="Add math with AI">∑ Math</button>
+    </div>
+
+    <!-- ===================== FLOATING: block-math alignment ===================== -->
+    <div class="seg-align hidden" id="mathAlignRow">
+      <button data-align="left" title="Align equation left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+      </button>
+      <button data-align="center" title="Center equation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M5.5 18h13"/></svg>
+      </button>
+      <button data-align="right" title="Align equation right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M10 12h10M7 18h13"/></svg>
+      </button>
     </div>
 
     <!-- ===================== FLOATING: link preview chip ===================== -->

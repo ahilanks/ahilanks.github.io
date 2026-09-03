@@ -93,15 +93,18 @@ function figureNodeView() {
       editor.chain().command(({ tr }) => { tr.setNodeAttribute(pos, 'width', w); return true }).run()
     }
 
-    /* drag the right edge to resize (grip is the CSS ::after); dbl-click there resets. */
-    const EDGE = 16
+    /* drag the right edge to resize (grip is the CSS ::after); dbl-click there resets.
+       Pointer events (not mouse) so a finger drag resizes too — the figure's CSS
+       touch-action:pan-y hands horizontal touch drags to us while vertical scrolling
+       stays native (a vertical pan mid-drag fires pointercancel, which just commits). */
     function onRightEdge(e) {
       const r = fig.getBoundingClientRect()
-      return e.clientX >= r.right - EDGE && e.clientX <= r.right + 8 &&
+      const edge = e.pointerType === 'touch' ? 28 : 16 // fatter hit zone for fingers
+      return e.clientX >= r.right - edge && e.clientX <= r.right + 8 &&
              e.clientY >= r.top + r.height * 0.18 && e.clientY <= r.bottom - r.height * 0.18
     }
-    fig.addEventListener('mousedown', (e) => {
-      if (!editor.isEditable || !onRightEdge(e)) return
+    fig.addEventListener('pointerdown', (e) => {
+      if (!editor.isEditable || !e.isPrimary || !onRightEdge(e)) return
       e.preventDefault(); e.stopPropagation()
       const startX = e.clientX
       const startW = fig.getBoundingClientRect().width
@@ -115,13 +118,15 @@ function figureNodeView() {
       }
       const onUp = () => {
         fig.classList.remove('resizing')
-        document.removeEventListener('mousemove', onMove)
-        document.removeEventListener('mouseup', onUp)
+        document.removeEventListener('pointermove', onMove)
+        document.removeEventListener('pointerup', onUp)
+        document.removeEventListener('pointercancel', onUp)
         const w = Number(fig.dataset.w)
         setWidthAttr(w >= 100 ? null : w) // full width = no override
       }
-      document.addEventListener('mousemove', onMove)
-      document.addEventListener('mouseup', onUp)
+      document.addEventListener('pointermove', onMove)
+      document.addEventListener('pointerup', onUp)
+      document.addEventListener('pointercancel', onUp)
     })
 
     /* ── crop: dbl-click the image (not the resize edge) → overlay w/ corner handles ── */

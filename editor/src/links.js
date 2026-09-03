@@ -67,11 +67,15 @@ export function setupLinks(editor) {
     pop.classList.remove('hidden')
     const w = pop.offsetWidth || 340
     const h = pop.offsetHeight || 0
+    // clamp against the VISUAL viewport where available: with the on-screen keyboard
+    // up, window.innerHeight still spans behind it and the popover would hide there
+    const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight
     let left = rect.left + rect.width / 2
-    left = Math.max(w / 2 + 10, Math.min(left, window.innerWidth - w / 2 - 10))
+    left = Math.max(w / 2 + 10, Math.min(left, vw - w / 2 - 10))
     let top = rect.bottom + 8
-    if (top + h > window.innerHeight - 10) top = rect.top - h - 8
-    top = Math.max(10, Math.min(top, window.innerHeight - h - 10))
+    if (top + h > vh - 10) top = rect.top - h - 8
+    top = Math.max(10, Math.min(top, vh - h - 10))
     pop.style.left = left + 'px'
     pop.style.top = top + 'px'
   }

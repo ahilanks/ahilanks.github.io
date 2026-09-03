@@ -14,7 +14,7 @@ import { Node, nodeInputRule, katex, NodeSelection, Selection } from '../../vend
 window.__MATHLOG = window.__MATHLOG || []
 const mlog = (m) => { try { window.__MATHLOG.push(m) } catch (e) {} }
 import { CONFIG } from '../config.js'
-import { configureMathfield, mathKeyboard } from '../mathlive-config.js'
+import { configureMathfield, mathKeyboard, toKatexTex } from '../mathlive-config.js'
 import { escapeHtml } from '../dom.js'
 
 function renderKatex(el, tex, displayMode) {
@@ -132,7 +132,7 @@ function mathNodeView(isBlock) {
       if (!editing) return
       editing = false
       dom.classList.remove('math-editing')
-      const tex = mf ? mf.getValue('latex').trim() : node.attrs.tex
+      const tex = mf ? toKatexTex(mf.getValue('latex')).trim() : node.attrs.tex
       if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('focusout', onFocusOut); mf = null }
       const pos = getPos()
       idle() // KaTeX comes back immediately

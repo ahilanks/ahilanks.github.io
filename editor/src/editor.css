@@ -241,6 +241,9 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
 .fn-body p, .fn-body div { margin: 0 0 0.4rem; }
 .fn-body p:last-child, .fn-body div:last-child { margin-bottom: 0; }
 .fn-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; }
+/* images inside a footnote: block, footnote-width, selectable-as-a-whole on click (footnote.js) */
+.fn-body img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.4rem 0; }
+.fn-body img::selection { background: transparent; }
 .fn-body:empty::before { content: "Footnote text…"; color: var(--faint); }
 /* orphaned footnote: its ref was deleted from the text — kept unnumbered (and unpublished)
    until the next inserted footnote adopts it */
@@ -403,6 +406,14 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .thumb-drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 1rem; text-align: center; font-size: 0.85rem; color: var(--muted); cursor: pointer; background: var(--bg); }
 .thumb-drop:hover { border-color: var(--link); color: var(--link); }
 .thumb-drop img { max-height: 120px; border-radius: 8px; margin: 0 auto; display: block; }
+.thumb-drop .thumb-hint { display: block; margin-top: 0.4rem; font-size: 0.72rem; color: var(--faint); }
+.pub-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-bottom: 0.3rem; }
+.pub-head h2 { margin: 0; }
+.pub-head .seg button { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
+.draft-url-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.draft-url-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+.draft-url-row .pop-btn { flex: none; }
+.modal-msg code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
 .modal-msg { font-size: 0.83rem; margin-top: 0.8rem; min-height: 1em; }
 .modal-msg.err { color: #c0392b; }
 .modal-msg.ok { color: #4a7a3a; }

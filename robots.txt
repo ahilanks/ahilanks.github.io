@@ -1,0 +1,3 @@
+# Private draft previews are unlisted: keep them out of search engines.
+User-agent: *
+Disallow: /writings/p/

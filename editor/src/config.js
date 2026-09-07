@@ -2,6 +2,9 @@
  * Edit these and just reload the editor (no rebuild needed for app changes). */
 
 export const CONFIG = {
+  // Public origin of the site — used to build shareable links (private draft previews).
+  siteUrl: 'https://ahilanks.github.io',
+
   // Writing font for the surface + published article.
   // "serif" (Newsreader) | "sans" (Inter) | "mono" (JetBrains Mono)
   font: 'serif',

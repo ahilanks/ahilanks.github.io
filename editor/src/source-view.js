@@ -175,7 +175,14 @@ function serializeFootnotes(ctx) {
   if (fnList) {
     Array.from(fnList.children).forEach((li) => {
       const b = li.querySelector('.fn-body')
-      bodies[li.dataset.fn] = b ? (b.textContent || '').replace(/\s+/g, ' ').trim() : ''
+      if (!b) { bodies[li.dataset.fn] = ''; return }
+      const c = b.cloneNode(true)
+      // embedded images → markdown image syntax (base64 blobs stay out of the source view)
+      c.querySelectorAll('img').forEach((img) => {
+        const src = (img.getAttribute('src') || '').startsWith('data:') ? 'embedded image' : (img.getAttribute('src') || '')
+        img.replaceWith(document.createTextNode(' ![' + (img.getAttribute('alt') || '') + '](' + src + ') '))
+      })
+      bodies[li.dataset.fn] = (c.textContent || '').replace(/\s+/g, ' ').trim()
     })
   }
   return ctx.order.map((id, idx) => '[^' + (idx + 1) + ']: ' + (bodies[id] || '')).join('\n')

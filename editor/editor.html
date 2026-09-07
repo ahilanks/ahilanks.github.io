@@ -204,25 +204,43 @@
     <!-- ===================== PUBLISH MODAL ===================== -->
     <div class="overlay hidden" id="publishOverlay">
       <div class="modal">
-        <h2>Publish to writings/</h2>
-        <p class="sub">Writes a standalone article into your <code>writings/</code> folder and adds it to the writings list.</p>
+        <div class="pub-head">
+          <h2>Publish</h2>
+          <div class="seg" id="pubMode">
+            <button type="button" data-mode="publish" class="active">Publish</button>
+            <button type="button" data-mode="draft">Private draft link</button>
+          </div>
+        </div>
+        <p class="sub" id="pubSub"></p>
         <div class="field">
           <label for="pubSlug">Filename (slug)</label>
           <input type="text" id="pubSlug" placeholder="my-article" />
-          <p class="desc">Saved as <code>writings/&lt;slug&gt;.html</code></p>
+          <p class="desc" id="pubVersionInfo"></p>
         </div>
-        <div class="field">
-          <label for="pubDate">Date</label>
-          <input type="text" id="pubDate" placeholder="May 28, 2026" />
+        <div id="pubPublishFields">
+          <div class="field">
+            <label for="pubDate">Date</label>
+            <input type="text" id="pubDate" placeholder="May 28, 2026" />
+          </div>
+          <div class="field">
+            <label>Thumbnail for the writings list</label>
+            <div class="thumb-drop" id="thumbDrop">Click to choose an image</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;">
+            <input type="checkbox" id="pubUpdateList" checked style="width:auto;" />
+            Add to writings.html list
+          </label>
         </div>
-        <div class="field">
-          <label>Thumbnail for the writings list (optional)</label>
-          <div class="thumb-drop" id="thumbDrop">Click to choose an image</div>
+        <div id="pubDraftFields" hidden>
+          <div class="field">
+            <label for="draftUrl">Unlisted link</label>
+            <div class="draft-url-row">
+              <input type="text" id="draftUrl" readonly placeholder="appears after you create the draft link" />
+              <button type="button" class="pop-btn ghost" id="draftCopy">Copy</button>
+            </div>
+            <p class="desc">Saved as <code>writings/p/&lt;token&gt;.html</code>. Anyone with the link can read it; it isn't listed, linked, or indexed anywhere.</p>
+          </div>
         </div>
-        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;">
-          <input type="checkbox" id="pubUpdateList" checked style="width:auto;" />
-          Add to writings.html list
-        </label>
         <div class="modal-actions">
           <button class="pop-btn ghost" id="publishClose">Cancel</button>
           <button class="pop-btn" id="publishConfirm">Publish</button>

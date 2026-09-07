@@ -9,7 +9,7 @@
  */
 
 import { Node } from '../../vendor/lib.bundle.js'
-import { $, uid, debounce } from '../dom.js'
+import { $, uid, debounce, toast } from '../dom.js'
 import { cleanPastedHTML, insertCleanHTML, insertPlain } from '../paste.js'
 
 /* ----------------------------------------------------------------- the node */
@@ -53,16 +53,82 @@ export const FootnoteRef = Node.create({
 })
 
 /* ----------------------------------------------------- the footnotes region */
-// Footnote bodies are text-only: only inline formatting survives (like v1).
-const FN_ALLOW = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'SUP', 'SUB'])
-const FN_ATTRS = { A: ['href', 'target', 'rel'] }
+// Footnote bodies keep inline formatting plus images (<img> embedded as a data-URI, the
+// same way body figures store theirs; publish.js splits them out to media/ files).
+const FN_ALLOW = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'SUP', 'SUB', 'IMG'])
+const FN_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'] }
+const FN_IMG_SRC = /^(https?:|data:image\/|media\/|\.\.?\/|\/)/i
 function normalizeFnBody(root) {
   root.querySelectorAll('*').forEach((el) => {
     if (!root.contains(el)) return
     if (!FN_ALLOW.has(el.tagName)) { el.replaceWith(...el.childNodes); return }
     const keep = FN_ATTRS[el.tagName] || []
     Array.from(el.attributes).forEach((a) => { if (!keep.includes(a.name.toLowerCase())) el.removeAttribute(a.name) })
+    // an image we can't show (file:// from a drag, a stripped/blocked src) is just noise
+    if (el.tagName === 'IMG' && !FN_IMG_SRC.test(el.getAttribute('src') || '')) el.remove()
   })
+}
+
+/* ------------------------------------------------------- images in footnotes
+ * A footnote body is a raw contenteditable, so an image is a plain <img> in its HTML
+ * (block-styled by CSS). Three ways in — the toolbar image button while a body has
+ * focus, pasting an image from the clipboard, dropping an image file — all land here. */
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+}
+
+// The footnote body that currently owns the caret, or null.
+export function activeFootnoteBody() {
+  const a = document.activeElement
+  return a && a.closest ? a.closest('.fn-body') : null
+}
+
+// Snapshot the caret inside `body` so it can be restored after a file dialog stole focus.
+function saveRange(body) {
+  const sel = window.getSelection()
+  if (!sel || !sel.rangeCount) return null
+  const r = sel.getRangeAt(0)
+  return body.contains(r.commonAncestorContainer) ? r.cloneRange() : null
+}
+
+/* Insert an image file into a footnote body. If `range` (or the live caret) is inside the
+ * body it goes there via execCommand so Cmd-Z undoes it; otherwise it's appended. */
+export async function insertImageIntoFootnote(body, file, range) {
+  if (!body || !file || !file.type.startsWith('image/')) return false
+  let src
+  try { src = await fileToDataUrl(file) } catch (e) { toast("Couldn't read that image"); return false }
+  const img = document.createElement('img')
+  img.src = src
+  img.alt = ''
+  const sel = window.getSelection()
+  if (!range) range = saveRange(body) // the live caret, if it's already in this body
+  if (range && sel) {
+    body.focus()
+    sel.removeAllRanges(); sel.addRange(range)
+    insertCleanHTML(img.outerHTML)
+  } else {
+    // no caret in the body → append, then park the caret after the image
+    body.appendChild(img)
+    body.focus()
+    if (sel) { const r = document.createRange(); r.setStartAfter(img); r.collapse(true); sel.removeAllRanges(); sel.addRange(r) }
+  }
+  body.dispatchEvent(new Event('input', { bubbles: true })) // → save
+  return true
+}
+
+// First image file in a clipboard/drag DataTransfer, or null.
+function imageFileFrom(dt) {
+  if (!dt) return null
+  for (const f of Array.from(dt.files || [])) if (f.type && f.type.startsWith('image/')) return f
+  for (const it of Array.from(dt.items || [])) {
+    if (it.kind === 'file' && it.type && it.type.startsWith('image/')) { const f = it.getAsFile(); if (f) return f }
+  }
+  return null
 }
 
 function createFnEntry(id) {
@@ -146,8 +212,12 @@ export function setupFootnotes(editor, onFootnoteEdit) {
     fnList.addEventListener('paste', (e) => {
       const cd = e.clipboardData
       if (!cd) return
-      const html = cd.getData('text/html')
       e.preventDefault()
+      // an image on the clipboard (screenshot, copied picture) → embed it
+      const imgFile = imageFileFrom(cd)
+      const body = e.target.closest && e.target.closest('.fn-body')
+      if (imgFile && body) { insertImageIntoFootnote(body, imgFile); return }
+      const html = cd.getData('text/html')
       if (html) {
         const tmp = document.createElement('div')
         tmp.innerHTML = cleanPastedHTML(html)
@@ -158,6 +228,59 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       }
       if (onFootnoteEdit) onFootnoteEdit()
     })
+    // Drop an image file onto a footnote body → embed it there. (An editor-internal drag —
+    // a body figure — is already swallowed by main.js's capture-phase drop handler.)
+    fnList.addEventListener('dragover', (e) => {
+      if (imageFileFrom(e.dataTransfer) && e.target.closest && e.target.closest('.fn-body')) {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
+      }
+    })
+    fnList.addEventListener('drop', (e) => {
+      const body = e.target.closest && e.target.closest('.fn-body')
+      const f = imageFileFrom(e.dataTransfer)
+      if (!body || !f) return
+      e.preventDefault()
+      let range = null
+      if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(e.clientX, e.clientY)
+      else if (document.caretPositionFromPoint) {
+        const cp = document.caretPositionFromPoint(e.clientX, e.clientY)
+        if (cp) { range = document.createRange(); range.setStart(cp.offsetNode, cp.offset); range.collapse(true) }
+      }
+      if (range && !body.contains(range.commonAncestorContainer)) range = null
+      insertImageIntoFootnote(body, f, range)
+    })
+    // Click an image → select it whole, so Backspace/Delete removes it (a bare click in a
+    // contenteditable only puts the caret beside it).
+    fnList.addEventListener('click', (e) => {
+      if (!(e.target instanceof HTMLImageElement) || !e.target.closest('.fn-body')) return
+      const sel = window.getSelection(); if (!sel) return
+      const r = document.createRange(); r.selectNode(e.target)
+      sel.removeAllRanges(); sel.addRange(r)
+    })
+    // Toolbar image button while a footnote body has the caret → the picked file goes
+    // into that body, not the article. The mousedown must not steal focus (so we can see
+    // WHICH body), and the caret is snapshotted because the file dialog will blur it.
+    const imageBtn = $('imageBtn'); const imageFileInput = $('imageFileInput')
+    if (imageBtn && imageFileInput) {
+      let target = null
+      imageBtn.addEventListener('mousedown', (e) => {
+        const body = activeFootnoteBody()
+        if (!body) { target = null; return }
+        e.preventDefault()
+        target = { body, range: saveRange(body) }
+      })
+      // capture phase: runs before figures.js's own change listener, which we then stop
+      imageFileInput.addEventListener('change', (e) => {
+        if (!target) return
+        const t = target; target = null
+        const file = imageFileInput.files[0]
+        imageFileInput.value = ''
+        e.stopImmediatePropagation()
+        insertImageIntoFootnote(t.body, file, t.range)
+      }, true)
+      // a click that never reached the input (dialog cancelled) must not leave a stale target
+      imageFileInput.addEventListener('cancel', () => { target = null })
+    }
   }
   // click a ref → focus its body
   editor.view.dom.addEventListener('click', (e) => {

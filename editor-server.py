@@ -35,6 +35,14 @@ import subprocess
 from urllib.parse import urlparse, parse_qs
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+# Cryptographic timestamping of published versions (provenance.py). Optional: if the
+# `opentimestamps` package is missing the drafts server still runs, publish just can't stamp.
+try:
+    import provenance
+except Exception as _e:  # pragma: no cover
+    provenance = None
+    sys.stderr.write(f"[proofs] timestamping unavailable: {_e}\n")
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STORE_PATH = os.path.join(ROOT, "drafts", ".editor-drafts.json")
 DRAFTS_DIR = os.path.join(ROOT, "drafts")
@@ -42,6 +50,9 @@ MEDIA_DIR = os.path.join(DRAFTS_DIR, "media")
 LOCK = threading.Lock()      # serialize read-modify-write so concurrent saves can't clobber
 GIT_LOCK = threading.Lock()  # serialize git operations
 AUTO_PUSH_SECONDS = 300      # ~5 minutes
+PROOF_UPGRADE_SECONDS = 900  # re-check pending Bitcoin timestamps every ~15 minutes
+PUBLISH_STATE_PATH = os.path.join(ROOT, "drafts", ".publish-state.json")  # private: draft share tokens
+PROOF_LOCK = threading.Lock()
 GITHUB_FILE_LIMIT = 95 * 1024 * 1024  # keep files >95MB out of git (GitHub rejects >100MB); they stay durable-local-only
 MIME_EXT = {
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/gif": "gif",
@@ -560,6 +571,54 @@ def auto_push_loop():
             pass
 
 
+# ---------------------------------------------------------------------------
+# Publish state (private) + proof upgrades
+# ---------------------------------------------------------------------------
+
+def load_publish_state():
+    """Per-draft publish bookkeeping that must NOT be public: the unlisted share token
+    of each draft ({"shares": {draft_id: token}}). Lives in drafts/ (private repo)."""
+    try:
+        with open(PUBLISH_STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("shares", {})
+    return data
+
+
+def save_publish_state(data):
+    os.makedirs(os.path.dirname(PUBLISH_STATE_PATH), exist_ok=True)
+    tmp = PUBLISH_STATE_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, PUBLISH_STATE_PATH)
+
+
+def upgrade_proofs(reason="auto"):
+    """Upgrade + verify pending OpenTimestamps proofs (see provenance.py). Never fatal."""
+    if provenance is None:
+        return {}
+    with PROOF_LOCK:
+        try:
+            return provenance.upgrade_all(log=lambda m: sys.stderr.write(m + "\n"))
+        except Exception as e:
+            sys.stderr.write(f"[proofs] upgrade ({reason}) failed: {e}\n")
+            return {}
+
+
+def proof_upgrade_loop():
+    while True:
+        time.sleep(PROOF_UPGRADE_SECONDS)
+        try:
+            if provenance is not None and provenance.pending_count():
+                upgrade_proofs("auto")
+        except Exception:
+            pass
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=ROOT, **k)
@@ -597,6 +656,17 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send_json(store)
         if path == "/api/push":          # status
             return self._send_json(push_status())
+        if path == "/api/publish-state":
+            return self._send_json(load_publish_state())
+        if path == "/api/proofs":        # one article's timestamp manifest (+ pending count)
+            if provenance is None:
+                return self._send_json({"available": False, "versions": []})
+            slug = (self._query().get("slug") or [""])[0]
+            if not provenance.SAFE_SLUG_RE.match(slug):
+                return self.send_error(400, "bad slug")
+            m = provenance.load_manifest(slug)
+            m["available"] = True
+            return self._send_json(m)
         if path == "/api/media":         # list a draft's backed-up media files
             draft = (self._query().get("draft") or [""])[0]
             if not SAFE_ID_RE.match(draft):
@@ -606,8 +676,29 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send_json({"files": files})
         return super().do_GET()
 
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            obj = json.loads(raw.decode("utf-8") or "{}")
+        except ValueError:
+            return None
+        return obj if isinstance(obj, dict) else None
+
     def do_PUT(self):
-        if self.path.split("?")[0] != "/api/drafts":
+        path = self.path.split("?")[0]
+        if path == "/api/publish-state":   # merge {"shares": {id: token}}
+            incoming = self._read_json()
+            if incoming is None:
+                return self.send_error(400, "bad json")
+            with LOCK:
+                st = load_publish_state()
+                for k, v in (incoming.get("shares") or {}).items():
+                    if SAFE_ID_RE.match(str(k)) and re.match(r"^[0-9a-f]{16,64}$", str(v)):
+                        st["shares"][k] = v
+                save_publish_state(st)
+            return self._send_json(st)
+        if path != "/api/drafts":
             return self.send_error(404)
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
@@ -628,6 +719,25 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/api/push":
             return self._send_json(git_sync("manual"))
+        if path == "/api/stamp":         # timestamp a just-published version (see provenance.py)
+            if provenance is None:
+                return self._send_json({"ok": False, "error": "timestamping unavailable: pip install opentimestamps"}, 503)
+            body = self._read_json()
+            if body is None:
+                return self.send_error(400, "bad json")
+            try:
+                with PROOF_LOCK:
+                    entry = provenance.stamp_version(
+                        str(body.get("slug") or ""), body.get("n"),
+                        expected_sha256=str(body.get("sha256") or "") or None,
+                        meta={k: body.get(k) for k in ("contentSha256", "date", "title", "words")})
+                return self._send_json({"ok": True, "entry": entry})
+            except Exception as e:
+                return self._send_json({"ok": False, "error": str(e)}, 400)
+        if path == "/api/proofs/upgrade":
+            changed = upgrade_proofs("manual")
+            pending = provenance.pending_count() if provenance else 0
+            return self._send_json({"ok": True, "changed": {k: [v["n"] for v in vs] for k, vs in changed.items()}, "pending": pending})
         if path == "/api/media":         # editor uploads a video blob for backup
             q = self._query()
             draft = (q.get("draft") or [""])[0]
@@ -655,11 +765,16 @@ if __name__ == "__main__":
     except Exception as e:
         sys.stderr.write(f"[drafts] startup sync failed: {e}\n")
     threading.Thread(target=auto_push_loop, daemon=True).start()
+    # Bitcoin timestamps: upgrade any pending proofs now (in the background) and every ~15 min
+    threading.Thread(target=lambda: upgrade_proofs("startup"), daemon=True).start()
+    threading.Thread(target=proof_upgrade_loop, daemon=True).start()
     httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"Serving {ROOT} at http://localhost:{port}")
     print(f"Editor:  http://localhost:{port}/editor.html")
     print(f"Drafts:  {STORE_PATH}")
     print(f"Files:   {DRAFTS_DIR}/  (+ media/<id>/ for images & videos; private repo ahilanks/writing-drafts, auto-push every {AUTO_PUSH_SECONDS}s)")
+    print(f"Proofs:  writings/proofs/<slug>/ (OpenTimestamps; pending proofs re-checked every {PROOF_UPGRADE_SECONDS}s)"
+          if provenance else "Proofs:  UNAVAILABLE (pip install opentimestamps)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <title>Experiential Learning in Embodied Intelligence</title>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous" />
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false,macros:{'\\differentialD':'d','\\exponentialE':'e','\\imaginaryI':'i','\\imaginaryJ':'j'}});"></script>
+    <style>
+      :root { --text-color:#27323f; --link-color:#0f7ae5; --bg-color:#f1ebdf; --muted:#6b7280; --accent:#e8743b; }
+      body { margin:0; padding:0 1.5rem; font-family:"Newsreader", Georgia, serif; color:var(--text-color); background:var(--bg-color); line-height:1.7; }
+      .container { max-width:820px; margin:4rem auto 6rem; }
+      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }
+      .back:hover { text-decoration:underline; }
+      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.8rem; letter-spacing:-0.01em; }
+      .subtitle { text-align:left; font-size:1.3rem; color:var(--muted); margin:0 0 1rem; }
+      .meta { text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 3rem; }
+      .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }
+      .math-block .katex-display { margin:0; }
+      .math-block.align-left, .math-block.align-left .katex-display { text-align:left; }
+      .math-block.align-right, .math-block.align-right .katex-display { text-align:right; }
+      .katex { font-size: 1em; }
+      p, ul, ol { margin:0 0 1.25rem; }
+      li { margin:0; }
+      li > p, li > ul, li > ol { margin:0; }
+      ul { list-style-type:disc; }
+      ul ul { list-style-type:circle; }
+      ul ul ul { list-style-type:square; }
+      h2 { font-size:1.7rem; margin:2rem 0 0.8rem; letter-spacing:-0.01em; }
+      h3 { font-size:1.32rem; margin:1.7rem 0 0.6rem; }
+      blockquote { margin:1.5rem 0; padding:0.2rem 0 0.2rem 1.2rem; position:relative; }
+      blockquote::before { content:""; position:absolute; left:0; top:0.4rem; bottom:0.4rem; width:3px; border-radius:2px; background:var(--accent); }
+      a { color:var(--text-color); text-decoration:underline; text-decoration-skip-ink:none; }
+      figure { margin:1.8rem auto; text-align:center; }
+      figure img, figure video { max-width:100%; border-radius:10px; }
+      figure[style] img, figure[style] video { width:100%; }
+      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }
+      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }
+      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }
+      .fn-divider { width:100%; margin:3rem 0 1.2rem; }
+      ol.footnotes { font-size:0.92rem; line-height:1.5; color:var(--text-color); padding-left:1.2rem; }
+      ol.footnotes li { margin-bottom:0.7rem; }
+      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }
+      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }
+      ol.footnotes img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.5rem 0; }
+      .fn-back { text-decoration:none; }
+      .prov { margin:-1.1rem 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); line-height:1.5; }
+      .prov-line { display:inline-flex; align-items:center; gap:0.45rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; letter-spacing:0.01em; }
+      .prov-line:hover .prov-text { color:var(--text-color); }
+      .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }
+      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }
+      .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }
+      .prov.open .prov-caret { transform:rotate(180deg); }
+      .prov-current { display:block; margin:0.15rem 0 0 0.95rem; color:var(--text-color); text-decoration:none; }
+      .prov-current:hover { text-decoration:underline; }
+      .prov-panel { margin:0.7rem 0 0; padding:0.1rem 0 0.1rem 0.9rem; border-left:2px solid rgba(39,50,63,0.12); max-width:560px; }
+      .prov-intro { margin:0 0 0.8rem; }
+      .prov-empty { margin:0 0 0.6rem; font-style:italic; }
+      .prov-list { list-style:none; margin:0 0 0.6rem; padding:0; display:flex; flex-direction:column; gap:0.6rem; }
+      .prov-v.here { background:rgba(39,50,63,0.04); margin:0 -0.4rem; padding:0.35rem 0.4rem; border-radius:6px; }
+      .prov-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:0.35rem 0.6rem; }
+      .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }
+      .prov-vlink:hover { text-decoration:underline; }
+      .prov-tag { font-size:0.66rem; text-transform:uppercase; letter-spacing:0.08em; padding:0.05rem 0.35rem; border:1px solid rgba(39,50,63,0.2); border-radius:4px; }
+      .prov-words { opacity:0.8; }
+      .prov-st { display:flex; align-items:center; gap:0.4rem; margin-top:0.1rem; }
+      .prov-fp { margin-top:0.1rem; display:flex; flex-wrap:wrap; gap:0.2rem 0.55rem; align-items:baseline; }
+      .prov-fplabel { opacity:0.7; }
+      .prov-fp code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }
+      .prov-check.ok { color:#4a9a5a; } .prov-check.bad { color:#c0392b; }
+      .prov-fp a { color:var(--muted); }
+      .prov-fp a:hover { color:var(--text-color); }
+      .prov-how { margin-top:0.3rem; }
+      .prov-how summary { cursor:pointer; }
+      .prov-how ol { margin:0.4rem 0; padding-left:1.2rem; }
+      .prov-how li { margin:0 0 0.3rem; }
+      .prov-how p { margin:0.3rem 0 0; }
+      .prov-how code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }
+      .prov a { color:var(--muted); }
+      .prov a:hover { color:var(--text-color); }
+      .draft-note { margin:-1.1rem 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); letter-spacing:0.01em; }
+      html { scroll-behavior:smooth; }
+      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }
+      .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }
+      .toc::-webkit-scrollbar { display:none; }
+      .toc-label { font-family:system-ui, sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-color); margin:0 0 0.9rem 2px; }
+      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }
+      .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }
+      .toc-item:hover { color:var(--text-color); }
+      .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }
+      .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }
+      .toc-item.hide { display:none; }
+      .toc-item.active { color:var(--text-color); font-weight:700; }
+      .toc-item.active::before { content:""; position:absolute; left:-2px; top:0.18rem; bottom:0.18rem; width:3px; background:var(--text-color); border-radius:2px; }
+      @media (max-width:1250px) { .toc { display:none; } }
+    </style>
+  </head>
+  <body>
+    <nav class="toc" aria-label="Contents">
+      <div class="toc-label">Contents</div>
+      <div class="toc-list">
+        <a class="toc-item lvl-2" href="#sec-the-bitter-lesson">§1 · The Bitter Lesson</a>
+        <a class="toc-item lvl-2" href="#sec-animals-play">§2 · Animals Play</a>
+        <a class="toc-item lvl-2" href="#sec-babies-self-collect-to-learn">§3 · Babies Self-Collect to Learn</a>
+        <a class="toc-item lvl-3" href="#sec-forming-an-rich-internal-dynamics-model">Forming an Rich Internal Dynamics Model</a>
+        <a class="toc-item lvl-3" href="#sec-self-collection-of-data-through-exploration">Self-Collection of Data Through Exploration</a>
+        <a class="toc-item lvl-4" href="#sec-curiosity">Curiosity</a>
+        <a class="toc-item lvl-4" href="#sec-learning-progress">Learning Progress</a>
+        <a class="toc-item lvl-4" href="#sec-power">Power</a>
+        <a class="toc-item lvl-3" href="#sec-learning-through-an-infinite-stream-of-data">Learning Through an Infinite Stream of Data</a>
+        <a class="toc-item lvl-2" href="#sec-closing-thoughts">§4 · Closing Thoughts</a>
+        <a class="toc-item lvl-2" href="#sec-citations">§5 · Citations</a>
+      </div>
+    </nav>
+    <main class="container">
+      <a class="back" href="../../writings.html">← Writings</a>
+      <p class="draft-note">Draft preview · unlisted · Sep 6, 2026</p>
+      <h1>Experiential Learning in Embodied Intelligence</h1>
+      <p class="subtitle">Inspired from biological intelligence</p>
+      <p class="meta">Sep 6, 26 · 8 min</p>
+      <figure class="img-block" style="width:71%;margin-left:auto;margin-right:auto;"><img src="https://substackcdn.com/image/fetch/$s_!1skk!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fe9cb9b02-a026-4536-877d-a46b01869164_1200x628.jpeg" alt="Baby and Toddler Milestones: 16 Actions with Objects by 16 Months | Reading  Rockets"><figcaption>A five-year-old learning balance and gravity</figcaption></figure><blockquote><p><em>“The most wonderful thing about [children] is their infinite capacity for wonder”</em>— <a target="_blank" rel="noopener noreferrer nofollow" href="https://www.alisongopnik.com/">Alison Gopnik</a></p></blockquote><h2 id="sec-the-bitter-lesson">The Bitter Lesson</h2><p>Last November on the <a target="_blank" rel="noopener noreferrer nofollow" href="https://x.com/ariel_bendavid/status/1886762807460298982">Dwarkesh</a> Patel <a target="_blank" rel="noopener noreferrer nofollow" href="https://www.youtube.com/watch?v=21EYKqUsPfg">podcast</a>, <a target="_blank" rel="noopener noreferrer nofollow" href="http://incompleteideas.net/">Richard Sutton</a> explained the <a target="_blank" rel="noopener noreferrer nofollow" href="http://www.incompleteideas.net/IncIdeas/BitterLesson.html">Bitter Lesson</a>, arguing that methods for intelligence leveraging human data are consistently overtaken by those built on a system’s own <a target="_blank" rel="noopener noreferrer nofollow" href="https://storage.googleapis.com/deepmind-media/Era-of-Experience%20/The%20Era%20of%20Experience%20Paper.pdf">experience</a>.</p><p>Even at scale, approaches that rely primarily on existing data face a fundamental ceiling. Human data is <a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2211.04325">finite</a> (we will eventually run out), and producing more of it is slow and expensive. More importantly, each additional data sample is not generated to maximize model learning, relying on human aggregation and filtering. In Skild's blog <a target="_blank" rel="noopener" href="https://skild.ai/blogs/s1">post on S1</a>, they say that for "every dollar [they spent] on data collection, [they spent] three on quality control." In contrast, experiential learning methods generate own data through <a target="_blank" rel="noopener" href="https://x.com/RichardSSutton/status/2056419165502935198">exploration and search</a>. As a result, its progress is bounded only by compute, which has historically proven to <a target="_blank" rel="noopener noreferrer nofollow" href="https://www.intel.com/content/www/us/en/history/virtual-vault/articles/moores-law.html">scale</a> far better and thus a much better strategy for intelligence.</p><p>In chess, <a target="_blank" rel="noopener noreferrer nofollow" href="https://deepmind.google/research/alphago/">AlphaGo</a>, trained on the games of grandmasters, was beaten by <a target="_blank" rel="noopener noreferrer nofollow" href="https://deepmind.google/research/alphazero-and-muzero/">AlphaZero</a>, an experience based method which learned by playing, losing, and winning. In Atari, methods built upon the rules of the game were beaten by experience based methods.</p><p>In natural language, LLMs initially improved with the <a target="_blank" rel="noopener noreferrer nofollow" href="https://arxiv.org/pdf/2001.08361">scale</a> of data and model <a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2203.15556">parameters</a>. But now that most internet data (and even text from <a target="_blank" rel="noopener" href="https://storage.courtlistener.com/recap/gov.uscourts.cand.434709/gov.uscourts.cand.434709.231.0.pdf">hardcover</a> <a target="_blank" rel="noopener" href="https://www.404media.co/ai-companies-are-buying-tons-of-old-books-because-theyre-free-of-ai-slop/">books</a>) has been consumed, research has returned to reinforcement and <a target="_blank" rel="noopener noreferrer nofollow" href="https://arxiv.org/pdf/2601.19897">test-time learning</a>. And this pattern, where experience vastly outperforms data, has repeated itself across image processing, translation, and scientific understanding.</p><p>Still, I don't think this lesson has been fully understood, especially in robotics. In academic labs and industry, much of the hype surrounds methods built on human-derived priors like language or collecting human data through teleoperation, videos, and egocentric capture. Many of these methods will solve important tasks for automation, manufacturing, and homes; but if the goal is<strong> general physical intelligence<sup id="fnref-1"><a href="#fn-1">1</a></sup></strong>— not just competence on certain, limited tasks— then these approaches are the exact trap Sutton warns about.</p><h2 id="sec-animals-play">Animals Play</h2><p><a target="_blank" rel="noopener noreferrer nofollow" href="https://www.youtube.com/watch?v=3Rf0dIk_Eec">Young animals</a> offer a useful example of <a target="_blank" rel="noopener noreferrer nofollow" href="https://storage.googleapis.com/deepmind-media/Era-of-Experience%20/The%20Era%20of%20Experience%20Paper.pdf">experiential learning</a>. They learn from exploration: playing, fighting, moving, falling, and trying new things.</p><p>A natural counterpoint against this is that many animals, like horses or giraffes, can walk almost immediately after birth. Indeed, this suggests the opposite of self-exploration: that genes encode a kind of “pre-training.” However, these built-in behaviors are primarily typical of animals with lower <a target="_blank" rel="noopener noreferrer nofollow" href="https://www.researchgate.net/figure/Relation-between-encephalization-quotient-EQ-and-supraoccipital-ossification-timing_fig6_261407553">encephalization quotient</a> (EQ), or brain to body size. Low EQ animals are ready to act early, but their behavior is less flexible. On the other hand, animals<sup id="fnref-2"><a href="#fn-2">2</a></sup> with higher EQ like chimpanzees and dogs are the opposite. They are born far more helpless and dependent upon their guardians for longer, but gain the ability to adapt, generalize, and learn from experience.</p><figure class="img-block" style="width:70%;margin-left:auto;margin-right:auto;"><img src="https://substackcdn.com/image/fetch/$s_!xBu8!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F6cb6cabb-e471-43cb-ada7-e1e07ce8db02_887x590.png" alt=""><figcaption>Primates with larger brains are more dependent upon their parents, for longer.</figcaption></figure><p>And importantly, this tradeoff isn’t neutral. Humans, at the extreme end of high EQ, dominate in general intelligence. Human infants are born with very little hardcoded behavior and are vulnerable for years, but with a brain designed to learn rapidly and flexibly.</p><p>tl;dr: nature also supports the bitter lesson.</p><h2 id="sec-babies-self-collect-to-learn">Babies Self-Collect to Learn</h2><p>The most general learners among young animals are human babies. They are born with little<sup id="fnref-3"><a href="#fn-3">3</a></sup> control over their bodies or environment, yet they learn to build motor skills, recognize patterns, and predict outcomes. From this behavior, we can learn a lot about building experiential learning systems.</p><p>I want to focus on three aspects of this learning: <strong><em>(1) forming a rich, internal model of the world, (2) self-collection of data, </em></strong><em>and </em><strong><em>(3) learning from this continual stream.</em></strong></p><h3 id="sec-forming-an-rich-internal-dynamics-model">Forming an Rich Internal Dynamics Model</h3><p>From: LeCunn, Schmidhuber, Balastario</p><p>The <a target="_blank" rel="noopener noreferrer nofollow" href="https://openreview.net/pdf?id=Sv7DazuCn8">big world hypothesis</a> theorizes that because it is highly unlikely that we can model all aspects of the world<sup id="fnref-4"><a href="#fn-4">4</a></sup>, intelligence must build an <em>approximate</em><sup id="fnref-5"><a href="#fn-5">5</a></sup> internal model.</p><p>This internal model must convert sensory observations— touch, sight, smell, and taste— into physical actions. The issue is that raw perception is high-dimensional<sup id="fnref-6"><a href="#fn-6">6</a></sup>, containing noise and redundancy. Mapping directly from perception to physical actions directly is compute-heavy and doesn't allow for planning.</p><p>The solution is creating a function that maps an observation $o_t$ to an intermediate latent state representation $z_t$. Defining the state to be lower dimensional relative to perception forces it to be a compressed function of observations. We can use this state and a proposed action $a_t$ from the set of actions to roll out imaginary trajectories, what we call a forward dynamics model.</p><p class="math-block">$$z_{t}=f(o_{t})$$</p><p>Our brains do this all the time. Imagine yourself at your favorite coffee shop. How many chairs are there? Though you've see all of them, you might not know. Like chairs, much of perception is abstracted away. Details irrelevant to future actions and goals are ignored. But when intents and goals change, so does the information, even given the same observation. That is to say that latent states are a compressed and action-conditioned form of perception. We can modify the equation above as follows:</p><p class="math-block">$$z_{t}=f\left(o_{t}\left|\right.g_{t}\right)$$</p><p>More than that, we use our dynamics models to imagine different futures. A college student may imagine himself graduating and the actions that it requires. You might imagine eating fast food against cooking at home; rolling out all the intermediate states and actions. Afterwards, you might assign values to the two and choose between the two. Our dynamics models serve as powerful tools for both representation and planning.</p><p>It's important to note that dynamics models approximates causation from correlation. If a state, action pair repeatedly results in a particular state, we can make the assumption that one causes the other. Young children do the same, yet mistakenly rely on a small sample size. They often mistake coincidence for cause— making papers fly at Universal Studios by waving a wand or summoning thunder by clapping. I'm guilty of both.</p><p></p><p></p><p></p><ul><li><p>biggest problem: representation collapse → contrastive learning, or <a target="_blank" rel="noopener" href="https://rezabyt.github.io/blogposts/sigreg-tutorial.html">regularization</a></p><ul><li><p>Embodiment of the Mind → World Models by Schmidhuber → Horace Barlow → DinoV3, V-JEPA2, LeJePA</p></li></ul></li></ul><p>Issues with regularization</p><ul><li><p><strong>Contrastive Learning</strong> (using positive and negative samples)</p></li><li><p><strong>Non-Contrastive Learning</strong> (using regularization or architectural asymmetry with stop-gradients/EMA)</p></li><li><p>Why Regularization?</p><ul><li><p>not decoding</p></li><li><p>not contrastive</p></li></ul></li><li><p>Technical Issues to cross with regularization</p></li></ul><p>Recurrency: LSTM &amp; RSSM</p><p></p><p>Different Variations: recurrence, state space models</p><figure class="img-block" style="width:67%;margin-left:auto;margin-right:auto;"><img src="../media/experiential-learning-in-embodied-intelligence-c49b6852e5e1.png" alt=""><figcaption>Dreamer V3 uses a recurrent dynamics model to approximate minecraft's environment (Hafner et. al)</figcaption></figure><p>Some of what was discussed above may seem straightforward. But, I'm not only arguing for dynamics models but also against the other methods for representation.</p><p></p><p>Alternate approaches use language(codign models too) as an intermediary from perception to action. I believe this is the wrong approach however. Language itself is a low-dimensional method for communication. Ask anybody who speaks multiple languages and they will tell you that thoughts are much richer than language. Mathematically, there is reason too. Each latent state can in theory (though the curse of dimensionality does hurt), represent much more information than any discrete token or combination thereof. footnote: discrete tokens are too low dimensional (order raw input, latents, discrete tokens- looped transformers) Raw ceilingRealistic effectiveToken (V=50k)15.6 bits5–8 bits (English entropy)Latent (d=4096)~131k bits~1k–4k bits</p><p>Lessons in 3d: <a target="_blank" rel="noopener" href="https://youtu.be/1J2iN6I0gCQ?si=8E0jaDZ4QUVAGBxH">https://youtu.be/1J2iN6I0gCQ?si=8E0jaDZ4QUVAGBxH</a></p><p>In <a target="_blank" rel="noopener" href="https://www.goodreads.com/en/book/show/42118411-mind-in-motion"><em>Mind in Motion</em></a><em>, </em>Barbara Tversky reasons that intelligence is built upon spatial understanding. It is through action that the mind forms its internal model of the world. Tversky shares an analogy of a friend asking a specific part of a car. By the time she can come up with the name of the part of the car, she already knows exactly what he is talking about. Similarly, the “<a target="_blank" rel="noopener noreferrer nofollow" href="https://direct.mit.edu/artl/article/11/1-2/13/2477/The-Development-of-Embodied-Cognition-Six-Lessons?guestAccessKey=">The Development of Embodied Cognition: Six Lessons from Babies</a>” by Smith &amp; Gasser, says that → VLA bad - language as an intermediary destroys high information latent representation</p><h3 id="sec-self-collection-of-data-through-exploration">Self-Collection of Data Through Exploration</h3><p>From: Hafner, Pathak, Aggarwal, Effros, Schmidhuber</p><p>Intelligence itself can be thought of as a fractal. Learning reveals more of its existing structure, and paradigm shifts or true discoveries push its boundaries, the edges of the spiral below, outward.</p><figure class="img-block" style="width:73%;margin-left:auto;margin-right:auto;"><img src="../media/experiential-learning-in-embodied-intelligence-f25e4892257e.png" alt=""><figcaption>Intelligence represented as a fractal</figcaption></figure><p>While significant thought has gone into developing robust internal state representations by both computer scientists and neuroscience experts, far less attention has been given to the motivations behind acquisition of data. Whatever stage of learning, a child or scientist must know where to look to push the fractal outward.</p><p>Children are not handed a large corpus of data. They constantly choose where to spend their time and energy. Some experiences intensely capture their interest, while others quickly bore or upset them. Even babies, Gopnik writes, show clear signs of curiosity and disinterest (27). As soon as they can move and explore, they begin shaping their environment around those interests— and when their wants are unmet, parents usually hear about it.</p><p>But what notions push them towards certain experiences and against others? And why does it appear intelligent to us?</p><p>These actions are guided by some combination of the following: curiosity, learning progress, and power.</p><h4 id="sec-curiosity">Curiosity</h4><ol><li><p>the desire to explore the unknown</p></li></ol><p>putting stuff in their mouth. (effros speech)</p><h4 id="sec-learning-progress">Learning Progress</h4><ol><li><p>the improvement upon prediction</p></li></ol><p>Occulusion-peek-a-boo</p><p>Learning Progress or LP was first conceptualized by</p><h4 id="sec-power">Power</h4><ol><li><p>Power - to have maximum control over the environment</p></li></ol><p>RL does this at edges of the framework. However the cost is:</p><ul><li><p>humans must repeatedly and continuously build the environments</p></li></ul><p>Power is the ability to stay in a reachable state with a large variance/distribution of high EV states. At the same time, it is about making unreachable states reachable.</p><h3 id="sec-learning-through-an-infinite-stream-of-data">Learning Through an Infinite Stream of Data</h3><p>From: Sutton</p><ul><li><p>RL TD Learning (Sutton, Barto) with curiosity goal</p><ul><li><p>Why simulation is not enough</p></li></ul></li><li><p>Per-parameter learning rate</p><ul><li><p>IDBD</p></li><li><p>Synaptic Intelligence</p></li></ul></li><li><p>Resetting some neruons</p></li><li><p>Replay Buffer</p></li></ul><h2 id="sec-closing-thoughts">Closing Thoughts</h2><p>I'm confident that the final stack of embodied intelligence will include a combination of the above. A regularized hierarchical dynamics model, pushed to act with intrinsic desires that maximize learning, and a model architecture that preserves foundational information while being plastic.</p><p>I’ve primarily discussed these ideas in the context of physical intelligence, yet they should extend generally to autonomous systems, including ones operating on the internet.</p><p>A quote from one of my favorite shows encapsulates the main idea of this essay well:</p><blockquote><p><em>“Anyone can memorize facts and figures, but to really LEARN something, you’ve got to go out and do it yourself… follow your curiosity!”</em> - the <a target="_blank" rel="noopener" href="https://curious-george.fandom.com/wiki/Man_in_the_Yellow_Hat">man with the yellow hat</a></p></blockquote><h2 id="sec-citations">Citations</h2><p>This piece builds on and connects ideas from Barlow, Barto, Effros, Gopnik, LeCun, Malik, McCulloch, Pathak, Schmidhuber, Silver, Sutton and many more.</p>
+
+      <hr class="fn-divider" />
+      <ol class="footnotes">
+        <li id="fn-1">Solving physical intelligence for specific tasks, with data collection will unlock massive value for our labor-constrained economy. There seem to be three tiers on the scale from dependence on data to experience: (1) finite pretraining (2) continuous-stream of data from deployment (think Tesla's FSD or Cursor's tab autocomplete) and (3) intelligence that searches for specific experiences that will shape its learning the most.&nbsp;The latter physical intelligence seems to me to be a more ambitious goal, but one which will win in the long run. <a href="#fnref-1" class="fn-back">↩</a></li>
+        <li id="fn-2"><p>Pigeons, dogs, squirrels, dolphins, pigs, octopus, orangutans.</p> <a href="#fnref-2" class="fn-back">↩</a></li>
+        <li id="fn-3"><p>Interestingly in the <a target="_blank" rel="noopener noreferrer nofollow" href="https://www.alisongopnik.com/TheScientistInTheCrib.htmhttps://www.alisongopnik.com/TheScientistInTheCrib.htm">Scientist in the Crib</a>, Dr. Gopnik notes that human babies are born not only with instinctual processes such as the beating of the heart, but also surprisingly sophisticated social priors, including the ability to recognize themselves and others as agents.</p><p>In one series of experiments, Gopnik’s lab studied whether newborns could imitate human actions. Remarkably, even babies just 42 minutes after birth were able to imitate an adult sticking out their tongue (Gopnik, 30). Somehow, the newborn brain already understood that the moving image in front of it was another human with a body similar to its own. Fascinatingly, this suggests that even human infants, the highest EQ animals, arrive with built-in structure for interpreting the world.</p><p>Still, the more interesting trend is that the more intelligent animals rely less on pre-programmed behavior. In the limit, this suggests that the most intelligent systems, though may start with pre-baked knowledge, will acquire most of their knowledge through interaction.</p> <a href="#fnref-3" class="fn-back">↩</a></li>
+        <li id="fn-4">Modeling all parts of the world, aka a perfect simulation would need two things: (1) a unique internal state for every possible state of the world, and (2) the property that "simulate one step" always matches "let the real world run one step." The counting and storage arguments kill (1). Chaos and quantum randomness kill (2) even for near-perfect attempts — tiny errors blow up, and random outcomes won't match. Fix this??????????? <a href="#fnref-4" class="fn-back">↩</a></li>
+        <li id="fn-5">Simple feed-forward neural networks are powerful function approximators themselves. <a href="#fnref-5" class="fn-back">↩</a></li>
+        <li id="fn-6"><p>Some body parts like the hand and mouth receive relatively more complex, significant information. These require more computation to convert into meaningful representations and thus more neurons in the brain. The sensory homunculus above is a depiction of the human body, where parts are scaled by neuron representation in the brain.</p> <a href="#fnref-6" class="fn-back">↩</a></li>
+      </ol>
+
+    </main>
+    <script>
+      (function () {
+        var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));
+        if (!items.length) return;
+        // parent links by document order: lvl-2 = section, lvl-3 = sub, lvl-4 = sub-sub
+        var meta = [], sec = -1, sub = -1;
+        for (var m = 0; m < items.length; m++) {
+          var c = items[m].className;
+          var d = c.indexOf("lvl-4") >= 0 ? 2 : c.indexOf("lvl-3") >= 0 ? 1 : 0;
+          if (d === 0) { sec = m; sub = -1; }
+          if (d === 1) sub = m;
+          meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });
+          // a clicked entry stays disclosed even when the page is too short to scroll it to the top
+          items[m].addEventListener("click", (function (i) { return function () { pinned = i; update(); }; })(m));
+        }
+        var pinned = -1;
+        var ticking = false;
+        function update() {
+          ticking = false;
+          var active = 0;
+          for (var i = 0; i < items.length; i++) {
+            var h = document.getElementById(items[i].getAttribute("href").slice(1));
+            if (h && h.getBoundingClientRect().top <= 110) active = i;
+          }
+          // subs show only inside an open section, sub-subs only inside an open
+          // sub-section — open = being read (scroll) or last clicked (pinned)
+          var secs = [meta[active].sec], subs = [meta[active].sub];
+          if (pinned >= 0) { secs.push(meta[pinned].sec); subs.push(meta[pinned].sub); }
+          for (var j = 0; j < items.length; j++) {
+            items[j].classList.toggle("active", j === active);
+            var show = true;
+            if (meta[j].d === 1) show = meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0;
+            else if (meta[j].d === 2) show = (meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0) && (meta[j].sub === -1 || subs.indexOf(meta[j].sub) >= 0);
+            items[j].classList.toggle("hide", !show);
+          }
+        }
+        addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+        addEventListener("load", update);
+        update();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 /* main.js — boots the editor. (Phase 1: core editing + toolbar + scroll + minimal
  * sandboxed persistence. Later phases add math, footnotes, figures, publish, sync.) */
 
-import { Editor, StarterKit, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
+import { Editor, StarterKit, Link, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
@@ -57,11 +57,21 @@ export const editor = new Editor({
   extensions: [
     StarterKit.configure({
       heading: { levels: CONFIG.headingLevels },
-      link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener', target: '_blank' } },
+      link: false, // configured below as a non-inclusive mark
       // the drop-position line shown while dragging a figure (or text) — match the
       // node-selection ring blue so "what's selected" and "where it lands" read as one
       dropcursor: { color: 'rgba(15, 122, 229, 0.8)', width: 3 },
       // keep it prose-focused; code block stays available
+    }),
+    // Stock Link is `inclusive` whenever autolink is on, so typing at the end of a link
+    // kept extending it. Autolink only fires on whitespace for not-yet-linked URLs, so it
+    // works fine with inclusive:false — text typed right after a link stays plain.
+    // (Typing at the very START of a block that begins with a link is the one boundary
+    // ProseMirror still treats as inside the mark; handleTextInput below covers that.)
+    Link.extend({ inclusive: false }).configure({
+      openOnClick: false,
+      autolink: true,
+      HTMLAttributes: { rel: 'noopener', target: '_blank' },
     }),
     // Only prompt "Start writing…" when the whole document is empty — not on every
     // blank paragraph inside an article that already has text.
@@ -114,6 +124,25 @@ export const editor = new Editor({
     // highlight, then step the caret past it, in both directions, without entering it. Text
     // blocks (quotes, lists, code) are not objects: the caret walks into them normally, one
     // character per press. (Enter still opens a highlighted equation for editing.)
+    // Typing with the caret at a link's boundary (before its first or after its last
+    // character) must never grow the link. inclusive:false handles the end; the start of
+    // a block that opens with a link is the case ProseMirror's $pos.marks() still
+    // resolves to the link, so strip it here.
+    handleTextInput(view, from, to, text) {
+      if (from !== to) return false
+      const { state } = view
+      const linkType = state.schema.marks.link
+      const $pos = state.doc.resolve(from)
+      const marks = state.storedMarks || $pos.marks()
+      if (!linkType.isInSet(marks)) return false
+      const before = $pos.nodeBefore, after = $pos.nodeAfter
+      const beforeLinked = !!(before && linkType.isInSet(before.marks))
+      const afterLinked = !!(after && linkType.isInSet(after.marks))
+      if (beforeLinked && afterLinked) return false // genuinely inside the link
+      const kept = marks.filter((m) => m.type !== linkType)
+      view.dispatch(state.tr.replaceWith(from, to, state.schema.text(text, kept)).scrollIntoView())
+      return true
+    },
     handleKeyDown(view, event) {
       const { state } = view
       const { selection, doc } = state

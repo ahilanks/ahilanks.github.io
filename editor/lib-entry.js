@@ -23,6 +23,9 @@ export {
 } from '@tiptap/core'
 
 export { default as StarterKit } from '@tiptap/starter-kit'
+// Link is exported separately so main.js can extend it (inclusive:false) instead of
+// using StarterKit's stock instance.
+export { Link } from '@tiptap/extension-link'
 export { Placeholder } from '@tiptap/extensions'
 
 // ---- ProseMirror internals (via @tiptap/pm so there is ONE prosemirror-model) ----

@@ -266,7 +266,7 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix) {
   let html = '\n      <hr class="fn-divider" />\n      <ol class="footnotes">\n'
   Array.from(wrap.children).forEach((bodyClone, idx) => {
     const n = idx + 1 // index order matches the re-numbered body refs above
-    html += '        <li id="fn-' + n + '">' + bodyClone.innerHTML + ' <a href="#fnref-' + n + '" class="fn-back">↩</a></li>\n'
+    html += '        <li id="fn-' + n + '">' + bodyClone.innerHTML + '</li>\n'
   })
   html += '      </ol>\n'
   return { html, files }
@@ -595,7 +595,6 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }',
     '      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }',
     '      ol.footnotes img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.5rem 0; }',
-    '      .fn-back { text-decoration:none; }',
     ...(version || draft ? PROV_CSS : []),
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',

@@ -203,17 +203,17 @@
 
     <!-- ===================== PUBLISH MODAL ===================== -->
     <div class="overlay hidden" id="publishOverlay">
-      <div class="modal">
+      <div class="modal modal-publish">
         <div class="pub-head">
           <h2>Publish</h2>
           <div class="seg" id="pubMode">
             <button type="button" data-mode="publish" class="active">Publish</button>
-            <button type="button" data-mode="draft">Private draft link</button>
+            <button type="button" data-mode="draft">Draft link</button>
           </div>
         </div>
-        <p class="sub" id="pubSub"></p>
+        <p class="sub" id="pubSub" hidden></p>
         <div class="field">
-          <label for="pubSlug">Filename (slug)</label>
+          <label for="pubSlug">Slug</label>
           <input type="text" id="pubSlug" placeholder="my-article" />
           <p class="desc" id="pubVersionInfo"></p>
         </div>
@@ -223,22 +223,21 @@
             <input type="text" id="pubDate" placeholder="May 28, 2026" />
           </div>
           <div class="field">
-            <label>Thumbnail for the writings list</label>
-            <div class="thumb-drop" id="thumbDrop">Click to choose an image</div>
+            <label>Thumbnail</label>
+            <div class="thumb-drop" id="thumbDrop">Choose an image</div>
           </div>
-          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;">
-            <input type="checkbox" id="pubUpdateList" checked style="width:auto;" />
-            Add to writings.html list
+          <label class="check-row">
+            <input type="checkbox" id="pubUpdateList" checked />
+            Add to writings list
           </label>
         </div>
         <div id="pubDraftFields" hidden>
           <div class="field">
-            <label for="draftUrl">Unlisted link</label>
+            <label for="draftUrl">Link</label>
             <div class="draft-url-row">
-              <input type="text" id="draftUrl" readonly placeholder="appears after you create the draft link" />
+              <input type="text" id="draftUrl" readonly placeholder="Created when you publish the draft" />
               <button type="button" class="pop-btn ghost" id="draftCopy">Copy</button>
             </div>
-            <p class="desc">Saved as <code>writings/p/&lt;token&gt;.html</code>. Anyone with the link can read it; it isn't listed, linked, or indexed anywhere.</p>
           </div>
         </div>
         <div class="modal-actions">

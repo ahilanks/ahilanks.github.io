@@ -407,9 +407,19 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .thumb-drop:hover { border-color: var(--link); color: var(--link); }
 .thumb-drop img { max-height: 120px; border-radius: 8px; margin: 0 auto; display: block; }
 .thumb-drop .thumb-hint { display: block; margin-top: 0.4rem; font-size: 0.72rem; color: var(--faint); }
-.pub-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-bottom: 0.3rem; }
-.pub-head h2 { margin: 0; }
+.modal-publish { max-width: 400px; }
+.pub-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-bottom: 1.1rem; }
+.pub-head h2 { margin: 0; font-size: 1.15rem; }
 .pub-head .seg button { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
+.modal-publish .field { margin-bottom: 0.85rem; }
+.modal-publish .field label { color: var(--muted); font-weight: 500; }
+.modal-publish .field .desc { color: var(--faint); }
+.modal-publish .thumb-drop { padding: 0.7rem; }
+.check-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--muted); }
+.check-row input { width: auto; margin: 0; }
+.modal-publish .modal-actions { margin-top: 1.1rem; }
+.modal-publish .modal-msg { margin-top: 0.7rem; font-size: 0.8rem; }
+.modal-publish .modal-msg a { color: inherit; }
 .draft-url-row { display: flex; gap: 0.5rem; align-items: stretch; }
 .draft-url-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
 .draft-url-row .pop-btn { flex: none; }

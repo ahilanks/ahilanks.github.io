@@ -720,9 +720,6 @@ export function setupPublish({ editor, currentSnapshot }) {
     $('pubPublishFields').hidden = m !== 'publish'
     $('pubDraftFields').hidden = m !== 'draft'
     $('publishConfirm').textContent = m === 'draft' ? 'Create draft link' : 'Publish'
-    $('pubSub').textContent = m === 'draft'
-      ? 'Pushes an unlisted copy you can send to a few readers. Not in the writings list, not indexed, no version or timestamp. Re-running overwrites the same link.'
-      : 'Publishes to writings/, freezes a numbered version, anchors its SHA-256 fingerprint in the Bitcoin blockchain (OpenTimestamps), and pushes to GitHub.'
     setMsg($('publishMsg'), '', '')
   }
 
@@ -731,14 +728,14 @@ export function setupPublish({ editor, currentSnapshot }) {
     const src = firstImageSrc(bodyHtml)
     const drop = $('thumbDrop')
     pendingThumb = null
-    if (!src) { drop.textContent = 'Click to choose an image'; drop.classList.remove('has-img'); return }
+    if (!src) { drop.textContent = 'Choose an image'; drop.classList.remove('has-img'); return }
     if (src.startsWith('data:')) {
       const ext = ((src.substring(5, src.indexOf(';')).split('/')[1] || 'png').replace('jpeg', 'jpg'))
       pendingThumb = { dataUrl: src, ext }
     } else {
       pendingThumb = { path: src }
     }
-    drop.innerHTML = '<img src="' + src.replace(/"/g, '&quot;') + '" alt="thumb"/><span class="thumb-hint">first image in the article · click to change</span>'
+    drop.innerHTML = '<img src="' + src.replace(/"/g, '&quot;') + '" alt="thumb"/><span class="thumb-hint">first image · click to change</span>'
     drop.classList.add('has-img')
   }
 
@@ -749,13 +746,12 @@ export function setupPublish({ editor, currentSnapshot }) {
     try {
       const m = await apiJson('/api/proofs?slug=' + encodeURIComponent(slug))
       const vs = m.versions || []
-      if (!vs.length) { el.textContent = 'First publish → v1.'; return }
+      if (!vs.length) { el.textContent = 'v1'; return }
       const last = vs[vs.length - 1]
       const pending = vs.filter((v) => v.status === 'pending').length
-      el.textContent = 'Published before: v' + last.n + ' on ' + longDate(last.date) + '. Text changes publish as v' + (last.n + 1) + '; unchanged text re-uses v' + last.n + '.'
-        + (pending ? ' ' + pending + ' proof' + (pending > 1 ? 's' : '') + ' still awaiting Bitcoin confirmation.' : '')
+      el.textContent = 'v' + last.n + ' · ' + longDate(last.date) + (pending ? ' · timestamp pending' : '')
     } catch (e) {
-      el.textContent = 'Editor server not reachable — start run-editor.command to publish.'
+      el.textContent = 'Editor server not running'
     }
   }
 
@@ -818,7 +814,7 @@ export function setupPublish({ editor, currentSnapshot }) {
     const draft = mode === 'draft'
     busy = true
     $('publishConfirm').disabled = true
-    setMsg(msg, draft ? 'Creating draft link…' : 'Publishing…', '')
+    setMsg(msg, 'Working…', '')
     try {
       const sink = makeSink()
       const mediaPrefix = draft ? '../media/' : 'media/'
@@ -843,11 +839,9 @@ export function setupPublish({ editor, currentSnapshot }) {
         await sink.add(rel, html)
         const url = site + '/' + rel
         $('draftUrl').value = url
-        setMsg(msg, 'Writing files…', '')
         const written = await sink.flush()
-        setMsg(msg, 'Committing &amp; pushing…', '')
-        const git = await sitePush(written, 'Draft preview: ' + titleText)
-        setMsg(msg, 'Draft link pushed (' + escapeHtml(git.detail || 'done') + '). Live in about a minute at <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(url) + '</a>.', 'ok')
+        await sitePush(written, 'Draft preview: ' + titleText)
+        setMsg(msg, 'Live in a minute.', 'ok')
         toast('Draft link pushed')
         return
       }
@@ -866,7 +860,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       let stampNote = ''
       let sha = null
       if (same && same.ots) {
-        stampNote = 'Text unchanged since v' + n + ' (' + longDate(same.date) + ') — no new version or timestamp.'
+        stampNote = 'Text unchanged since v' + n + '.'
       } else {
         // 2) frozen copy + live page, byte-identical (the frozen file is what gets hashed)
         const html = buildArticleHtml(Object.assign({}, common, { version: { n, date: versionDate } }))
@@ -884,12 +878,10 @@ export function setupPublish({ editor, currentSnapshot }) {
         await updateWritingsIndex(sink, { slug, title: titleText, date: dateStr, minutes, thumb: thumbPath })
       }
 
-      setMsg(msg, 'Writing files…', '')
       const written = await sink.flush()
 
       // 5) anchor the fingerprint in Bitcoin (server → OpenTimestamps calendars)
       if (sha) {
-        setMsg(msg, 'Timestamping…', '')
         try {
           const r = await apiJson('/api/stamp', {
             method: 'POST',
@@ -897,18 +889,16 @@ export function setupPublish({ editor, currentSnapshot }) {
             body: JSON.stringify({ slug, n, sha256: sha, contentSha256: contentSha, date: versionDate, title: titleText, words: wordCount() }),
           })
           const cals = (r.entry && r.entry.calendars || []).length
-          stampNote = 'v' + n + ' fingerprint <code>' + sha.slice(0, 12) + '…</code> submitted to ' + cals + ' OpenTimestamps calendar' + (cals === 1 ? '' : 's') +
-            '; Bitcoin confirmation usually lands within a few hours and is pushed automatically.'
+          stampNote = cals ? 'Timestamp submitted; Bitcoin confirmation lands in a few hours.' : ''
         } catch (e) {
-          stampNote = '<b>Not timestamped:</b> ' + escapeHtml(e.message || 'server error') + '. Run Publish again (same text re-uses v' + n + ') to retry.'
+          stampNote = 'Not timestamped (' + escapeHtml(e.message || 'server error') + ') — publish again to retry.'
         }
       }
 
       // 6) commit + push everything this publish touched (proofs included)
-      setMsg(msg, 'Committing &amp; pushing…', '')
-      const git = await sitePush(written.concat(['writings/proofs']), 'Publish: ' + titleText + ' (v' + n + ')')
+      await sitePush(written.concat(['writings/proofs']), 'Publish: ' + titleText + ' (v' + n + ')')
       const url = site + '/writings/' + slug + '.html'
-      setMsg(msg, 'Published v' + n + ' — ' + escapeHtml(git.detail || 'pushed') + '. Live in about a minute at <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(url) + '</a>. ' + stampNote, 'ok')
+      setMsg(msg, '<a href="' + url + '" target="_blank" rel="noopener">v' + n + '</a> live in a minute. ' + stampNote, 'ok')
       toast('Published v' + n + ' ✓')
       showVersionInfo(slug)
     } catch (err) {

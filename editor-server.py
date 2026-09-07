@@ -53,6 +53,9 @@ AUTO_PUSH_SECONDS = 300      # ~5 minutes
 PROOF_UPGRADE_SECONDS = 900  # re-check pending Bitcoin timestamps every ~15 minutes
 PUBLISH_STATE_PATH = os.path.join(ROOT, "drafts", ".publish-state.json")  # private: draft share tokens
 PROOF_LOCK = threading.Lock()
+SITE_GIT_LOCK = threading.Lock()   # serialize commits/pushes of the public site repo (ROOT)
+# Paths the editor may write when publishing (everything else on the site is hand-edited).
+PUBLISH_PATH_RE = re.compile(r"^(writings/(p/|media/)?[A-Za-z0-9_\-.]+\.[A-Za-z0-9]+|media/[A-Za-z0-9_\-.]+\.[A-Za-z0-9]+|writings\.html)$")
 GITHUB_FILE_LIMIT = 95 * 1024 * 1024  # keep files >95MB out of git (GitHub rejects >100MB); they stay durable-local-only
 MIME_EXT = {
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/gif": "gif",
@@ -597,16 +600,76 @@ def save_publish_state(data):
     os.replace(tmp, PUBLISH_STATE_PATH)
 
 
+def _site_git(args):
+    return subprocess.run(["git", *args], cwd=ROOT, env=GIT_ENV, capture_output=True, text=True)
+
+
+def site_commit_push(paths, message):
+    """Stage exactly `paths` in the public site repo, commit them (pathspec commit, so
+    unrelated staged/unstaged work is left alone) and push origin main."""
+    if not os.path.isdir(os.path.join(ROOT, ".git")):
+        return {"ok": False, "detail": "site folder is not a git repo"}
+    paths = [p for p in paths if p and ".." not in p]
+    with SITE_GIT_LOCK:
+        try:
+            _site_git(["add", "-A", "--", *paths])
+            status = _site_git(["status", "--porcelain", "--", *paths]).stdout.strip()
+            committed = False
+            if status:
+                c = _site_git(["commit", "-q", "-m", message, "--", *paths])
+                if c.returncode != 0:
+                    return {"ok": False, "committed": False, "pushed": False,
+                            "detail": "commit failed: " + (c.stderr.strip() or c.stdout.strip())}
+                committed = True
+            push = _site_git(["push", "origin", "main"])
+            if push.returncode != 0:
+                return {"ok": False, "committed": committed, "pushed": False,
+                        "detail": "push failed: " + (push.stderr.strip() or "unknown error")}
+            head = _site_git(["rev-parse", "--short", "HEAD"]).stdout.strip()
+            return {"ok": True, "committed": committed, "pushed": True, "commit": head,
+                    "detail": ("committed " + head + " and pushed") if committed else "nothing new to commit; pushed"}
+        except Exception as e:
+            return {"ok": False, "detail": f"git error: {e}"}
+
+
+def write_publish_files(files):
+    """Write the editor's publish payload ([{path, text | b64}]) under ROOT. Only the
+    allow-listed site paths (writings/, writings/media/, writings/p/, media/, writings.html)."""
+    written = []
+    for f in files:
+        rel = str(f.get("path") or "")
+        if not PUBLISH_PATH_RE.match(rel) or ".." in rel:
+            raise ValueError(f"refusing to write {rel!r}")
+        if "b64" in f:
+            data = base64.b64decode(f["b64"])
+        else:
+            data = str(f.get("text") or "").encode("utf-8")
+        fp = os.path.join(ROOT, rel)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        tmp = fp + ".tmp"
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, fp)
+        written.append(rel)
+    return written
+
+
 def upgrade_proofs(reason="auto"):
-    """Upgrade + verify pending OpenTimestamps proofs (see provenance.py). Never fatal."""
+    """Upgrade + verify pending OpenTimestamps proofs (see provenance.py), then commit and
+    push writings/proofs/ so confirmed proofs go live without a manual git step. Never fatal."""
     if provenance is None:
         return {}
     with PROOF_LOCK:
         try:
-            return provenance.upgrade_all(log=lambda m: sys.stderr.write(m + "\n"))
+            changed = provenance.upgrade_all(log=lambda m: sys.stderr.write(m + "\n"))
         except Exception as e:
             sys.stderr.write(f"[proofs] upgrade ({reason}) failed: {e}\n")
             return {}
+    if changed:
+        what = ", ".join(f"{slug} v{'/'.join(str(v['n']) for v in vs)}" for slug, vs in changed.items())
+        r = site_commit_push(["writings/proofs"], f"Proofs: timestamp update for {what}")
+        sys.stderr.write(f"[proofs] {r.get('detail')}\n")
+    return changed
 
 
 def proof_upgrade_loop():
@@ -734,6 +797,26 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json({"ok": True, "entry": entry})
             except Exception as e:
                 return self._send_json({"ok": False, "error": str(e)}, 400)
+        if path == "/api/publish":       # write site files (see write_publish_files)
+            body = self._read_json()
+            if body is None:
+                return self.send_error(400, "bad json")
+            try:
+                written = write_publish_files(body.get("files") or [])
+            except Exception as e:
+                return self._send_json({"ok": False, "error": str(e)}, 400)
+            return self._send_json({"ok": True, "written": written})
+        if path == "/api/site-push":     # commit + push the given site paths
+            body = self._read_json()
+            if body is None:
+                return self.send_error(400, "bad json")
+            paths = [str(p) for p in (body.get("paths") or []) if PUBLISH_PATH_RE.match(str(p)) or str(p) in ("writings/proofs", "robots.txt")]
+            if not paths:
+                return self._send_json({"ok": False, "error": "no publishable paths"}, 400)
+            r = site_commit_push(paths, str(body.get("message") or "Publish"))
+            if not r.get("ok"):
+                return self._send_json({"ok": False, "error": r.get("detail"), "git": r}, 500)
+            return self._send_json({"ok": True, "git": r})
         if path == "/api/proofs/upgrade":
             changed = upgrade_proofs("manual")
             pending = provenance.pending_count() if provenance else 0

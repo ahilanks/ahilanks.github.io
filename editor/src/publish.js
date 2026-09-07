@@ -1,11 +1,11 @@
 /* publish.js — one-click publish to the static site's writings/ folder.
  *
  * Opens #publishOverlay, then on confirm builds a standalone article HTML from the
- * current doc and writes it into the project via the File System Access API. Inline
- * data-URI images are split out into media/ files (named by content hash, so older
- * versions keep pointing at the bytes they were published with); the writings.html
- * index list is optionally updated. Everything is USER-GATED: the browser folder picker
- * means nothing is written until the user grants access.
+ * current doc and hands the files to the local editor server (POST /api/publish), which
+ * writes them into the project it serves, then commits + pushes them to GitHub
+ * (POST /api/site-push) — no folder picker, no manual git step. Inline data-URI images
+ * are split out into media/ files (named by content hash, so older versions keep pointing
+ * at the bytes they were published with); the writings.html index list is optionally updated.
  *
  * Two modes:
  *   publish — writings/<slug>.html + a frozen copy writings/<slug>.v<N>.html (byte-identical
@@ -31,67 +31,36 @@
 import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 import { CONFIG } from './config.js'
 
-/* ---------------------------------------------------------- File System Access */
-// Remember the chosen project folder across reloads (a directory handle survives in IDB).
-const IDB_NAME = 'ahilan.editor2.fs'
-const IDB_STORE = 'handles'
-function idbOpen() {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(IDB_NAME, 1)
-    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE)
-    r.onsuccess = () => res(r.result)
-    r.onerror = () => rej(r.error)
-  })
-}
-async function idbGet(key) {
-  const db = await idbOpen()
-  return new Promise((res, rej) => {
-    const rq = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key)
-    rq.onsuccess = () => res(rq.result)
-    rq.onerror = () => rej(rq.error)
-  })
-}
-async function idbSet(key, val) {
-  const db = await idbOpen()
-  return new Promise((res, rej) => {
-    const t = db.transaction(IDB_STORE, 'readwrite')
-    t.objectStore(IDB_STORE).put(val, key)
-    t.oncomplete = () => res()
-    t.onerror = () => rej(t.error)
-  })
-}
-
-let projectHandle = null
-// Resolve (remembering across sessions) a read-write handle to the project root the user
-// picks. requestPermission runs inside the publish click, so the gesture requirement is met.
-async function ensureProjectHandle() {
-  if (projectHandle) {
-    if ((await projectHandle.queryPermission({ mode: 'readwrite' })) === 'granted') return projectHandle
-    if ((await projectHandle.requestPermission({ mode: 'readwrite' })) === 'granted') return projectHandle
+/* ------------------------------------------------------------ file sink (server) */
+// Files are collected here during a publish and sent to the local server in one request.
+// The server only accepts the site's publish paths (writings/, writings/media/, writings/p/,
+// media/, writings.html) — see PUBLISH_PATH_RE in editor-server.py.
+function makeSink() {
+  const files = []
+  return {
+    files,
+    add(path, data) {
+      if (data instanceof Blob) return data.arrayBuffer().then((buf) => { files.push({ path, b64: bytesToB64(new Uint8Array(buf)) }) })
+      if (data instanceof Uint8Array) { files.push({ path, b64: bytesToB64(data) }); return Promise.resolve() }
+      files.push({ path, text: String(data) })
+      return Promise.resolve()
+    },
+    async flush() {
+      if (!files.length) return []
+      const r = await apiJson('/api/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
+      return r.written || []
+    },
   }
-  const saved = await idbGet('projectDir').catch(() => null)
-  if (saved) {
-    const perm = await saved.queryPermission({ mode: 'readwrite' })
-    if (perm === 'granted' || (await saved.requestPermission({ mode: 'readwrite' })) === 'granted') {
-      projectHandle = saved
-      return projectHandle
-    }
-  }
-  if (!window.showDirectoryPicker) throw new Error('Use Chrome on localhost for one-click publish (File System Access API).')
-  projectHandle = await window.showDirectoryPicker({ id: 'ahilan-project', mode: 'readwrite' })
-  await idbSet('projectDir', projectHandle).catch(() => {})
-  return projectHandle
 }
-
-async function writeFile(dirHandle, name, data) {
-  const fh = await dirHandle.getFileHandle(name, { create: true })
-  const w = await fh.createWritable()
-  await w.write(data)
-  await w.close()
+function bytesToB64(bytes) {
+  let s = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
+  return btoa(s)
 }
-async function readTextFile(dirHandle, name) {
-  try { return await (await (await dirHandle.getFileHandle(name)).getFile()).text() }
-  catch (e) { return null }
+// Commit + push the given site paths. Returns the server's git summary.
+async function sitePush(paths, message) {
+  const r = await apiJson('/api/site-push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths, message }) })
+  return r.git || {}
 }
 function dataUrlToBlob(dataUrl) {
   const [meta, b64] = dataUrl.split(',')
@@ -664,13 +633,14 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
 }
 
 // Insert a new <li> into writings.html's post list (or fail loudly if the layout is missing).
-async function updateWritingsIndex(root, post) {
-  let fh, text
-  try { fh = await root.getFileHandle('writings.html'); text = await (await fh.getFile()).text() }
-  catch (e) { throw new Error('writings.html not found at the project root you selected.') }
+// Returns true when the index changed (the new text is queued on `sink`).
+async function updateWritingsIndex(sink, post) {
+  const r = await fetch('/writings.html', { cache: 'no-store' })
+  if (!r.ok) throw new Error('writings.html not found at the project root.')
+  let text = await r.text()
 
   const liId = 'post-' + post.slug
-  if (text.includes('id="' + liId + '"')) return // already listed
+  if (text.includes('id="' + liId + '"')) return false // already listed
 
   const thumbInner = post.thumb
     ? '<img src="' + post.thumb + '" alt="" onerror="this.parentNode.classList.add(\'no-img\');this.remove();" />'
@@ -690,41 +660,35 @@ async function updateWritingsIndex(root, post) {
   } else {
     throw new Error('No <ul class="post-list"> in writings.html — open it once so the new layout is in place.')
   }
-  const w = await fh.createWritable()
-  await w.write(text)
-  await w.close()
+  await sink.add('writings.html', text)
+  return true
 }
 
 /* -------------------------------------------------------- server (stamp / state) */
-// The local editor server (editor-server.py) does the OpenTimestamps work and keeps the
-// private per-draft share tokens. Both are best-effort: the site files are written first.
+// The local editor server (editor-server.py) writes the files, does the OpenTimestamps
+// work, keeps the private per-draft share tokens, and commits + pushes the site repo.
 async function apiJson(url, opts) {
   const r = await fetch(url, Object.assign({ cache: 'no-store' }, opts || {}))
   const j = await r.json().catch(() => ({}))
   if (!r.ok || j.ok === false) throw new Error(j.error || ('server ' + r.status))
   return j
 }
-// Manifest as it exists on disk (source of truth for the next version number). Read via
-// the folder handle so it works even if the server is down; falls back to an empty one.
-async function readManifest(root, slug) {
+// Manifest as it exists on disk (source of truth for the next version number).
+async function readManifest(slug) {
   try {
-    const dir = await (await (await root.getDirectoryHandle('writings')).getDirectoryHandle('proofs')).getDirectoryHandle(slug)
-    const txt = await readTextFile(dir, 'manifest.json')
-    const m = txt ? JSON.parse(txt) : null
+    const m = await apiJson('/api/proofs?slug=' + encodeURIComponent(slug))
     if (m && Array.isArray(m.versions)) return m
-  } catch (e) { /* no manifest yet */ }
+  } catch (e) { /* no manifest yet / server down */ }
   return { slug, versions: [] }
 }
-// Stable unlisted token for a draft id: server-side (private, cross-device) with an IDB fallback.
+// Stable unlisted token for a draft id, kept privately by the server (drafts/.publish-state.json).
 async function shareTokenFor(docId) {
-  let state = null
-  try { state = await apiJson('/api/publish-state') } catch (e) { /* server down */ }
-  let token = state && state.shares && state.shares[docId]
-  if (!token) token = await idbGet('share:' + docId).catch(() => null)
-  if (!token) token = randomToken()
-  await idbSet('share:' + docId, token).catch(() => {})
-  try { await apiJson('/api/publish-state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: { [docId]: token } }) }) }
-  catch (e) { /* IDB copy is enough locally */ }
+  const state = await apiJson('/api/publish-state')
+  let token = state.shares && state.shares[docId]
+  if (!token) {
+    token = randomToken()
+    await apiJson('/api/publish-state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: { [docId]: token } }) })
+  }
   return token
 }
 
@@ -758,8 +722,8 @@ export function setupPublish({ editor, currentSnapshot }) {
     $('pubDraftFields').hidden = m !== 'draft'
     $('publishConfirm').textContent = m === 'draft' ? 'Create draft link' : 'Publish'
     $('pubSub').textContent = m === 'draft'
-      ? 'Writes an unlisted copy you can send to a few readers. Not in the writings list, not indexed, no version or timestamp. Re-running overwrites the same link.'
-      : 'Writes a standalone article into writings/, freezes it as a numbered version, and anchors its SHA-256 fingerprint in the Bitcoin blockchain (OpenTimestamps).'
+      ? 'Pushes an unlisted copy you can send to a few readers. Not in the writings list, not indexed, no version or timestamp. Re-running overwrites the same link.'
+      : 'Publishes to writings/, freezes a numbered version, anchors its SHA-256 fingerprint in the Bitcoin blockchain (OpenTimestamps), and pushes to GitHub.'
     setMsg($('publishMsg'), '', '')
   }
 
@@ -792,7 +756,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       el.textContent = 'Published before: v' + last.n + ' on ' + longDate(last.date) + '. Text changes publish as v' + (last.n + 1) + '; unchanged text re-uses v' + last.n + '.'
         + (pending ? ' ' + pending + ' proof' + (pending > 1 ? 's' : '') + ' still awaiting Bitcoin confirmation.' : '')
     } catch (e) {
-      el.textContent = 'Editor server not reachable — publish will write files but cannot timestamp.'
+      el.textContent = 'Editor server not reachable — start run-editor.command to publish.'
     }
   }
 
@@ -829,12 +793,11 @@ export function setupPublish({ editor, currentSnapshot }) {
 
   // Thumbnail → top-level media/<slug>-thumb.<ext> (site convention); returns the path
   // relative to writings.html, or '' when there is none.
-  async function writeThumb(root, slug) {
+  async function writeThumb(sink, slug) {
     if (!pendingThumb) return ''
     if (pendingThumb.dataUrl) {
-      const md = await root.getDirectoryHandle('media', { create: true })
       const name = slug + '-thumb.' + pendingThumb.ext
-      await writeFile(md, name, dataUrlToBlob(pendingThumb.dataUrl))
+      await sink.add('media/' + name, dataUrlToBlob(pendingThumb.dataUrl))
       return 'media/' + name
     }
     const p = pendingThumb.path || ''
@@ -858,8 +821,7 @@ export function setupPublish({ editor, currentSnapshot }) {
     $('publishConfirm').disabled = true
     setMsg(msg, draft ? 'Creating draft link…' : 'Publishing…', '')
     try {
-      const root = await ensureProjectHandle()
-      const writingsDir = await root.getDirectoryHandle('writings', { create: true })
+      const sink = makeSink()
       const mediaPrefix = draft ? '../media/' : 'media/'
 
       // 1) split inline data-URI images out to writings/media/<slug>-<hash>.<ext>
@@ -867,32 +829,35 @@ export function setupPublish({ editor, currentSnapshot }) {
       const { html: bodyHtml, files, toc } = await buildBody(snap.body, slug, mediaPrefix)
       const { html: footHtml, files: fnFiles } = await buildFootnotesHtml($('fnList'), slug, mediaPrefix)
       files.push(...fnFiles)
-      const mediaDir = files.length ? await writingsDir.getDirectoryHandle('media', { create: true }) : null
-      for (const f of files) await writeFile(mediaDir, f.name, f.blob)
+      for (const f of files) await sink.add('writings/media/' + f.name, f.blob)
 
       const minutes = readingMinutes()
       const subtitleText = htmlToText(snap.subtitle)
       const common = { titleText, subtitleText, dateStr, minutes, font: snap.font, bodyHtml, footHtml, toc, slug }
+      const site = (CONFIG.siteUrl || '').replace(/\/$/, '')
 
       /* ---------------------------------------------------------- draft link */
       if (draft) {
         const token = await shareTokenFor(snap.id || 'doc')
-        const pDir = await writingsDir.getDirectoryHandle('p', { create: true })
         const html = buildArticleHtml(Object.assign({}, common, { draft: true }))
-        await writeFile(pDir, token + '.html', new Blob([html], { type: 'text/html' }))
         const rel = 'writings/p/' + token + '.html'
-        const url = (CONFIG.siteUrl || '').replace(/\/$/, '') + '/' + rel
+        await sink.add(rel, html)
+        const url = site + '/' + rel
         $('draftUrl').value = url
-        setMsg(msg, 'Draft written to <code>' + rel + '</code> — commit &amp; push, then share the link above. Local preview: <a href="/' + rel + '" target="_blank" rel="noopener">open</a>.', 'ok')
-        toast('Draft link ready')
+        setMsg(msg, 'Writing files…', '')
+        const written = await sink.flush()
+        setMsg(msg, 'Committing &amp; pushing…', '')
+        const git = await sitePush(written, 'Draft preview: ' + titleText)
+        setMsg(msg, 'Draft link pushed (' + escapeHtml(git.detail || 'done') + '). Live in about a minute at <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(url) + '</a>.', 'ok')
+        toast('Draft link pushed')
         return
       }
 
       /* ------------------------------------------------- versioned publish */
       // Version = a change to the TEXT (title/subtitle/body/footnotes). Date/font-only edits
       // don't mint a new version; identical text re-uses the existing one (idempotent).
-      const contentSha = await sha256Hex(utf8([titleText, subtitleText, bodyHtml, footHtml].join('\n \n')))
-      const manifest = await readManifest(root, slug)
+      const contentSha = await sha256Hex(utf8([titleText, subtitleText, bodyHtml, footHtml].join('\n \n')))
+      const manifest = await readManifest(slug)
       const versions = manifest.versions || []
       const same = versions.find((v) => v.contentSha256 === contentSha)
       const maxN = versions.reduce((a, v) => Math.max(a, v.n || 0), 0)
@@ -900,17 +865,32 @@ export function setupPublish({ editor, currentSnapshot }) {
       const versionDate = same ? same.date : new Date().toISOString()
 
       let stampNote = ''
+      let sha = null
       if (same && same.ots) {
         stampNote = 'Text unchanged since v' + n + ' (' + longDate(same.date) + ') — no new version or timestamp.'
       } else {
         // 2) frozen copy + live page, byte-identical (the frozen file is what gets hashed)
         const html = buildArticleHtml(Object.assign({}, common, { version: { n, date: versionDate } }))
         const bytes = utf8(html)
-        const sha = await sha256Hex(bytes)
-        await writeFile(writingsDir, slug + '.v' + n + '.html', bytes)
-        await writeFile(writingsDir, slug + '.html', bytes)
+        sha = await sha256Hex(bytes)
+        await sink.add('writings/' + slug + '.v' + n + '.html', bytes)
+        await sink.add('writings/' + slug + '.html', bytes)
+      }
 
-        // 3) anchor the fingerprint in Bitcoin (server → OpenTimestamps calendars)
+      // 3) thumbnail (default: first image) → media/<slug>-thumb.<ext>
+      const thumbPath = await writeThumb(sink, slug)
+
+      // 4) update the writings.html index list
+      if ($('pubUpdateList').checked) {
+        await updateWritingsIndex(sink, { slug, title: titleText, date: dateStr, minutes, thumb: thumbPath })
+      }
+
+      setMsg(msg, 'Writing files…', '')
+      const written = await sink.flush()
+
+      // 5) anchor the fingerprint in Bitcoin (server → OpenTimestamps calendars)
+      if (sha) {
+        setMsg(msg, 'Timestamping…', '')
         try {
           const r = await apiJson('/api/stamp', {
             method: 'POST',
@@ -919,21 +899,17 @@ export function setupPublish({ editor, currentSnapshot }) {
           })
           const cals = (r.entry && r.entry.calendars || []).length
           stampNote = 'v' + n + ' fingerprint <code>' + sha.slice(0, 12) + '…</code> submitted to ' + cals + ' OpenTimestamps calendar' + (cals === 1 ? '' : 's') +
-            '. Bitcoin confirmation usually lands within a few hours; the editor server upgrades the proof automatically — commit &amp; push <code>writings/proofs/</code> again then.'
+            '; Bitcoin confirmation usually lands within a few hours and is pushed automatically.'
         } catch (e) {
-          stampNote = '<b>Not timestamped:</b> ' + escapeHtml(e.message || 'server error') + '. Files are written; run Publish again (same text re-uses v' + n + ') once the editor server is up.'
+          stampNote = '<b>Not timestamped:</b> ' + escapeHtml(e.message || 'server error') + '. Run Publish again (same text re-uses v' + n + ') to retry.'
         }
       }
 
-      // 4) thumbnail (default: first image) → media/<slug>-thumb.<ext>
-      const thumbPath = await writeThumb(root, slug)
-
-      // 5) update the writings.html index list
-      if ($('pubUpdateList').checked) {
-        await updateWritingsIndex(root, { slug, title: titleText, date: dateStr, minutes, thumb: thumbPath })
-      }
-
-      setMsg(msg, 'Published <code>writings/' + slug + '.html</code> (v' + n + '). ' + stampNote + ' Commit &amp; push to go live.', 'ok')
+      // 6) commit + push everything this publish touched (proofs included)
+      setMsg(msg, 'Committing &amp; pushing…', '')
+      const git = await sitePush(written.concat(['writings/proofs']), 'Publish: ' + titleText + ' (v' + n + ')')
+      const url = site + '/writings/' + slug + '.html'
+      setMsg(msg, 'Published v' + n + ' — ' + escapeHtml(git.detail || 'pushed') + '. Live in about a minute at <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(url) + '</a>. ' + stampNote, 'ok')
       toast('Published v' + n + ' ✓')
       showVersionInfo(slug)
     } catch (err) {

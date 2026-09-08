@@ -453,7 +453,10 @@ const PROV_CSS = [
   '      .prov a:hover { color:var(--text-color); }',
   // Draft pages have no "← Writings" back-link, so the note sits at the top with the
   // container's (tighter) top margin instead of being pulled up under the link.
-  '      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); letter-spacing:0.01em; }',
+  // Deep brick red on the cream page: unmistakably "not the published article", still quiet.
+  '      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }',
+  '      .draft-note::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.5rem; vertical-align:middle; position:relative; top:-1px; }',
+  '      .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }',
 ]
 
 function longDate(iso) {
@@ -551,7 +554,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
       '        <div class="prov-panel" hidden></div>\n' +
       '      </div>'
     : draft
-      ? '      <p class="draft-note">Draft preview · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
+      ? '      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
 

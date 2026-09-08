@@ -80,7 +80,9 @@
       .prov-how code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }
       .prov a { color:var(--muted); }
       .prov a:hover { color:var(--text-color); }
-      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); letter-spacing:0.01em; }
+      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }
+      .draft-note::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.5rem; vertical-align:middle; position:relative; top:-1px; }
+      .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }
       html { scroll-behavior:smooth; }
       h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }
       .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }
@@ -115,7 +117,7 @@
       </div>
     </nav>
     <main class="container">
-      <p class="draft-note">Draft preview · created <time datetime="2026-09-08T20:07:02.000Z">Sep 8, 2026, 1:07 PM PDT</time></p>
+      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="2026-09-08T20:07:02.000Z">Sep 8, 2026, 1:07 PM PDT</time></p>
       <h1>Experiential Learning in Embodied Intelligence</h1>
       <p class="subtitle">Inspired from biological intelligence</p>
       <p class="meta">Sep 8, 26 · 8 min</p>

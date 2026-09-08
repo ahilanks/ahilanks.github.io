@@ -458,11 +458,18 @@ function longDate(iso) {
   const d = new Date(iso)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
+// "Sep 8, 2026, 9:45 AM PDT" — date + time of day in the author's zone (named, so a reader
+// elsewhere isn't misled).
+function longDateTime(iso) {
+  const d = new Date(iso)
+  return d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+}
 
 // Build a full standalone article that matches the published site's aesthetic.
 // `version` ({ n, date }) adds the provenance widget; `draft` marks an unlisted preview
 // (noindex, no widget, relative paths one level deeper via `pathPrefix`).
 function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bodyHtml, footHtml, toc, slug, version, draft }) {
+  const draftCreated = new Date().toISOString() // when this draft link was (re)generated
   const title = escapeHtml(titleText)
   const subtitle = escapeHtml(subtitleText)
   const hasToc = !!(toc && toc.length)
@@ -542,7 +549,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
       '        <div class="prov-panel" hidden></div>\n' +
       '      </div>'
     : draft
-      ? '      <p class="draft-note">Draft preview · unlisted · ' + escapeHtml(longDate(new Date().toISOString())) + '</p>'
+      ? '      <p class="draft-note">Draft preview · unlisted · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
 

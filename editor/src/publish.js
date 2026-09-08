@@ -451,7 +451,9 @@ const PROV_CSS = [
   '      .prov-how code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }',
   '      .prov a { color:var(--muted); }',
   '      .prov a:hover { color:var(--text-color); }',
-  '      .draft-note { margin:-1.1rem 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); letter-spacing:0.01em; }',
+  // Draft pages have no "← Writings" back-link, so the note sits at the top with the
+  // container's (tighter) top margin instead of being pulled up under the link.
+  '      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); letter-spacing:0.01em; }',
 ]
 
 function longDate(iso) {
@@ -549,7 +551,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
       '        <div class="prov-panel" hidden></div>\n' +
       '      </div>'
     : draft
-      ? '      <p class="draft-note">Draft preview · unlisted · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
+      ? '      <p class="draft-note">Draft preview · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
 
@@ -568,7 +570,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '    <style>',
     '      :root { --text-color:#27323f; --link-color:#0f7ae5; --bg-color:#f1ebdf; --muted:#6b7280; --accent:#e8743b; }',
     '      body { margin:0; padding:0 1.5rem; font-family:' + fontFamily + '; color:var(--text-color); background:var(--bg-color); line-height:1.7; }',
-    '      .container { max-width:820px; margin:4rem auto 6rem; }',
+    '      .container { max-width:820px; margin:' + (draft ? '2rem' : '4rem') + ' auto 6rem; }',
     '      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }',
     '      .back:hover { text-decoration:underline; }',
     '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.8rem; letter-spacing:-0.01em; }',
@@ -622,7 +624,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '  <body>',
     tocHtml,
     '    <main class="container">',
-    '      <a class="back" href="' + up + 'writings.html">← Writings</a>',
+    // Unlisted drafts are shared out of context, so no back-link to the writings index.
+    draft ? '' : '      <a class="back" href="' + up + 'writings.html">← Writings</a>',
     provHtml,
     '      <h1>' + title + '</h1>',
     subtitle ? '      <p class="subtitle">' + subtitle + '</p>' : '',

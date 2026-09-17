@@ -1,7 +1,7 @@
 /* main.js — boots the editor. (Phase 1: core editing + toolbar + scroll + minimal
  * sandboxed persistence. Later phases add math, footnotes, figures, publish, sync.) */
 
-import { Editor, StarterKit, Link, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
+import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
@@ -43,6 +43,27 @@ function caretNear(doc, pos, bias) {
   return b instanceof NodeSelection ? a : b
 }
 
+// "Small" paragraph style (toolbar: Normal / Small / …): a boolean `small` attribute on
+// paragraph, stored as <p class="small"> so it round-trips through drafts and publish.
+// keepOnSplit (the default) carries it onto the next paragraph on Enter, so a note can run
+// several lines; picking "Normal" clears it. Headings and quotes are untouched — a small
+// paragraph inside a blockquote stays small.
+const SmallParagraph = Extension.create({
+  name: 'smallParagraph',
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph'],
+      attributes: {
+        small: {
+          default: false,
+          parseHTML: (el) => el.classList.contains('small'),
+          renderHTML: (attrs) => (attrs.small ? { class: 'small' } : {}),
+        },
+      },
+    }]
+  },
+})
+
 /* ---------------------------------------------------------------- boot */
 const surface = $('surface')
 const docTitle = $('docTitle')
@@ -77,6 +98,7 @@ export const editor = new Editor({
     // blank paragraph inside an article that already has text.
     Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? 'Start writing…' : '') }),
     SmartTypography,
+    SmallParagraph,
     InlineMath,
     BlockMath,
     FootnoteRef,
@@ -238,7 +260,9 @@ $('quoteBtn').addEventListener('mousedown', (e) => { e.preventDefault(); editor.
 $('formatSelect').addEventListener('change', (e) => {
   const v = e.target.value
   const chain = editor.chain().focus()
-  if (v === 'paragraph') chain.setParagraph().run()
+  // explicit attrs both ways: "Normal" must clear `small`, not just re-assert "paragraph"
+  if (v === 'paragraph') chain.setNode('paragraph', { small: false }).run()
+  else if (v === 'small') chain.setNode('paragraph', { small: true }).run()
   else if (v === 'blockquote') chain.toggleBlockquote().run()
   else if (/^h(\d)$/.test(v)) chain.setHeading({ level: +v[1] }).run()
 })
@@ -253,6 +277,7 @@ function updateToolbar() {
   if (editor.isActive('heading', { level: 2 })) sel.value = 'h2'
   else if (editor.isActive('heading', { level: 3 })) sel.value = 'h3'
   else if (editor.isActive('heading', { level: 4 })) sel.value = 'h4'
+  else if (editor.isActive('paragraph', { small: true })) sel.value = 'small'
   else if (editor.isActive('blockquote')) sel.value = 'blockquote'
   else sel.value = 'paragraph'
 }

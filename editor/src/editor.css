@@ -132,6 +132,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 .doc-body { font-size: 1.12rem; }
 .doc-body > * { margin: 0 0 1.25rem; }
+/* "Small" paragraph style (toolbar): notes/asides a step below body size. em-based so it
+   tracks the writing font's own size; a tighter gap so consecutive small lines read as one block. */
+.doc-body p.small { font-size: 0.85em; margin-bottom: 1rem; }
 .doc-body h2 { font-size: 1.7rem; font-weight: 700; margin: 2rem 0 0.8rem; letter-spacing: -0.01em; }
 .doc-body h3 { font-size: 1.32rem; font-weight: 600; margin: 1.7rem 0 0.6rem; }
 .doc-body h4 { font-size: 1.12rem; font-weight: 700; margin: 1.4rem 0 0.5rem; }

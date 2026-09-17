@@ -5,7 +5,8 @@
  * #sourcePre with a Markdown + LaTeX serialization of the current document; "write"
  * reverses it. Serialization walks editor.state.doc by node.type.name (the cleanest
  * source of truth) and mirrors the style of editor-server.py's html_to_markdown:
- *   headings h2/h3/h4 → ## / ### / ####, paragraphs blank-line-separated,
+ *   headings h2/h3/h4 → ## / ### / ####, paragraphs blank-line-separated
+ *   (the "small" paragraph style has no Markdown form — it reads as a plain paragraph),
  *   blockquote → "> ", bold → **, italic → *, code → `, strike → ~~,
  *   links → [text](href), bullet/ordered lists → - / 1., hr → ---,
  *   inlineMath → $tex$, blockMath → $$…$$ on their own lines,

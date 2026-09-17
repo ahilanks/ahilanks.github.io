@@ -585,6 +585,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      .math-block.align-right, .math-block.align-right .katex-display { text-align:right; }',
     '      .katex { font-size: 1em; }',
     '      p, ul, ol { margin:0 0 1.25rem; }',
+    '      p.small { font-size:0.85em; margin-bottom:1rem; }',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
     '      ul { list-style-type:disc; }',

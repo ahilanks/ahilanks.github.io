@@ -29,7 +29,7 @@ const UNWRAP = new Set([
 
 // The few attributes worth keeping, by tag. Everything else — style, class, id, width,
 // height, color, align, dir, data-*, aria-*, on* — goes.
-const KEEP = { A: ['href'], OL: ['start'] }
+const KEEP = { A: ['href'], OL: ['start'], P: ['class'] }
 
 // The editor's OWN markup (pasting from a published article of yours, or from a draft's
 // saved HTML): kept verbatim so math, figures and footnote refs survive the round trip.
@@ -123,6 +123,9 @@ function clean(parent) {
     if (DROP.has(tag)) { n.remove(); return }
     clean(n)                                                   // depth-first, so unwrapping is safe
     stripAttrs(n, KEEP[tag] || [])
+    // a paragraph keeps its class only for our own "small" style; any other class is a
+    // site's presentation hook and goes
+    if (tag === 'P' && n.getAttribute('class') !== 'small') n.removeAttribute('class')
     if (UNWRAP.has(tag)) n.replaceWith(...n.childNodes)
   })
 }

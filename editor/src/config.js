@@ -33,7 +33,9 @@ export const CONFIG = {
   },
 
   // OpenAI defaults (key is loaded from .env via the local server, else Settings).
-  openai: { model: 'gpt-5.4-mini' },
+  // model: the ∑ math formatter. writingModel: Proofread / Review suggestions — a full
+  // (non-mini) model, since judging prose is the hard part.
+  openai: { model: 'gpt-5.4-mini', writingModel: 'gpt-5.5' },
 
   // Scroll behaviour. scrollMargin.top keeps the caret out from under the sticky
   // toolbar; ProseMirror scrolls the *minimum* amount instead of recentering.

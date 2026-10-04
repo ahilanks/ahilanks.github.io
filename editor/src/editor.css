@@ -7,6 +7,8 @@
   --faint: #9aa1ab;
   --link: #0f7ae5;
   --accent: #e8743b;
+  --sg: #2b8a6e;      /* AI suggestions: proposed words, notes */
+  --sg-del: #b9533b;  /* AI suggestions: words an edit would remove */
   --bg: #f1ebdf;
   --bg-soft: #f6f1e8;
   --line: rgba(39, 50, 63, 0.12);
@@ -104,7 +106,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 /* ----------------------------- SURFACE ----------------------------- */
 .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scroll-padding-bottom: 22vh; }
-.surface { max-width: var(--maxw); margin: 2.4rem auto; padding: 0 1.5rem 32vh; }
+.surface { max-width: var(--maxw); margin: 2.4rem auto; padding: 0 1.5rem 32vh; position: relative; }
 
 /* ProseMirror base (essential rules, inlined so we vendor no extra CSS) */
 .ProseMirror { position: relative; word-wrap: break-word; white-space: pre-wrap; white-space: break-spaces; font-feature-settings: "liga" 0; outline: none; }
@@ -243,7 +245,7 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
 .fn-body { flex: 1; outline: none; }
 .fn-body p, .fn-body div { margin: 0 0 0.4rem; }
 .fn-body p:last-child, .fn-body div:last-child { margin-bottom: 0; }
-.fn-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; }
+.fn-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; cursor: pointer; }
 /* images inside a footnote: block, footnote-width, selectable-as-a-whole on click (footnote.js) */
 .fn-body img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.4rem 0; }
 .fn-body img::selection { background: transparent; }
@@ -252,6 +254,148 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
    until the next inserted footnote adopts it */
 ol.fn-list li.fn-orphan { opacity: 0.55; }
 ol.fn-list li.fn-orphan .fn-num { color: var(--faint); font-weight: 400; }
+
+/* ----------------------------- COMMENTS ----------------------------- */
+/* the commented stretch of text: a soft marker tint; stronger while its card is active
+   (.cmt-on is a ProseMirror decoration — see comments.js for why not a class) */
+.doc-body span.cmt { background: rgba(230, 178, 60, 0.2); box-shadow: inset 0 -2px 0 rgba(230, 178, 60, 0.55); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
+.doc-body span.cmt:hover { background: rgba(230, 178, 60, 0.32); }
+.doc-body .cmt-on { background: rgba(230, 178, 60, 0.45); }
+/* cards sit in the right margin, level with their anchor (positioned by comments.js) */
+.cmt-layer { position: absolute; top: 0; left: calc(100% + 18px); width: 224px; height: 100%; pointer-events: none; }
+.cmt-card {
+  position: absolute; left: 0; width: 100%; pointer-events: auto;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.45rem 0.65rem 0.55rem; font-family: "Inter", sans-serif; font-size: 0.82rem; line-height: 1.45; color: var(--text);
+  transition: top 0.18s ease, border-color 0.15s, box-shadow 0.15s;
+}
+.cmt-card[hidden] { display: none; }
+.cmt-card.active { border-color: rgba(230, 178, 60, 0.9); box-shadow: 0 4px 16px rgba(39, 50, 63, 0.1); z-index: 1; }
+.cmt-head { display: flex; align-items: center; justify-content: space-between; height: 18px; margin-bottom: 0.15rem; }
+.cmt-time { font-size: 0.68rem; color: var(--faint); letter-spacing: 0.02em; user-select: none; }
+.cmt-resolve {
+  width: 20px; height: 20px; margin-right: -5px; padding: 0; border: none; border-radius: 50%;
+  background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.cmt-card:hover .cmt-resolve, .cmt-card.active .cmt-resolve { opacity: 1; }
+.cmt-resolve:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.cmt-resolve svg { width: 13px; height: 13px; }
+.cmt-text { outline: none; white-space: pre-wrap; word-break: break-word; min-height: 1.3em; }
+.cmt-text:empty::before, .cmt-text:has(> br:only-child)::before { content: attr(data-placeholder); color: var(--faint); pointer-events: none; }
+/* no room beside the column: only the active comment shows, tucked under its text */
+.cmt-layer.narrow { left: 0; width: 100%; }
+.cmt-layer.narrow .cmt-card { width: 240px; box-shadow: var(--shadow); }
+#commentBtn.active { background: rgba(230, 178, 60, 0.22); color: var(--text); }
+
+/* ----------------------------- AI SUGGESTIONS ----------------------------- */
+/* In the text (ProseMirror decorations — never part of the saved doc, see ai-suggest.js):
+   an edit shows the words it would remove struck through + the proposed words; a note
+   underlines what it's about. .sg-on marks the suggestion whose card is active. */
+.doc-body .sg-del {
+  color: var(--sg-del); text-decoration: line-through; text-decoration-color: rgba(185, 83, 59, 0.75);
+  text-decoration-thickness: 1.5px; background: rgba(185, 83, 59, 0.06); border-radius: 2px; cursor: pointer;
+}
+.doc-body .sg-ins {
+  color: var(--sg); background: rgba(43, 138, 110, 0.1); border-radius: 2px; cursor: pointer;
+  text-decoration: underline; text-decoration-color: rgba(43, 138, 110, 0.45); text-underline-offset: 3px;
+}
+.doc-body .sg-ins.after-del { margin-left: 0.15em; }
+.doc-body .sg-note {
+  text-decoration: underline dotted rgba(43, 138, 110, 0.85); text-decoration-thickness: 2px;
+  text-underline-offset: 4px; cursor: pointer; border-radius: 2px;
+}
+.doc-body .sg-note-block { outline: 2px dotted rgba(43, 138, 110, 0.55); outline-offset: 4px; border-radius: 4px; }
+.doc-body .sg-del.sg-on { background: rgba(185, 83, 59, 0.14); }
+.doc-body .sg-ins.sg-on, .doc-body .sg-note.sg-on { background: rgba(43, 138, 110, 0.18); }
+.doc-body .sg-note-block.sg-on { outline-color: var(--sg); }
+
+/* In the margin: cards share the comment layout (and .cmt-card's look) */
+.sg-card { border-left: 3px solid rgba(43, 138, 110, 0.5); }
+.sg-card.active { border-color: rgba(43, 138, 110, 0.85); border-left-color: var(--sg); }
+.sg-head { display: flex; align-items: center; justify-content: space-between; height: 20px; margin-bottom: 0.2rem; }
+.sg-cat { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg); user-select: none; }
+.sg-btns { display: flex; gap: 1px; margin-right: -5px; }
+.sg-btn {
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: none; color: var(--faint);
+  display: inline-flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
+}
+.sg-btn:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.sg-btn.sg-accept { color: var(--sg); }
+.sg-btn.sg-accept:hover { background: rgba(43, 138, 110, 0.15); color: var(--sg); }
+.sg-btn svg { width: 14px; height: 14px; }
+.sg-diff {
+  font-family: "Newsreader", serif; font-size: 0.95rem; line-height: 1.4; margin-bottom: 0.25rem; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.sg-d { color: var(--sg-del); text-decoration: line-through; }
+.sg-i { color: var(--sg); }
+.sg-arrow { color: var(--faint); margin: 0 0.3em; }
+.sg-why { color: var(--muted); }
+.sg-note .sg-why { color: var(--text); }
+.sg-pending { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); padding-top: 0.5rem; }
+.sg-stop { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 0.75rem; padding: 2px 7px; border-radius: 6px; }
+.sg-stop:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.sg-spin {
+  width: 12px; height: 12px; flex: none; border-radius: 50%;
+  border: 2px solid rgba(43, 138, 110, 0.25); border-top-color: var(--sg); animation: sg-spin 0.8s linear infinite;
+}
+@keyframes sg-spin { to { transform: rotate(360deg); } }
+
+/* toolbar button: a dot while suggestions are showing, a pulse while one is being read */
+#suggestBtn { position: relative; }
+#suggestBtn.has::after {
+  content: ""; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--sg);
+}
+#suggestBtn.busy svg { animation: sg-pulse 1.1s ease-in-out infinite; color: var(--sg); }
+@keyframes sg-pulse { 50% { opacity: 0.35; } }
+
+.sg-menu {
+  position: fixed; z-index: 95; width: 272px; padding: 0.35rem;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+}
+.sg-menu.hidden { display: none; }
+.sg-scope { font-size: 0.72rem; color: var(--faint); padding: 0.3rem 0.6rem 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sg-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left;
+  border: none; background: none; border-radius: 8px; padding: 0.45rem 0.6rem; color: var(--text);
+}
+.sg-item[hidden] { display: none; }
+.sg-item:hover:not(:disabled) { background: rgba(39, 50, 63, 0.07); }
+.sg-item:disabled { opacity: 0.45; cursor: default; }
+.sg-item-t { font-size: 0.9rem; font-weight: 500; }
+.sg-item-d { font-size: 0.75rem; color: var(--muted); }
+.sg-item-plain { font-size: 0.85rem; color: var(--muted); }
+/* links offered from the writer's notes: a dashed underline in link blue */
+.doc-body .sg-link {
+  text-decoration: underline dashed rgba(15, 122, 229, 0.7); text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px; cursor: pointer; border-radius: 2px;
+}
+.doc-body .sg-link.sg-on { background: rgba(15, 122, 229, 0.1); }
+.sg-card.sg-link .sg-cat { color: var(--link); }
+.sg-url {
+  display: block; margin-bottom: 0.2rem; color: var(--link); text-decoration: none; font-size: 0.78rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sg-url:hover { text-decoration: underline; }
+.sg-sep { color: var(--faint); margin: 0 0.4em; }
+
+/* menu: Context for Review */
+.sg-ctx { border-top: 1px solid var(--line-soft); margin-top: 0.3rem; padding-top: 0.3rem; }
+.sg-ctx-label { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding: 0.3rem 0.6rem 0.2rem; }
+.sg-ctx-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.3rem 0.2rem 0.6rem; font-size: 0.82rem; }
+.sg-ctx-row label { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 0; cursor: pointer; }
+.sg-ctx-row input { margin: 0; flex: none; accent-color: var(--sg); }
+.sg-ctx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-ctx-row.off .sg-ctx-name { color: var(--faint); }
+.sg-ctx-meta { font-size: 0.7rem; color: var(--faint); white-space: nowrap; }
+.sg-ctx-err { color: #c0392b; }
+.sg-ctx-btn { border: none; background: none; color: var(--faint); border-radius: 6px; padding: 1px 5px; font-size: 0.78rem; flex: none; }
+.sg-ctx-btn:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.sg-ctx-btn.confirm { background: #c0392b; color: #fff; font-size: 0.7rem; font-weight: 600; }
+.sg-ctx-btn.spin { animation: sg-spin 0.8s linear infinite; }
+.sg-ctx-add { width: 100%; text-align: left; border: none; background: none; border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.82rem; color: var(--muted); }
+.sg-ctx-add:hover { background: rgba(39, 50, 63, 0.07); color: var(--text); }
 
 /* placeholders (TipTap Placeholder + our contenteditable title/subtitle) */
 [data-placeholder]:empty::before, [data-placeholder].is-empty::before { content: attr(data-placeholder); color: var(--faint); pointer-events: none; }

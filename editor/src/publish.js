@@ -159,6 +159,8 @@ function headingId(text, used) {
 // Also gives every non-empty H2/H3 an id and returns the contents-panel entries
 // ({ id, text, level, n }, where n is the §-number counted over H2s only).
 function bodyToPublishHtml(clone) {
+  // review comments are editor-only: unwrap their anchor spans, keep the words
+  clone.querySelectorAll('span[data-comment]').forEach((s) => s.replaceWith(...s.childNodes))
   // inline math -> literal $tex$ text
   clone.querySelectorAll('.math-inline').forEach((m) => m.replaceWith(document.createTextNode('$' + (m.dataset.tex || '') + '$')))
   // block math -> a centred (or aligned) paragraph carrying $$tex$$

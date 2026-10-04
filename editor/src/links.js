@@ -9,6 +9,9 @@
  *     (href is normalised: a bare host gets https://; empty unsets). Remove unsets.
  *   • A #linkPreview chip shows the URL (as a real clickable <a target=_blank>) whenever the
  *     CARET is inside a link, with an Edit button back into the popover. Not on hover.
+ *   • Footnote bodies are raw contenteditables outside the doc, so the same popover + chip
+ *     run in a "footnote mode" (fnCtx) whenever a footnote body owns the caret: the edits
+ *     go through footnote.js's execCommand helpers instead of TipTap commands.
  *
  * Ported from v1's openLinkPop / positionPopover / linkPreview, adapted from raw contenteditable
  * + execCommand to TipTap commands (extendMarkRange/setLink/unsetLink) and ProseMirror geometry
@@ -18,6 +21,9 @@
 
 import { getMarkRange } from '../vendor/lib.bundle.js'
 import { $, toast } from './dom.js'
+import {
+  footnoteLinkContext, footnoteAnchorAtSelection, applyFootnoteLink, removeFootnoteLink, focusFootnoteLinkContext,
+} from './nodes/footnote.js'
 
 /* --------------------------------------------------------------- href helpers */
 // Add https:// to a bare host; leave anything with a scheme (http:, mailto:, tel:…),
@@ -81,11 +87,29 @@ export function setupLinks(editor) {
   }
 
   /* --------------------------------------------------------------- the popover */
+  // Set while the popover is editing a FOOTNOTE link: { body, range, anchor } captured by
+  // footnote.js before the input stole focus. Null → the popover is on the article.
+  let fnCtx = null
+  const inFootnote = (a) => !!(a && a.closest && a.closest('.fn-body'))
+
   const hideBubble = () => $('bubble')?.classList.remove('show')
-  const closeLinkPop = () => linkPop.classList.add('hidden')
+  const closeLinkPop = () => { linkPop.classList.add('hidden'); fnCtx = null }
   const isPopOpen = () => !linkPop.classList.contains('hidden')
 
+  function openFootnoteLinkPop(fn) {
+    if (!fn.anchor && (!fn.range || fn.range.collapsed)) { toast('Select some text to link'); return }
+    hideBubble()
+    hidePreviewNow()
+    fnCtx = fn
+    positionPopover(linkPop, (fn.anchor || fn.range).getBoundingClientRect())
+    linkInput.value = fn.anchor ? fn.anchor.getAttribute('href') || '' : ''
+    linkInput.focus()
+    linkInput.select()
+  }
+
   function openLinkPop() {
+    const fn = footnoteLinkContext()
+    if (fn) { openFootnoteLinkPop(fn); return }
     const { empty } = editor.state.selection
     // Need either a real selection to wrap, or a caret already sitting inside a link to edit.
     if (empty && !editor.isActive('link')) { toast('Select some text to link'); return }
@@ -99,6 +123,7 @@ export function setupLinks(editor) {
 
   function applyLink() {
     const href = normalizeHref(linkInput.value)
+    if (fnCtx) { const ctx = fnCtx; closeLinkPop(); applyFootnoteLink(ctx, href); return }
     const chain = editor.chain().focus().extendMarkRange('link')
     if (href) chain.setLink({ href }).run()
     else chain.unsetLink().run() // empty input clears the link
@@ -106,6 +131,7 @@ export function setupLinks(editor) {
   }
 
   function removeLink() {
+    if (fnCtx) { const ctx = fnCtx; closeLinkPop(); removeFootnoteLink(ctx); return }
     editor.chain().focus().extendMarkRange('link').unsetLink().run()
     closeLinkPop()
   }
@@ -119,7 +145,13 @@ export function setupLinks(editor) {
   $('linkRemove').addEventListener('click', removeLink)
   linkInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); applyLink() }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeLinkPop(); editor.commands.focus() }
+    else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation()
+      const ctx = fnCtx
+      closeLinkPop()
+      if (ctx) focusFootnoteLinkContext(ctx) // back into the footnote body, selection intact
+      else editor.commands.focus()
+    }
   })
 
   // ⌘K / Ctrl-K (main.js's shortcut handler ignores 'k', so there's no conflict).
@@ -199,6 +231,14 @@ export function setupLinks(editor) {
     if (a) showPreview(a)
     else if (lpAnchor) hidePreview()
   })
+  // Same for the footnote bodies, which ProseMirror knows nothing about: follow the DOM
+  // selection. Only ever hides a chip it showed itself (a footnote link's), never the
+  // article's, which the handler above owns.
+  document.addEventListener('selectionchange', () => {
+    const a = footnoteAnchorAtSelection()
+    if (a) showPreview(a)
+    else if (lpAnchor && inFootnote(lpAnchor)) hidePreview()
+  })
 
   // keep the chip alive while the pointer is on it (so Edit stays clickable)
   linkPreview.addEventListener('mouseenter', () => clearTimeout(lpHideTimer))
@@ -208,6 +248,17 @@ export function setupLinks(editor) {
   $('linkPreviewEdit').addEventListener('mousedown', (e) => {
     e.preventDefault(); e.stopPropagation()
     if (!lpAnchor) return
+    if (inFootnote(lpAnchor)) {
+      // footnote link: select its text inside the body, then the popover picks it up as an edit
+      const a = lpAnchor
+      hidePreviewNow()
+      a.closest('.fn-body').focus()
+      const r = document.createRange(); r.selectNodeContents(a)
+      const sel = window.getSelection()
+      if (sel) { sel.removeAllRanges(); sel.addRange(r) }
+      openLinkPop()
+      return
+    }
     const pos = editor.view.posAtDOM(lpAnchor.firstChild || lpAnchor, 0)
     const range = linkType && getMarkRange(editor.state.doc.resolve(pos), linkType)
     editor.chain().focus().setTextSelection(range || pos).run()

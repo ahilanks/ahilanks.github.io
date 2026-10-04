@@ -1,5 +1,6 @@
 /* ai-math.js — the ∑ button: AI-format a selected snippet (prose + informal math)
- * into clean KaTeX in place, and the Settings modal + OpenAI key handling.
+ * into clean KaTeX in place, and the Settings modal + OpenAI key handling (shared with
+ * the writing suggestions in ai-suggest.js).
  *
  * Ported from the v1 editor's runMathOnSelection / callOpenAIFormatMath. The key
  * is auto-loaded from the local server's .env (absolute /.env — the page now lives
@@ -12,7 +13,10 @@ import { CONFIG, LS } from './config.js'
 import { $, toast, escapeHtml } from './dom.js'
 import { insertAndEditMath } from './nodes/math.js'
 
-let settings = { apiKey: '', model: CONFIG.openai.model }
+let settings = { apiKey: '', model: CONFIG.openai.model, writingModel: CONFIG.openai.writingModel }
+
+// For ai-suggest.js: the current key/models, and the modal to ask for a key.
+export const aiSettings = () => settings
 
 /* ------------------------------------------------------------------ settings */
 function loadSettings() {
@@ -37,9 +41,10 @@ async function loadKeyFromEnv() {
   } catch (e) { /* .env not reachable — fall back to a saved/entered key */ }
 }
 
-function openSettings() {
+export function openSettings() {
   $('apiKey').value = settings.apiKey || ''
   $('modelName').value = settings.model || ''
+  $('writingModelName').value = settings.writingModel || ''
   const msg = $('settingsMsg'); if (msg) { msg.textContent = ''; msg.className = 'modal-msg' }
   $('settingsOverlay').classList.remove('hidden')
   $('apiKey').focus()
@@ -52,6 +57,7 @@ function wireSettings() {
   $('settingsSave').addEventListener('click', () => {
     settings.apiKey = $('apiKey').value.trim()
     settings.model = $('modelName').value.trim() || CONFIG.openai.model
+    settings.writingModel = $('writingModelName').value.trim() || CONFIG.openai.writingModel
     saveSettings()
     const msg = $('settingsMsg'); if (msg) { msg.textContent = 'Saved'; msg.className = 'modal-msg ok' }
     setTimeout(closeSettings, 500)
@@ -125,6 +131,10 @@ async function callOpenAIFormatMath(selected, ctx) {
     "'<=' -> \\le, '>=' -> \\ge, '!=' -> \\neq, '~=' -> \\approx, '->' -> \\to, 'inf' -> \\infty, " +
     'spelled-out Greek -> \\alpha, \\theta, \\pi, etc. Use \\left( ... \\right) for tall delimiters, ' +
     'subscripts/superscripts with _{...} and ^{...}, and \\text{...} for words inside math.\n' +
+    '4b. Use standard AI/ML notation: expectation \\mathbb{E}[...], probability \\mathbb{P}, real spaces \\mathbb{R}^{n}, ' +
+    '\\operatorname*{arg\\,max}_{x} / \\operatorname*{arg\\,min}_{x}, transpose x^{\\top}, \\operatorname{softmax}, ' +
+    '\\operatorname{Var}, D_{\\mathrm{KL}}(p \\,\\|\\, q), \\nabla_{\\theta}, \\mathcal{L} for a loss, \\coloneqq for "is defined as", ' +
+    '\\mathbf{x} for vectors and matrices, \\hat{y} / \\theta^{*} for estimates / optima, \\sim for "distributed as".\n' +
     '5. Leave ordinary prose EXACTLY as written, in the same order. Do NOT translate prose into math or vice-versa ' +
     'beyond adding delimiters and standard LaTeX. Do not add or remove sentences.\n' +
     'Output ONLY the rewritten snippet — no commentary, no code fences, no surrounding quotes.'

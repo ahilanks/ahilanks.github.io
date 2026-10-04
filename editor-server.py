@@ -682,6 +682,82 @@ def proof_upgrade_loop():
             pass
 
 
+# ---- Google Doc context for the editor's AI Review (editor/src/ai-context.js) ----
+# Browsers can't read a Google Doc cross-origin, so the editor asks us. Only Google Docs
+# URLs are fetched (never an arbitrary host), and only docs readable without signing in:
+# shared "Anyone with the link" or "Published to the web". We fetch the Markdown export
+# (compact, keeps links as [text](url)); a published doc only offers HTML. Either way the
+# images are stripped here — Google inlines them as base64, which can be hundreds of MB.
+GDOC_EDIT_RE = re.compile(r"^https://docs\.google\.com/document/(?:u/\d+/)?d/([A-Za-z0-9_-]{20,})")
+GDOC_PUB_RE = re.compile(r"^https://docs\.google\.com/document/d/e/([A-Za-z0-9_-]{20,})")
+GDOC_MAX_BYTES = 300 * 1024 * 1024  # raw download, images and all
+GDOC_MAX_TEXT = 12 * 1024 * 1024    # what we pass on, once the images are gone
+DATA_URI_RE = re.compile(r"data:[\w.+-]+/[\w.+-]+;base64,[A-Za-z0-9+/=\s]*")
+MD_IMAGE_DEF_RE = re.compile(r"^[ \t]*\[[^\]\n]+\]:[ \t]*<?data:[^\n]*$", re.M)  # [image1]: <data:...>
+MD_IMAGE_REF_RE = re.compile(r"!\[[^\]\n]*\](?:\[[^\]\n]*\]|\([^)\n]*\))")     # ![][image1], ![](...)
+HTML_IMG_RE = re.compile(r"<img\b[^>]*>", re.I)
+GDOC_NOT_SHARED = ("Google wouldn't share that doc without signing in. In the doc: Share -> General access -> "
+                   "\"Anyone with the link\" (Viewer), or File -> Share -> Publish to the web.")
+
+
+def _gdoc_download(target):
+    """(status, body_text, headers) or (status, {error}, None)."""
+    import urllib.request
+    import urllib.error
+    req = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0 (editor-server)"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            final, headers = resp.geturl(), resp.headers
+            raw = resp.read(GDOC_MAX_BYTES + 1)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return 403, {"error": GDOC_NOT_SHARED}, None
+        if e.code == 404:
+            return 404, {"error": "No such Google Doc (check the link)."}, None
+        return 502, {"error": "Google returned %d." % e.code}, None
+    except Exception as e:  # network down, timeout, DNS...
+        return 502, {"error": "Couldn't reach Google: %s" % e}, None
+    if "accounts.google.com" in final or "ServiceLogin" in final:
+        return 403, {"error": GDOC_NOT_SHARED}, None
+    if len(raw) > GDOC_MAX_BYTES:
+        return 413, {"error": "That doc is too large to download (over 300 MB, images included)."}, None
+    return 200, raw.decode("utf-8", "replace"), headers
+
+
+def fetch_gdoc(url):
+    """Return (status, payload): payload is {markdown|html, title, truncated} or {error}."""
+    pub = GDOC_PUB_RE.match(url)
+    edit = None if pub else GDOC_EDIT_RE.match(url)
+    if not pub and not edit:
+        return 400, {"error": "Not a Google Doc link (docs.google.com/document/d/...)."}
+    kind, title = "html", ""
+    if edit:
+        code, body, headers = _gdoc_download("https://docs.google.com/document/d/%s/export?format=md" % edit.group(1))
+        if code == 200:
+            kind = "markdown"
+            m = re.search(r"filename\*=UTF-8''([^;]+)", headers.get("Content-Disposition") or "")
+            if m:
+                from urllib.parse import unquote
+                title = re.sub(r"\.md$", "", unquote(m.group(1)))
+        elif code in (403, 404):
+            return code, body
+        else:  # Markdown export unavailable → the HTML export
+            code, body, headers = _gdoc_download("https://docs.google.com/document/d/%s/export?format=html" % edit.group(1))
+    else:
+        code, body, headers = _gdoc_download("https://docs.google.com/document/d/e/%s/pub" % pub.group(1))
+    if code != 200:
+        return code, body
+    if kind == "markdown":
+        body = MD_IMAGE_REF_RE.sub("", MD_IMAGE_DEF_RE.sub("", body))
+    else:
+        t = re.search(r"<title>(.*?)</title>", body, re.S | re.I)
+        title = re.sub(r"\s*-\s*Google Docs$", "", htmlmod.unescape(t.group(1)).strip()) if t else ""
+        body = HTML_IMG_RE.sub("", body)
+    body = DATA_URI_RE.sub("", body)
+    truncated = len(body) > GDOC_MAX_TEXT
+    return 200, {kind: body[:GDOC_MAX_TEXT], "title": title, "truncated": truncated}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=ROOT, **k)
@@ -730,6 +806,9 @@ class Handler(SimpleHTTPRequestHandler):
             m = provenance.load_manifest(slug)
             m["available"] = True
             return self._send_json(m)
+        if path == "/api/gdoc":          # a Google Doc's HTML, for Review's context
+            code, payload = fetch_gdoc((self._query().get("url") or [""])[0].strip())
+            return self._send_json(payload, code)
         if path == "/api/media":         # list a draft's backed-up media files
             draft = (self._query().get("draft") or [""])[0]
             if not SAFE_ID_RE.match(draft):

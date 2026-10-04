@@ -131,6 +131,101 @@ function imageFileFrom(dt) {
   return null
 }
 
+/* -------------------------------------------------------- links in footnotes
+ * A footnote body is a raw contenteditable, so a link is a plain <a href> in its HTML
+ * (normalizeFnBody keeps href/target/rel; publish.js copies them out verbatim). links.js
+ * owns the popover + preview chip and calls in here whenever a footnote body owns the
+ * caret. The edits are the browser's own createLink / unlink: they keep the surrounding
+ * <b>/<i> structure intact (an insertHTML wrap splits it and sprinkles &nbsp;) and sit
+ * on the native undo stack, so Cmd-Z undoes them like typing. New links then get
+ * target=_blank / rel=noopener like the article's link mark. */
+
+// The <a href> enclosing `node` inside `body`, or null (never walks past the body).
+function anchorIn(body, node) {
+  if (node && node.nodeType === 3) node = node.parentNode
+  while (node && node !== body) {
+    if (node.tagName === 'A' && node.getAttribute('href')) return node
+    node = node.parentNode
+  }
+  return null
+}
+
+function restoreSelection(body, range) {
+  body.focus()
+  const sel = window.getSelection()
+  if (sel && range) { sel.removeAllRanges(); sel.addRange(range) }
+}
+
+/* What ⌘K / the link button acts on: the footnote body that owns the caret, the selection
+ * inside it, and — if the selection sits inside a link — that link (→ edit instead of
+ * wrap). Null when the caret isn't in a footnote body at all. Must be taken BEFORE the
+ * popover's input steals focus, since that drops the body's selection. */
+export function footnoteLinkContext() {
+  const body = activeFootnoteBody()
+  if (!body) return null
+  const range = saveRange(body)
+  const anchor = range ? anchorIn(body, range.commonAncestorContainer) : null
+  return { body, range, anchor }
+}
+
+// The footnote link the caret currently sits in (drives the preview chip), or null.
+export function footnoteAnchorAtSelection() {
+  const sel = window.getSelection()
+  if (!sel || !sel.rangeCount) return null
+  const node = sel.getRangeAt(0).commonAncestorContainer
+  const el = node && node.nodeType === 3 ? node.parentNode : node
+  const body = el && el.closest ? el.closest('.fn-body') : null
+  return body ? anchorIn(body, node) : null
+}
+
+// Put the caret back where the popover found it (Escape / cancelled edit).
+export function focusFootnoteLinkContext(ctx) { restoreSelection(ctx.body, ctx.range) }
+
+// After a link edit: park the caret just AFTER `after` (the link, so typing on doesn't
+// extend it) or else collapse to the selection's end, then tell the draft it changed.
+function finishFootnoteLinkEdit(body, after) {
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount) {
+    if (after) { const r = document.createRange(); r.setStartAfter(after); r.collapse(true); sel.removeAllRanges(); sel.addRange(r) }
+    else sel.collapseToEnd()
+  }
+  body.dispatchEvent(new Event('input', { bubbles: true })) // → save
+}
+
+/* Apply the popover to a footnote: an empty href unlinks; a selection inside an existing
+ * link re-targets that whole link; otherwise the selection is linked (one <a> per inline
+ * run when it crosses formatting, as the browser does). Returns whether anything changed. */
+export function applyFootnoteLink(ctx, href) {
+  const { body, range, anchor } = ctx
+  if (!href) return removeFootnoteLink(ctx)
+  let r = range
+  if (anchor) { r = document.createRange(); r.selectNodeContents(anchor) }
+  else if (!r || r.collapsed) return false
+  restoreSelection(body, r)
+  document.execCommand('createLink', false, href)
+  // the link(s) just made carry only href — match the article's link mark
+  let last = null
+  body.querySelectorAll('a[href]').forEach((a) => {
+    if (a.getAttribute('href') !== href) return
+    a.setAttribute('target', '_blank')
+    a.setAttribute('rel', 'noopener')
+    last = a
+  })
+  finishFootnoteLinkEdit(body, last)
+  return true
+}
+
+// Unwrap the link the popover was opened on (keeps its text). No link → just refocus.
+export function removeFootnoteLink(ctx) {
+  const { body, range, anchor } = ctx
+  if (!anchor) { restoreSelection(body, range); return false }
+  const r = document.createRange(); r.selectNodeContents(anchor)
+  restoreSelection(body, r)
+  document.execCommand('unlink')
+  finishFootnoteLinkEdit(body, null)
+  return true
+}
+
 function createFnEntry(id) {
   const li = document.createElement('li')
   li.dataset.fn = id
@@ -250,8 +345,16 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       insertImageIntoFootnote(body, f, range)
     })
     // Click an image → select it whole, so Backspace/Delete removes it (a bare click in a
-    // contenteditable only puts the caret beside it).
+    // contenteditable only puts the caret beside it). A plain click on a link OPENS it in a
+    // new tab, as in the article (main.js handleClick); hold any modifier to click INTO it
+    // instead — the caret lands inside, the preview chip appears, ⌘K edits the URL.
     fnList.addEventListener('click', (e) => {
+      const a = e.target.closest && e.target.closest('.fn-body a[href]')
+      if (a && e.button === 0 && !(e.metaKey || e.ctrlKey || e.altKey || e.shiftKey)) {
+        e.preventDefault()
+        window.open(a.getAttribute('href'), '_blank', 'noopener')
+        return
+      }
       if (!(e.target instanceof HTMLImageElement) || !e.target.closest('.fn-body')) return
       const sel = window.getSelection(); if (!sel) return
       const r = document.createRange(); r.selectNode(e.target)

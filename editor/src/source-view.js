@@ -178,6 +178,10 @@ function serializeFootnotes(ctx) {
       const b = li.querySelector('.fn-body')
       if (!b) { bodies[li.dataset.fn] = ''; return }
       const c = b.cloneNode(true)
+      // links → [text](href), as applyMarks does for the article
+      c.querySelectorAll('a[href]').forEach((a) => {
+        a.replaceWith(document.createTextNode('[' + (a.textContent || '') + '](' + a.getAttribute('href') + ')'))
+      })
       // embedded images → markdown image syntax (base64 blobs stay out of the source view)
       c.querySelectorAll('img').forEach((img) => {
         const src = (img.getAttribute('src') || '').startsWith('data:') ? 'embedded image' : (img.getAttribute('src') || '')

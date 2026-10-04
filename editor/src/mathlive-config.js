@@ -1,38 +1,9 @@
-/* mathlive-config.js — global MathLive setup + the AI/ML virtual-keyboard layers.
- * Edit the AI_LAYER below to change which symbols appear in the custom keyboard. */
+/* mathlive-config.js — global MathLive setup: fonts, the virtual keyboard's layers and
+ * the typing shortcuts. The layers + shortcuts themselves live in math-keyboard.js. */
 
 import { MathfieldElement, getMathVirtualKeyboard } from '../vendor/lib.bundle.js'
 import { VENDOR_BASE } from './config.js'
-
-// A compact layer of the symbols that come up most in AI/ML writing.
-// Each keycap inserts its `latex`; `#@` means "wrap the previous item", `#0` a slot.
-const AI_LAYER = {
-  label: 'AI/ML',
-  tooltip: 'Probability & linear algebra',
-  rows: [
-    [
-      { latex: '\\mathbb{E}', tooltip: 'expectation' },
-      { latex: '\\mathbb{P}', tooltip: 'probability' },
-      { latex: '\\operatorname{Var}' }, { latex: '\\operatorname{Cov}' },
-      { latex: '\\sim' }, { latex: '\\mathcal{N}' },
-      { latex: '\\mid' }, { latex: '\\propto' },
-    ],
-    [
-      { latex: '\\sum_{#0}^{#0}' }, { latex: '\\prod_{#0}^{#0}' }, { latex: '\\int_{#0}^{#0}' },
-      { latex: '\\nabla' }, { latex: '\\partial' },
-      { latex: '\\operatorname*{arg\\,max}' }, { latex: '\\operatorname*{arg\\,min}' },
-      { latex: '\\|#0\\|' },
-    ],
-    [
-      { latex: '\\hat{#@}' }, { latex: '\\bar{#@}' }, { latex: '\\tilde{#@}' }, { latex: '#@^{\\top}' },
-      { latex: '\\in' }, { latex: '\\subseteq' }, { latex: '\\otimes' }, { latex: '\\odot' },
-    ],
-    [
-      { latex: '\\alpha' }, { latex: '\\beta' }, { latex: '\\theta' }, { latex: '\\lambda' },
-      { latex: '\\mu' }, { latex: '\\sigma' }, { latex: '\\epsilon' }, { latex: '\\infty' },
-    ],
-  ],
-}
+import { KEYBOARD_LAYOUTS, SHORTCUTS_ADD, SHORTCUTS_REMOVE, SHORTCUTS_NO_LETTER_BEFORE } from './math-keyboard.js'
 
 let done = false
 export function setupMathLive() {
@@ -43,8 +14,8 @@ export function setupMathLive() {
   MathfieldElement.soundsDirectory = null // no keypress sounds
   const vk = getMathVirtualKeyboard()
   if (vk) {
-    // custom AI layer first, then the built-in symbol/greek/number boards.
-    vk.layouts = [AI_LAYER, 'greek', 'symbols', 'numeric']
+    // custom AI/ML layers first, then the built-in Greek / numeric / symbol boards.
+    vk.layouts = KEYBOARD_LAYOUTS
   }
 }
 
@@ -54,10 +25,19 @@ export function setupMathLive() {
 // shortcuts (^ _ / sqrt) are MathLive defaults; smart fence auto-closes brackets.
 const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
 
-// MathLive's default dx/dy/dt/ee/ii/jj shortcuts insert \differentialD, \exponentialE,
-// \imaginaryI/J — commands KaTeX doesn't know, so they publish as red errors (and typing
-// a word like "dynamics" silently mutates its "dy"). Plain italic letters are fine.
-const MATHLIVE_ONLY_SHORTCUTS = ['dx', 'dy', 'dt', 'ee', 'ii', 'jj']
+// Every preceding-atom kind MathLive's `after` condition knows, minus "letter".
+const NOT_AFTER_LETTER = 'nothing+digit+function+frac+surd+binop+relop+operator+punct+array+openfence+closefence+space+text'
+
+// MathLive's defaults, edited for AI/ML writing (see math-keyboard.js for why).
+function editedShortcuts(defaults) {
+  const shortcuts = { ...defaults }
+  for (const key of SHORTCUTS_REMOVE) delete shortcuts[key]
+  for (const key of SHORTCUTS_NO_LETTER_BEFORE) {
+    const v = shortcuts[key]
+    if (typeof v === 'string') shortcuts[key] = { after: NOT_AFTER_LETTER, value: v }
+  }
+  return Object.assign(shortcuts, SHORTCUTS_ADD)
+}
 
 export function configureMathfield(mf) {
   mf.mathVirtualKeyboardPolicy = TOUCH ? 'auto' : 'manual'
@@ -66,12 +46,8 @@ export function configureMathfield(mf) {
   mf.removeExtraneousParentheses = true
   // inlineShortcuts throws until the field is mounted; configureMathfield runs
   // before the element is appended, so fall back to the 'mount' event.
-  const dropMathliveOnlyShortcuts = () => {
-    const shortcuts = { ...mf.inlineShortcuts }
-    for (const k of MATHLIVE_ONLY_SHORTCUTS) delete shortcuts[k]
-    mf.inlineShortcuts = shortcuts
-  }
-  try { dropMathliveOnlyShortcuts() } catch (e) { mf.addEventListener('mount', dropMathliveOnlyShortcuts, { once: true }) }
+  const applyShortcuts = () => { mf.inlineShortcuts = editedShortcuts(mf.inlineShortcuts) }
+  try { applyShortcuts() } catch (e) { mf.addEventListener('mount', applyShortcuts, { once: true }) }
 }
 
 // Rewrite any MathLive-only commands that still slip through (older saved math, paste)
@@ -82,6 +58,9 @@ export function toKatexTex(tex) {
     .replace(/\\exponentialE\s?/g, 'e')
     .replace(/\\imaginaryI\s?/g, 'i')
     .replace(/\\imaginaryJ\s?/g, 'j')
+    // MathLive-only relations (from older shortcuts) → their KaTeX spellings
+    .replace(/\\coloneq(?![a-zA-Z])/g, '\\coloneqq')
+    .replace(/\\questeq(?![a-zA-Z])/g, '\\stackrel{?}{=}')
 }
 
 export function mathKeyboard() { return getMathVirtualKeyboard() }

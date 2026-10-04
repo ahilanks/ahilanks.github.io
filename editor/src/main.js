@@ -5,7 +5,7 @@ import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Select
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
-import { FootnoteRef, setupFootnotes, footnotesHTML, loadFootnotesHTML } from './nodes/footnote.js'
+import { FootnoteRef, setupFootnotes, footnotesHTML, loadFootnotesHTML, activeFootnoteBody } from './nodes/footnote.js'
 import { Figure } from './nodes/figure.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
@@ -19,6 +19,8 @@ import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
 import { setupMobileViewport } from './mobile.js'
 import { setupMathAlign } from './math-align.js'
+import { CommentMark, setupComments } from './comments.js'
+import { Suggestions, setupSuggestions } from './ai-suggest.js'
 
 setupMathLive()
 setupMobileViewport() // phones: size the shell to the visual viewport (keyboard-aware)
@@ -103,6 +105,8 @@ export const editor = new Editor({
     BlockMath,
     FootnoteRef,
     Figure,
+    CommentMark,
+    Suggestions,
   ],
   editorProps: {
     scrollThreshold: CONFIG.scroll.threshold,
@@ -246,9 +250,11 @@ export const editor = new Editor({
 window.__editor = editor
 
 /* ---------------------------------------------------------------- toolbar */
+// A footnote body (raw contenteditable outside the doc) formats natively; anything else
+// goes through TipTap. Without the branch, `focus()` would yank the caret into the article.
 const cmd = {
-  bold: () => editor.chain().focus().toggleBold().run(),
-  italic: () => editor.chain().focus().toggleItalic().run(),
+  bold: () => activeFootnoteBody() ? document.execCommand('bold') : editor.chain().focus().toggleBold().run(),
+  italic: () => activeFootnoteBody() ? document.execCommand('italic') : editor.chain().focus().toggleItalic().run(),
 }
 
 document.querySelectorAll('.tb-btn[data-cmd], .bubble button[data-cmd]').forEach((b) => {
@@ -321,6 +327,7 @@ function currentSnapshot() {
     subtitle: docSubtitle.innerHTML,
     body: editor.getHTML(),
     footnotes: footnotesHTML(),
+    comments: comments.data(),
     font: CONFIG.font,
     updated: Date.now(),
   }
@@ -350,6 +357,7 @@ function applySnapshot(s) {
   docSubtitle.innerHTML = s.subtitle || ''
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })
   loadFootnotesHTML(s.footnotes, editor)
+  comments.load(s.comments)
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')
@@ -402,6 +410,13 @@ setupMathAlign(editor)
 // Footnotes: fn toolbar + bubble buttons, reconcile numbering, click-ref-to-body, save on edit.
 setupFootnotes(editor, scheduleSave)
 
+// Comments: toolbar button / ⌘⌥M on a selection (or the word at the caret) → a margin card.
+const comments = setupComments(editor, scheduleSave)
+window.__comments = comments // console debugging, like __editor
+
+// AI suggestions: toolbar pen → Proofread / Review the selection or section → margin cards.
+window.__suggest = setupSuggestions(editor, comments, { getDocId })
+
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor)
 
@@ -428,6 +443,7 @@ document.addEventListener('drop', (e) => {
 // end (right margin) of the line at that height, like a word processor.
 $('scrollArea').addEventListener('mousedown', (e) => {
   if (e.button !== 0 || !editor.isEditable) return
+  if (e.target && e.target.closest && e.target.closest('.cmt-layer')) return // comment cards live in the margin
   const r = editor.view.dom.getBoundingClientRect()
   const left = e.clientX < r.left
   const right = e.clientX > r.right
@@ -477,6 +493,9 @@ editor.on('blur', () => {
 document.addEventListener('keydown', (e) => {
   const meta = e.metaKey || e.ctrlKey
   if (!meta) return
+  // ⌘⌥M comments on the selection (Google Docs' shortcut). Checked by code: with ⌥ held,
+  // e.key is 'µ' on a Mac, so the plain ⌘M math branch below never sees it either way.
+  if (e.altKey && e.code === 'KeyM') { e.preventDefault(); comments.add(); return }
   const k = e.key.toLowerCase()
   if (k === 'b') { e.preventDefault(); cmd.bold() }
   else if (k === 'i') { e.preventDefault(); cmd.italic() }

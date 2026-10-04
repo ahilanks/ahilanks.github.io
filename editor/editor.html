@@ -63,11 +63,22 @@
         <button class="tb-btn" id="footnoteBtn" title="Insert footnote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9"/><path d="M4 12h7"/><path d="M4 19h13"/><text x="15.5" y="11" font-size="9" font-weight="700" fill="currentColor" stroke="none">1</text></svg>
         </button>
+        <button class="tb-btn" id="commentBtn" title="Comment (⌘⌥M)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
         <button class="tb-btn" id="quoteBtn" title="Quote (blockquote)">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6.5 7C4.6 7 3 8.6 3 10.5S4.6 14 6.5 14c.2 0 .4 0 .5-.05C6.7 15.1 5.7 16 4.3 16.3l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C9 8.6 7.4 7 6.5 7zm9 0C13.6 7 12 8.6 12 10.5S13.6 14 15.5 14c.2 0 .4 0 .5-.05-.3 1.15-1.3 2.05-2.7 2.35l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C18 8.6 16.4 7 15.5 7z"/></svg>
         </button>
         <button class="tb-btn ai" id="mathBtn" title="Insert math with AI (describe it)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14l-7 8 7 8H5"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" id="suggestBtn" title="Suggestions — proofread or review this section">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 7.8a2 2 0 0 0-2.8-2.8L7 15.4l-1 3.8 3.8-1z"/><path d="M15.6 6.8l2.8 2.8"/><path d="M5.5 3v4M3.5 5h4"/></svg>
         </button>
       </div>
 
@@ -104,6 +115,9 @@
           <div class="fn-label">Footnotes</div>
           <ol class="fn-list" id="fnList"></ol>
         </section>
+
+        <!-- comment cards, placed beside their anchored text (comments.js) -->
+        <div class="cmt-layer" id="cmtLayer"></div>
       </main>
 
       <!-- ===================== SOURCE VIEW ===================== -->
@@ -173,6 +187,26 @@
       <div class="pop-msg" id="aiMsg"></div>
     </div>
 
+    <!-- ===================== FLOATING: AI suggestions menu (ai-suggest.js) ===================== -->
+    <div class="sg-menu hidden" id="sgMenu">
+      <div class="sg-scope" id="sgScope"></div>
+      <button type="button" class="sg-item" data-mode="proofread">
+        <span class="sg-item-t">Proofread</span>
+        <span class="sg-item-d">Spelling, grammar, punctuation</span>
+      </button>
+      <button type="button" class="sg-item" data-mode="review">
+        <span class="sg-item-t">Review</span>
+        <span class="sg-item-d">Clarity, flow, style — and ideas for visuals</span>
+      </button>
+      <button type="button" class="sg-item sg-item-plain" id="sgStop" hidden>Stop</button>
+      <button type="button" class="sg-item sg-item-plain" id="sgClear" hidden>Clear suggestions</button>
+      <div class="sg-ctx">
+        <div class="sg-ctx-label">Context for Review</div>
+        <div id="sgCtxList"></div>
+        <button type="button" class="sg-ctx-add" id="sgCtxAdd">+ Add a Google Doc or notes</button>
+      </div>
+    </div>
+
     <!-- ===================== DRAFTS MENU ===================== -->
     <div class="drafts-menu hidden" id="draftsMenu">
       <button class="drafts-new" id="newDraftBtn">+ New draft</button>
@@ -187,18 +221,49 @@
         <div class="field">
           <label for="apiKey">OpenAI API key</label>
           <input type="password" id="apiKey" placeholder="sk-…" autocomplete="off" />
-          <p class="desc">Used directly from your browser for the math feature. Stays in localStorage.</p>
+          <p class="desc">Used directly from your browser for the math and suggestion features. Stays in localStorage.</p>
         </div>
         <div class="field">
-          <label for="modelName">Model</label>
+          <label for="modelName">Math model</label>
           <input type="text" id="modelName" placeholder="gpt-5.4-mini" />
-          <p class="desc">Set the exact model id your account supports.</p>
+          <p class="desc">Formats math with ∑. Set the exact model id your account supports.</p>
+        </div>
+        <div class="field">
+          <label for="writingModelName">Writing model</label>
+          <input type="text" id="writingModelName" placeholder="gpt-5.5" />
+          <p class="desc">Reads your draft for Proofread / Review suggestions.</p>
         </div>
         <div class="modal-actions">
           <button class="pop-btn ghost" id="settingsClose">Close</button>
           <button class="pop-btn" id="settingsSave">Save</button>
         </div>
         <div class="modal-msg" id="settingsMsg"></div>
+      </div>
+    </div>
+
+    <!-- ===================== ADD CONTEXT MODAL (ai-context.js) ===================== -->
+    <div class="overlay hidden" id="ctxOverlay">
+      <div class="modal">
+        <h2>Add context</h2>
+        <p class="sub">Review reads this alongside your draft — to understand what you’re working toward, and to suggest linking things you’ve been reading. Kept in this browser; sent to OpenAI only with a Review.</p>
+        <div class="field">
+          <label for="ctxUrl">Google Doc link</label>
+          <input type="text" id="ctxUrl" placeholder="https://docs.google.com/document/d/…" autocomplete="off" />
+          <p class="desc">Share it as “Anyone with the link · Viewer” (or File → Share → Publish to web). Re-read automatically when it’s 10 minutes old.</p>
+        </div>
+        <div class="field">
+          <label for="ctxText">…or paste notes</label>
+          <textarea id="ctxText" rows="4" placeholder="Sources, your audience, what you’re arguing — anything Review should know."></textarea>
+        </div>
+        <div class="field">
+          <label for="ctxName">Name</label>
+          <input type="text" id="ctxName" placeholder="Research journal" autocomplete="off" />
+        </div>
+        <div class="modal-actions">
+          <button class="pop-btn ghost" id="ctxCancel">Cancel</button>
+          <button class="pop-btn" id="ctxSave">Add</button>
+        </div>
+        <div class="modal-msg" id="ctxMsg"></div>
       </div>
     </div>
 

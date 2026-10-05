@@ -288,6 +288,31 @@ ol.fn-list li.fn-orphan .fn-num { color: var(--faint); font-weight: 400; }
 .cmt-layer.narrow .cmt-card { width: 240px; box-shadow: var(--shadow); }
 #commentBtn.active { background: rgba(230, 178, 60, 0.22); color: var(--text); }
 
+/* ----------------------------- RECENTLY CLOSED (closed.js) ----------------------------- */
+.closed-menu {
+  position: fixed; z-index: 95; width: 320px; max-width: calc(100vw - 16px);
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; max-height: min(70vh, 560px);
+}
+.closed-menu.hidden { display: none; }
+.closed-head { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding: 0.7rem 0.9rem 0.35rem; }
+.closed-list { overflow-y: auto; overscroll-behavior: contain; padding: 0 0.35rem; }
+.closed-foot { font-size: 0.7rem; color: var(--faint); padding: 0.45rem 0.9rem 0.6rem; border-top: 1px solid var(--line-soft); }
+.cl-empty { font-size: 0.82rem; color: var(--muted); padding: 0.4rem 0.55rem 0.8rem; line-height: 1.45; }
+.cl-row { padding: 0.5rem 0.55rem; border-radius: 8px; font-size: 0.82rem; line-height: 1.4; }
+.cl-row + .cl-row { border-top: 1px solid var(--line-soft); border-radius: 0; }
+.cl-top { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.15rem; }
+.cl-kind { font-size: 0.64rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #b08a2a; white-space: nowrap; }
+.cl-ai .cl-kind { color: var(--sg); }
+.cl-when { font-size: 0.7rem; color: var(--faint); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-reopen { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 7px; padding: 2px 9px; font-size: 0.75rem; font-weight: 500; flex: none; }
+.cl-reopen:hover { border-color: var(--text); }
+.cl-gone { font-size: 0.7rem; color: var(--faint); font-style: italic; flex: none; }
+.cl-text { color: var(--text); word-break: break-word; }
+.cl-quote { color: var(--faint); font-size: 0.76rem; margin-top: 0.1rem; font-family: "Newsreader", serif; font-style: italic; }
+.cl-stale .cl-text { color: var(--muted); }
+#closedBtn.active { background: rgba(39, 50, 63, 0.1); }
+
 /* ----------------------------- AI SUGGESTIONS ----------------------------- */
 /* In the text (ProseMirror decorations — never part of the saved doc, see ai-suggest.js):
    an edit shows the words it would remove struck through + the proposed words; a note

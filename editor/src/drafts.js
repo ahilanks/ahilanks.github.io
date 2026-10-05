@@ -69,7 +69,7 @@ function reconcile(serverDrafts, serverDeleted) {
  *
  * @param {object} deps
  * @param {import('@tiptap/core').Editor} deps.editor  the live editor (unused directly today; kept for future hooks)
- * @param {() => object}     deps.currentSnapshot  snapshot of the live doc: {id,title,subtitle,body,footnotes,comments,font,updated}
+ * @param {() => object}     deps.currentSnapshot  snapshot of the live doc: {id,title,subtitle,body,footnotes,comments,closedComments,font,updated}
  * @param {(s:object)=>void} deps.applySnapshot   load a snapshot into the editor UI (title/subtitle/body/footnotes/placeholders/toolbar). Must NOT set doc.id and should use emitUpdate:false.
  * @param {() => string}     deps.getDocId        current doc id
  * @param {(id:string)=>void} deps.setDocId       set the current doc id
@@ -320,7 +320,8 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
         const cur = drafts[s.id]
         const dirty = !cur || cur.title !== s.title || cur.subtitle !== s.subtitle ||
                       cur.body !== s.body || cur.footnotes !== s.footnotes || cur.font !== s.font ||
-                      JSON.stringify(cur.comments || {}) !== JSON.stringify(s.comments || {})
+                      JSON.stringify(cur.comments || {}) !== JSON.stringify(s.comments || {}) ||
+                      JSON.stringify(cur.closedComments || []) !== JSON.stringify(s.closedComments || [])
         if (dirty) { drafts[s.id] = s; putDraftsLocal(drafts); localStorage.setItem(LS.current, s.id) }
         await SYNC.push()
         const res = await (await fetch('/api/push', { method: 'POST' })).json()

@@ -66,6 +66,9 @@
         <button class="tb-btn" id="commentBtn" title="Comment (⌘⌥M)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
+        <button class="tb-btn" id="closedBtn" title="Recently closed comments and suggestions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></svg>
+        </button>
         <button class="tb-btn" id="quoteBtn" title="Quote (blockquote)">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6.5 7C4.6 7 3 8.6 3 10.5S4.6 14 6.5 14c.2 0 .4 0 .5-.05C6.7 15.1 5.7 16 4.3 16.3l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C9 8.6 7.4 7 6.5 7zm9 0C13.6 7 12 8.6 12 10.5S13.6 14 15.5 14c.2 0 .4 0 .5-.05-.3 1.15-1.3 2.05-2.7 2.35l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C18 8.6 16.4 7 15.5 7z"/></svg>
         </button>
@@ -77,7 +80,7 @@
       <div class="tb-sep"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" id="suggestBtn" title="Suggestions — proofread or review this section">
+        <button class="tb-btn" id="suggestBtn" title="Suggestions — proofread or review the draft (or just the selected text)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 7.8a2 2 0 0 0-2.8-2.8L7 15.4l-1 3.8 3.8-1z"/><path d="M15.6 6.8l2.8 2.8"/><path d="M5.5 3v4M3.5 5h4"/></svg>
         </button>
       </div>
@@ -205,6 +208,13 @@
         <div id="sgCtxList"></div>
         <button type="button" class="sg-ctx-add" id="sgCtxAdd">+ Add a Google Doc or notes</button>
       </div>
+    </div>
+
+    <!-- ===================== FLOATING: recently closed (closed.js) ===================== -->
+    <div class="closed-menu hidden" id="closedMenu">
+      <div class="closed-head">Recently closed</div>
+      <div class="closed-list" id="closedList"></div>
+      <div class="closed-foot">Resolved comments are kept with the draft; AI suggestions until you reload.</div>
     </div>
 
     <!-- ===================== DRAFTS MENU ===================== -->

@@ -21,6 +21,7 @@ import { setupMobileViewport } from './mobile.js'
 import { setupMathAlign } from './math-align.js'
 import { CommentMark, setupComments } from './comments.js'
 import { Suggestions, setupSuggestions } from './ai-suggest.js'
+import { setupClosedList } from './closed.js'
 
 setupMathLive()
 setupMobileViewport() // phones: size the shell to the visual viewport (keyboard-aware)
@@ -328,6 +329,7 @@ function currentSnapshot() {
     body: editor.getHTML(),
     footnotes: footnotesHTML(),
     comments: comments.data(),
+    closedComments: comments.closedData(),
     font: CONFIG.font,
     updated: Date.now(),
   }
@@ -357,7 +359,7 @@ function applySnapshot(s) {
   docSubtitle.innerHTML = s.subtitle || ''
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })
   loadFootnotesHTML(s.footnotes, editor)
-  comments.load(s.comments)
+  comments.load(s.comments, s.closedComments)
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')
@@ -414,8 +416,11 @@ setupFootnotes(editor, scheduleSave)
 const comments = setupComments(editor, scheduleSave)
 window.__comments = comments // console debugging, like __editor
 
-// AI suggestions: toolbar pen → Proofread / Review the selection or section → margin cards.
+// AI suggestions: toolbar pen → Proofread / Review the selection or whole draft → margin cards.
 window.__suggest = setupSuggestions(editor, comments, { getDocId })
+
+// Recently closed: resolved comments + dismissed/cleared/replaced AI suggestions → Reopen.
+window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean))
 
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor)

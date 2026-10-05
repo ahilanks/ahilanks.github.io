@@ -11,6 +11,10 @@
  * back: its body is parked in `trash` (never saved) and re-adopted when the anchor
  * returns. The same parking covers cut/paste of commented text and deleting it.
  *
+ * Resolved comments are also kept — with the words they were on — in the draft's
+ * `closedComments` field (the 30 most recent), listed under "Recently closed" (closed.js)
+ * where Reopen finds those words again and re-attaches the comment.
+ *
  * Comments never reach a published page: publish.js unwraps the anchor spans.
  *
  * Other margin cards (AI suggestions — ai-suggest.js) join the same layout through
@@ -73,6 +77,26 @@ export const CommentMark = Mark.create({
 /* ------------------------------------------------------------------- setup */
 const WIDE = '(min-width: 1300px)' // room for a 224px card beside the 820px column
 const GAP = 8
+const MAX_CLOSED = 30
+const ATOM = '\uFFFC' // how an inline atom (math, footnote ref) reads in a comment's quoted words
+
+// The doc's text as one string (blocks joined by newlines, atoms as ATOM) with each
+// character's position — to find a closed comment's words again.
+function docTextMap(doc) {
+  let str = ''
+  const at = []
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true
+    if (str) { str += '\n'; at.push(-1) }
+    node.forEach((child, off) => {
+      const p = pos + 1 + off
+      if (child.isText) for (let i = 0; i < child.text.length; i++) { str += child.text[i]; at.push(p + i) }
+      else { str += ATOM; at.push(p) }
+    })
+    return false
+  })
+  return { str, at }
+}
 
 function fmtTime(t) {
   const d = new Date(t || Date.now())
@@ -89,12 +113,15 @@ export function setupComments(editor, scheduleSave) {
   const layer = $('cmtLayer')
   const surface = $('surface')
   const btn = $('commentBtn')
-  if (!layer || !surface) return { add() {}, addAt() {}, data: () => ({}), load() {}, addSource() {}, layout() {}, deactivate() {} }
+  if (!layer || !surface) {
+    return { add() {}, addAt() {}, data: () => ({}), closedData: () => [], load() {}, addSource() {}, layout() {}, deactivate() {}, closedSource: { list: () => [], reopen() {} } }
+  }
 
   let store = {}            // id -> { text, created }   (saved with the draft)
   const trash = new Map()   // bodies whose anchor left the doc; re-adopted if it comes back
   const cards = new Map()   // id -> card element
   const sources = []        // other margin cards laid out with ours (see addSource)
+  let closed = []           // resolved comments, newest first: { id, text, created, closedAt, quote, pos }
   let activeId = null
   const wide = window.matchMedia(WIDE)
 
@@ -212,6 +239,7 @@ export function setupComments(editor, scheduleSave) {
     for (const id in store) if (!anchored.has(id)) { trash.set(id, store[id]); delete store[id] }
     for (const [id, card] of cards) if (!anchored.has(id)) { card.remove(); cards.delete(id) }
     if (activeId && !anchored.has(activeId)) setActive(null)
+    if (closed.some((c) => anchored.has(c.id))) { closed = closed.filter((c) => !anchored.has(c.id)); scheduleSave() }
 
     const sRect = surface.getBoundingClientRect()
     const entries = []
@@ -305,13 +333,60 @@ export function setupComments(editor, scheduleSave) {
     const { state } = editor
     const type = commentType()
     const tr = state.tr
+    let from = -1, to = -1
     state.doc.descendants((node, pos) => {
       if (!node.isInline) return
-      node.marks.forEach((m) => { if (m.type === type && m.attrs.id === id) tr.removeMark(pos, pos + node.nodeSize, m) })
+      node.marks.forEach((m) => {
+        if (m.type !== type || m.attrs.id !== id) return
+        tr.removeMark(pos, pos + node.nodeSize, m)
+        if (from < 0) from = pos
+        to = pos + node.nodeSize
+      })
     })
+    // keep it for "Recently closed" (an empty comment was never really written)
+    const body = store[id]
+    if (body && body.text.trim() && from >= 0) {
+      closed = [{ id, text: body.text, created: body.created, closedAt: Date.now(), quote: state.doc.textBetween(from, to, '\n', ATOM), pos: from },
+        ...closed.filter((c) => c.id !== id)].slice(0, MAX_CLOSED)
+    }
     if (id === activeId) { activeId = null; tr.setMeta(activeKey, null) }
     editor.view.dispatch(tr) // the mark removal is undoable; the body waits in trash
     layout()
+  }
+
+  /* ---- recently closed ---- */
+  // Re-attach a resolved comment to its words: the occurrence nearest where it was, else
+  // the current selection. → false if there's nowhere to put it.
+  function reopen(id) {
+    const c = closed.find((x) => x.id === id)
+    if (!c) return false
+    const { state } = editor
+    let from = -1, to = -1
+    const { str, at } = docTextMap(state.doc)
+    let best = Infinity
+    for (let i = c.quote ? str.indexOf(c.quote) : -1; i >= 0; i = str.indexOf(c.quote, i + 1)) {
+      const d = Math.abs(at[i] - c.pos)
+      if (d < best) { best = d; from = at[i]; to = at[i + c.quote.length - 1] + 1 }
+    }
+    if (from < 0 && !state.selection.empty) ({ from, to } = state.selection)
+    if (from < 0) return false
+    closed = closed.filter((x) => x.id !== id)
+    trash.delete(id)
+    store[id] = { text: c.text, created: c.created }
+    editor.view.dispatch(state.tr.addMark(from, to, commentType().create({ id })))
+    editor.chain().focus().setTextSelection(from).scrollIntoView().run() // caret in it → its card opens
+    setActive(id)
+    layout()
+    return true
+  }
+  const closedSource = {
+    list: () => closed.map((c) => ({ key: c.id, kind: 'comment', label: 'Comment', how: 'Resolved', text: c.text, quote: c.quote.replaceAll(ATOM, '…'), closedAt: c.closedAt, canReopen: true })),
+    reopen: (key) => reopen(key) || 'Its words are gone — select the text to attach it to, then Reopen.',
+  }
+
+  // the draft's `closedComments` field
+  function closedData() {
+    return closed.map((c) => ({ id: c.id, text: c.text, created: c.created, closedAt: c.closedAt, quote: c.quote, pos: c.pos }))
   }
 
   // the draft's `comments` field
@@ -320,7 +395,11 @@ export function setupComments(editor, scheduleSave) {
     for (const id in store) out[id] = { text: store[id].text || '', created: store[id].created || 0 }
     return out
   }
-  function load(c) {
+  function load(c, closedList) {
+    closed = (Array.isArray(closedList) ? closedList : [])
+      .filter((x) => x && typeof x === 'object' && x.id && typeof x.text === 'string')
+      .map((x) => ({ id: String(x.id), text: x.text, created: +x.created || 0, closedAt: +x.closedAt || 0, quote: String(x.quote || ''), pos: +x.pos || 0 }))
+      .slice(0, MAX_CLOSED)
     store = {}
     for (const id in (c || {})) {
       const e = c[id]
@@ -359,7 +438,7 @@ export function setupComments(editor, scheduleSave) {
   function addSource(src) { sources.push(src); layoutSoon() }
 
   return {
-    add, addAt, data, load, addSource, layer,
+    add, addAt, data, closedData, load, addSource, layer, closedSource,
     layout: layoutSoon,               // also exposed for console debugging
     deactivate: () => setActive(null),
   }

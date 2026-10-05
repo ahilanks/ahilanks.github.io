@@ -1,8 +1,8 @@
 /* ai-suggest.js — AI writing suggestions in the margin, like Google Docs' "suggesting".
  *
  * The writer asks (toolbar pen → Proofread / Review). The model reads the selection, or
- * the section around the caret, with the whole draft as context, and returns a handful
- * of suggestions. Nothing in the text changes until the writer accepts one:
+ * else the whole draft (a long Proofread in parallel parts), with the whole draft as
+ * context, and returns a handful of suggestions. Nothing changes until one is accepted:
  *   edit — small fixes (a word, a phrase, at most a sentence), drawn inline as the
  *          struck-out words + the proposed ones. Accept applies it as one ⌘Z-able step.
  *   link — turn a phrase into a link to a source from the writer's notes (ai-context.js).
@@ -15,7 +15,8 @@
  * not part of the doc: they don't save, sync, publish or enter undo history, and they
  * vanish on reload. Their positions are mapped through every transaction; an edit or link
  * whose text you change by hand no longer applies and is dropped, a note stays until its
- * text is deleted or you dismiss it.
+ * text is deleted or you dismiss it. Dismissed, cleared and replaced-by-a-new-run ones
+ * move to `closed` (still mapped) so "Recently closed" (closed.js) can reopen them.
  *
  * The model anchors each suggestion with a verbatim QUOTE of the passage, which we find
  * ourselves — models can't count characters, but they can copy. Anything that doesn't
@@ -33,7 +34,10 @@ const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
   visual: 'Visual idea', interactive: 'Interactive idea', link: 'Link',
 }
-const MAX_ITEMS = { proofread: 12, review: 12 }
+const MAX_ITEMS = { proofread: 80, review: 30 } // safety caps per run; the prompt asks for far fewer
+const PROOF_BATCH_WORDS = 1200 // a long Proofread is split into parts this size, read in parallel
+const PARALLEL = 6
+const MAX_CLOSED = 30
 const TIMEOUT_MS = 240000
 
 /* ===================================================================== text model */
@@ -298,6 +302,13 @@ function toItem(sg, blocks, mode, doc, allowed) {
 
 /* ===================================================================== plugin */
 const key = new PluginKey('aiSuggestions')
+
+// What a suggestion says, independent of its id and of how much text the model happened
+// to quote around it — to tell a re-run's repeat from a new suggestion.
+const hunkKey = (h) => h.delFrom + ':' + h.del + '→' + h.ins
+const sayKey = (it) => it.kind === 'edit' ? 'e|' + it.hunks.map(hunkKey).join('|')
+  : it.kind === 'link' ? 'l|' + it.from + '|' + it.url
+  : 'n|' + it.category + '|' + it.from + '|' + it.to
 let onChange = null // set by setupSuggestions: refresh cards after any state change
 
 // Carry an item through a change. Edits and links only survive while their text is untouched.
@@ -349,26 +360,49 @@ export const Suggestions = Extension.create({
     return [new Plugin({
       key,
       state: {
-        init: () => ({ items: [], active: null, decos: DecorationSet.empty }),
-        // meta: { add: [items], replace: {mode, from, to}, remove: id, clear: true, active: id|null }
+        init: () => ({ items: [], closed: [], active: null, decos: DecorationSet.empty }),
+        // meta: { add: [items], replace: {mode, from, to}, remove: id, dismiss: id, clear: true,
+        //         reopen: id, active: id|null }. remove = gone for good (accepted, kept as a
+        //         comment); dismiss / clear / replace = closed, and reopenable.
         apply(tr, prev, _old, state) {
           const meta = tr.getMeta(key)
           if (!meta && !tr.docChanged) return prev
-          let { items, active } = prev
+          let { items, closed, active } = prev
           if (tr.docChanged && items.length) items = items.map((it) => mapItem(it, tr.mapping, state.doc)).filter(Boolean)
+          // a closed suggestion whose text has changed can't come back; it stays listed, greyed
+          if (tr.docChanged && closed.length) closed = closed.map((c) => (c.stale ? c : mapItem(c, tr.mapping, state.doc) || { ...c, stale: true }))
           if (meta) {
-            if (meta.clear) items = []
+            const close = (gone, how) => {
+              if (!gone.length) return
+              const at = Date.now()
+              closed = [...gone.map((it) => ({ ...it, how, closedAt: at })), ...closed].slice(0, MAX_CLOSED)
+            }
+            if (meta.clear) { close(items, 'Cleared'); items = [] }
             if (meta.remove) items = items.filter((it) => it.id !== meta.remove)
+            if (meta.dismiss) { close(items.filter((it) => it.id === meta.dismiss), 'Dismissed'); items = items.filter((it) => it.id !== meta.dismiss) }
             if (meta.replace) {
               const r = meta.replace // a new run supersedes the same kind of run over the same text
-              items = items.filter((it) => !(it.mode === r.mode && it.from < r.to && it.to > r.from))
+              const hit = (it) => it.mode === r.mode && it.from < r.to && it.to > r.from
+              // only what the new run dropped counts as closed, not what it said again
+              const again = new Set((meta.add || []).map(sayKey))
+              close(items.filter((it) => hit(it) && !again.has(sayKey(it))), 'Replaced by a new run')
+              items = items.filter((it) => !hit(it))
+            }
+            if (meta.reopen) {
+              const c = closed.find((x) => x.id === meta.reopen && !x.stale)
+              if (c) {
+                const { how, closedAt, ...it } = c
+                items = [...items, it].sort((a, b) => a.from - b.from)
+                closed = closed.filter((x) => x !== c)
+              }
             }
             if (meta.add) items = items.concat(meta.add).sort((a, b) => a.from - b.from)
             if (meta.active !== undefined) active = meta.active
           }
           if (active && !items.some((it) => it.id === active)) active = null
-          if (items === prev.items && active === prev.active) return prev
-          return { items, active, decos: buildDecorations(state.doc, items, active) }
+          if (items === prev.items && closed === prev.closed && active === prev.active) return prev
+          const decos = items === prev.items && active === prev.active ? prev.decos : buildDecorations(state.doc, items, active)
+          return { items, closed, active, decos }
         },
       },
       props: {
@@ -428,7 +462,7 @@ const PROMPTS = {
     '- "comment": names the error in a few words (e.g. "Subject–verb agreement.").\n' +
     '- "url": "".\n' +
     ANCHOR_RULES +
-    '- Return at most 12, in passage order. If there are no errors, return an empty list.',
+    '- Return at most {N}, in passage order. If there are no errors, return an empty list.',
   review:
     'You are a sharp, sparing editor leaving margin suggestions on a draft essay. The author writes technical essays ' +
     'about AI and machine learning for curious readers. They are published as web pages, so figures, animations and ' +
@@ -459,7 +493,7 @@ const PROMPTS = {
     'No praise, no hedging. Write any math in it as $…$.\n' +
     '- "url" is "" except for links.\n' +
     '- Match the author’s spelling conventions and terminology.\n' +
-    '- Fewer is better: at most 6 edits and notes, most important first. If the passage is already clear and ' +
+    '- Fewer is better: at most {N} edits and notes, most important first. If the passage is already clear and ' +
     'correct, return an empty list — that is a good outcome.',
   // appended to the review prompt when the writer has attached notes (ai-context.js)
   links:
@@ -472,7 +506,7 @@ const PROMPTS = {
     '- "quote": the exact words in the passage that name the thing (usually 2–8 words), to become the link text.\n' +
     '- "url": copied EXACTLY from the notes. Never guess, shorten or build a URL; if the notes have no URL for it, skip it.\n' +
     '- "comment": what it is and where it is in the notes, e.g. "Ng et al. 1999, reward shaping — journal, Mar 3."\n' +
-    'Link each source at most once in the passage, at its first mention. At most 5 links; they don’t count toward the 6.',
+    'Link each source at most once in the passage, at its first mention. At most 5 links; they don’t count toward the {N}.',
 }
 
 async function requestSuggestions(mode, input, signal) {
@@ -480,15 +514,17 @@ async function requestSuggestions(mode, input, signal) {
   const notes = input.notes && input.notes.length
     ? '<author_notes>\n' + input.notes.map((n) => '<source name="' + n.name.replace(/"/g, "'") + '">\n' + n.text + '\n</source>').join('\n') + '\n</author_notes>\n\n'
     : ''
-  // stable parts first (notes, then the draft) so repeated runs hit the prompt cache
+  // stable parts first (notes, then the draft) so repeated runs hit the prompt cache. When
+  // the passage IS the whole draft, the draft isn't sent twice — just its footnotes.
   const user =
     notes +
     'Title: ' + (input.title || '(untitled)') + '\n' +
     (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
-    '\n<document>\n' + input.docText + '\n</document>\n\n' +
-    'PASSAGE (' + input.where + '). Suggest only within it. Paragraphs are labelled [P#]:\n' +
-    '<passage>\n' + input.passage + '\n</passage>'
-  const system = PROMPTS[mode] + (mode === 'review' && notes ? PROMPTS.links : '')
+    (input.docText ? '\n<document>\n' + input.docText + '\n</document>\n' : '') +
+    '\nPASSAGE (' + input.where + '). Suggest only within it. Paragraphs are labelled [P#]:\n' +
+    '<passage>\n' + input.passage + '\n</passage>' +
+    (input.footnotes ? '\n\nThe draft’s footnotes, for context:' + input.footnotes : '')
+  const system = (PROMPTS[mode] + (mode === 'review' && notes ? PROMPTS.links : '')).replaceAll('{N}', String(input.limit))
   const base = {
     model: settings.writingModel || CONFIG.openai.writingModel,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -591,7 +627,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   function dismiss(id) {
     const it = find(id)
     if (it) dismissed.add(fingerprint(it))
-    dispatchMeta({ remove: id })
+    dispatchMeta({ dismiss: id })
   }
   function keepAsComment(id) {
     const it = find(id)
@@ -601,6 +637,29 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     comments.addAt(it.from, it.to, it.comment)
   }
   function clearAll() { dispatchMeta({ clear: true }) }
+
+  // "Recently closed" (closed.js): dismissed / cleared / replaced suggestions, this session
+  function reopen(id) {
+    const c = st().closed.find((x) => x.id === id)
+    if (!c) return false
+    if (c.stale) return 'Its text has changed since, so it no longer applies.'
+    dismissed.delete(fingerprint(c))
+    comments.deactivate()
+    dispatchMeta({ reopen: id, active: id })
+    const at = c.kind === 'edit' ? c.hunks[0].delFrom : c.from
+    editor.chain().focus().setTextSelection(at).scrollIntoView().run()
+    return true
+  }
+  const closedSource = {
+    list: () => st().closed.map((c) => ({
+      key: c.id, kind: 'ai', label: 'AI · ' + CATEGORY_LABELS[c.category], how: c.how, closedAt: c.closedAt,
+      text: c.kind === 'edit' ? c.hunks.map((h) => (h.del ? h.del + ' → ' : '+ ') + (h.ins || '∅')).join(' · ') + (c.comment ? ' — ' + c.comment : '')
+        : c.kind === 'link' ? shortUrl(c.url) + (c.comment ? ' — ' + c.comment : '') : c.comment,
+      quote: c.stale || c.block ? '' : textOf(editor.state.doc, c.from, c.to),
+      canReopen: !c.stale,
+    })),
+    reopen: (key) => reopen(key) || 'Couldn’t reopen it.',
+  }
 
   /* ---- cards ---- */
   function makeCard(it) {
@@ -699,30 +758,45 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     if (el) setTimeout(() => setActive(el.dataset.sg), 0)
   })
 
-  /* ---- scope: the selection, else the section around the caret ---- */
+  /* ---- scope: the selection, else the whole draft ---- */
+  const countWords = (t) => t.split(/\s+/).filter(Boolean).length
+  const wordsLabel = (n) => n.toLocaleString('en-US') + (n === 1 ? ' word' : ' words')
   function scopeOf(state) {
     const { doc, selection } = state
     if (!selection.empty && !selection.node) {
-      const words = doc.textBetween(selection.from, selection.to, ' ', ' ').split(/\s+/).filter(Boolean).length
-      return { from: selection.from, to: selection.to, label: 'Selection · ' + words + (words === 1 ? ' word' : ' words'), where: 'the writer’s selection' }
+      const words = countWords(doc.textBetween(selection.from, selection.to, ' ', ' '))
+      return { from: selection.from, to: selection.to, label: 'Selection · ' + wordsLabel(words), where: 'the writer’s selection' }
     }
-    // from the nearest heading above the caret to the next heading of the same or higher rank
-    const caret = selection.from
-    let start = 0, level = 0, title = ''
-    doc.forEach((node, offset) => {
-      if (offset <= caret && node.type.name === 'heading') { start = offset; level = node.attrs.level; title = node.textContent.trim() }
-    })
-    let end = doc.content.size
-    let headings = 0
-    doc.forEach((node, offset) => {
-      if (node.type.name !== 'heading') return
-      headings++
-      if (offset > start && end === doc.content.size && (level === 0 || node.attrs.level <= level)) end = offset
-    })
-    if (!headings) return { from: 0, to: end, label: 'Whole draft', where: 'the whole draft' }
-    if (!level) return { from: 0, to: end, label: 'Opening section', where: 'the opening section, before the first heading' }
-    const short = title.length > 42 ? title.slice(0, 40) + '…' : title || 'Untitled'
-    return { from: start, to: end, label: 'Section · ' + short, where: 'the section “' + title + '”' }
+    const words = countWords(doc.textBetween(0, doc.content.size, ' ', ' '))
+    return { from: 0, to: doc.content.size, whole: true, label: 'Whole draft · ' + wordsLabel(words), where: 'the whole draft' }
+  }
+
+  // Proofread reads a long passage in parts (faster, and nothing gets skimmed); a part
+  // ends at a block boundary once it passes PROOF_BATCH_WORDS.
+  function batches(blocks, mode) {
+    if (mode !== 'proofread') return [blocks]
+    const out = [[]]
+    let n = 0
+    for (const b of blocks) {
+      if (n >= PROOF_BATCH_WORDS) { out.push([]); n = 0 }
+      out[out.length - 1].push(b)
+      n += countWords(b.str)
+    }
+    return out
+  }
+
+  // run fn over items, at most PARALLEL at a time → Promise.allSettled-style results
+  async function pool(items, fn) {
+    const results = new Array(items.length)
+    let next = 0
+    const worker = async () => {
+      while (next < items.length) {
+        const i = next++
+        try { results[i] = { status: 'fulfilled', value: await fn(items[i], i) } } catch (reason) { results[i] = { status: 'rejected', reason } }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, worker))
+    return results
   }
 
   /* ---- a run ---- */
@@ -760,6 +834,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     layer.appendChild(run.card)
     btn.classList.add('busy')
     comments.layout()
+    if (scope.whole) toast((mode === 'proofread' ? 'Proofreading' : 'Reviewing') + ' the whole draft…')
 
     const thisRun = run
     try {
@@ -768,39 +843,60 @@ export function setupSuggestions(editor, comments, { getDocId }) {
       const query = scope.label + '\n' + blocks.map((b) => b.str).join('\n')
       const notes = mode === 'review' ? await freshContext(query) : { parts: [], urls: new Set() }
       if (controller.signal.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' })
-      const input = {
+      const parts = batches(blocks, mode)
+      const docText = documentText(state.doc, fnNum)
+      const footnotes = footnotesText()
+      // Review scales with length: ~1 suggestion per 300 words, between 6 and 15
+      const limit = mode === 'proofread' ? 15 : Math.max(6, Math.min(15, Math.round(countWords(blocks.map((b) => b.str).join(' ')) / 300)))
+      const results = await pool(parts, (part, i) => requestSuggestions(mode, {
         title: ($('docTitle') || {}).textContent || '',
         subtitle: ($('docSubtitle') || {}).textContent || '',
-        docText: documentText(state.doc, fnNum) + footnotesText(),
-        passage: blocks.map((b, i) => '[P' + (i + 1) + (b.kind ? ', ' + b.kind : '') + '] ' + b.str).join('\n\n'),
-        where: scope.where,
+        // the passage already is the whole draft → don't send it twice
+        docText: scope.whole && parts.length === 1 ? '' : docText + footnotes,
+        footnotes: scope.whole && parts.length === 1 ? footnotes : '',
+        passage: part.map((b, j) => '[P' + (j + 1) + (b.kind ? ', ' + b.kind : '') + '] ' + b.str).join('\n\n'),
+        where: scope.where + (parts.length > 1 ? ', part ' + (i + 1) + ' of ' + parts.length : ''),
         notes: notes.parts,
-      }
-      const raw = await requestSuggestions(mode, input, controller.signal)
+        limit,
+      }, controller.signal))
       if (thisRun.docId !== getDocId()) return // switched drafts while it was thinking
+      const failed = results.filter((r) => r.status === 'rejected')
+      if (failed.length === results.length) throw failed[0].reason
       const mapping = { map: (p, assoc) => thisRun.mapPos(p, assoc) }
       const seen = new Set()
       const items = []
+      // a fix the other mode already shows (Review re-finding a Proofread typo) isn't repeated
+      const shown = new Set(st().items.filter((it) => it.mode !== mode && it.kind === 'edit').flatMap((it) => it.hunks.map(hunkKey)))
       let unplaced = 0, overtaken = 0
-      for (const sg of raw) {
-        let it = toItem(sg, blocks, mode, state.doc, notes.urls)
-        if (!it) { unplaced++; continue }
-        it = mapItem(it, mapping, editor.state.doc) // carry it over edits made while waiting
-        if (!it) { overtaken++; continue }
-        const fp = fingerprint(it)
-        if (dismissed.has(fp) || seen.has(fp)) continue
-        seen.add(fp)
-        items.push(it)
-        if (items.length >= MAX_ITEMS[mode]) break
-      }
-      if (unplaced) console.info('[suggest] ' + unplaced + ' suggestion(s) could not be placed', raw)
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return
+        for (const sg of r.value) {
+          if (items.length >= MAX_ITEMS[mode]) return
+          let it = toItem(sg, parts[i], mode, state.doc, notes.urls)
+          if (!it) { unplaced++; continue }
+          it = mapItem(it, mapping, editor.state.doc) // carry it over edits made while waiting
+          if (!it) { overtaken++; continue }
+          if (it.kind === 'edit') {
+            const hunks = it.hunks.filter((h) => !shown.has(hunkKey(h)))
+            if (!hunks.length) continue
+            it = { ...it, hunks }
+          }
+          const fp = fingerprint(it)
+          if (dismissed.has(fp) || seen.has(fp)) continue
+          seen.add(fp)
+          items.push(it)
+        }
+      })
+      if (unplaced) console.info('[suggest] ' + unplaced + ' suggestion(s) could not be placed')
+      if (failed.length) console.warn('[suggest] ' + failed.length + ' part(s) failed:', failed.map((f) => f.reason && f.reason.message))
       dispatchMeta({
         replace: { mode, from: thisRun.mapPos(scope.from, 1), to: thisRun.mapPos(scope.to, -1) },
         add: items,
       })
       if (!items.length && overtaken) toast('The text changed while it was reading — try again')
       else if (!items.length) toast(mode === 'proofread' ? 'No errors found' : 'Nothing to suggest — it reads well')
-      else toast(items.length + (items.length === 1 ? ' suggestion' : ' suggestions') + (wide.matches ? '' : ' — tap the marked text'))
+      else toast(items.length + (items.length === 1 ? ' suggestion' : ' suggestions') + (wide.matches ? '' : ' — tap the marked text') +
+        (failed.length ? ' (' + failed.length + ' of ' + results.length + ' parts failed — run it again for those)' : ''))
     } catch (err) {
       toast(err.name === 'AbortError' ? 'Stopped' : (err.message || 'Suggestions failed'))
     } finally {
@@ -816,7 +912,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   /* ---- the menu ---- */
   function openMenu() {
     const scope = scopeOf(editor.state)
-    $('sgScope').textContent = scope.label
+    $('sgScope').textContent = scope.label + (scope.whole ? ' — select text to narrow it' : '')
     menu.querySelectorAll('[data-mode]').forEach((b) => { b.disabled = !!run })
     $('sgStop').hidden = !run
     $('sgClear').hidden = !st().items.length
@@ -846,7 +942,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
 
   // exposed for console debugging / verification
   return {
-    start, stop, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment,
+    start, stop, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment, closedSource,
     _internal: { locate, wordHunks, toItem, passageBlocks, scopeOf, documentText },
   }
 }

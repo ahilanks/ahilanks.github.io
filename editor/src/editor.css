@@ -225,7 +225,8 @@ math-field.math-edit {
 .fn-ref { color: var(--text); font-weight: 600; font-size: 0.72em; vertical-align: super; line-height: 0; cursor: pointer; padding: 0 1px; user-select: none; }
 
 /* footnotes section */
-.doc-footnotes { margin-top: 0; }
+/* bottom room so even the last footnote can be scrolled to the middle of the screen */
+.doc-footnotes { margin-top: 0; padding-bottom: 20vh; }
 /* the editor surface + its last paragraph shouldn't pad the space before the footnotes */
 .doc-body-pm { margin-bottom: 0; }
 .doc-body-pm > p:last-child { margin-bottom: 0; }
@@ -240,8 +241,10 @@ math-field.math-edit {
 .doc-footnotes hr { border: none; border-top: 1px solid var(--line); margin: 0 0 1.2rem; }
 .doc-footnotes .fn-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-bottom: 0.6rem; }
 ol.fn-list { list-style: none; margin: 0; padding: 0; }
-ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.95rem; line-height: 1.5; color: var(--text); margin-bottom: 0.7rem; }
-.fn-num { color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 1.2rem; }
+ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.95rem; line-height: 1.5; color: var(--text); margin-bottom: 0.7rem; position: relative; border-radius: 4px; }
+/* the number jumps back to its marker in the text (footnote.js) */
+.fn-num { color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 1.2rem; cursor: pointer; user-select: none; }
+.fn-num:hover { color: var(--text); }
 .fn-body { flex: 1; outline: none; }
 .fn-body p, .fn-body div { margin: 0 0 0.4rem; }
 .fn-body p:last-child, .fn-body div:last-child { margin-bottom: 0; }
@@ -249,11 +252,22 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
 /* images inside a footnote: block, footnote-width, selectable-as-a-whole on click (footnote.js) */
 .fn-body img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.4rem 0; }
 .fn-body img::selection { background: transparent; }
-.fn-body:empty::before { content: "Footnote text…"; color: var(--faint); }
-/* orphaned footnote: its ref was deleted from the text — kept unnumbered (and unpublished)
-   until the next inserted footnote adopts it */
-ol.fn-list li.fn-orphan { opacity: 0.55; }
-ol.fn-list li.fn-orphan .fn-num { color: var(--faint); font-weight: 400; }
+.fn-body:empty::before, .fn-body:has(> br:only-child)::before { content: "Footnote text…"; color: var(--faint); pointer-events: none; }
+/* orphaned footnote: its marker was deleted from the text — the words stay, light gray and
+   unpublished, under a "Removed from text" label below the numbered notes. The bullet turns
+   into × on hover; clicking it deletes the text for good (footnote.js). */
+ol.fn-list li.fn-orphan { color: var(--faint); }
+ol.fn-list li.fn-orphan .fn-body a { color: inherit; }
+ol.fn-list li.fn-orphan .fn-body img { opacity: 0.55; }
+ol.fn-list li.fn-orphan:first-child, ol.fn-list li:not(.fn-orphan) + li.fn-orphan { margin-top: 2.4rem; }
+ol.fn-list li.fn-orphan:first-child::before, ol.fn-list li:not(.fn-orphan) + li.fn-orphan::before {
+  content: "Removed from text"; position: absolute; left: 0; top: -1.6rem;
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); pointer-events: none;
+}
+ol.fn-list li.fn-orphan .fn-num { color: var(--faint); font-weight: 400; position: relative; }
+ol.fn-list li.fn-orphan:hover .fn-num { color: transparent; }
+ol.fn-list li.fn-orphan:hover .fn-num::after { content: "×"; position: absolute; left: 0; top: 0; color: var(--muted); }
+ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 
 /* ----------------------------- COMMENTS ----------------------------- */
 /* the commented stretch of text: a soft marker tint; stronger while its card is active

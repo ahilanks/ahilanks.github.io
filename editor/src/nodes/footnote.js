@@ -5,7 +5,7 @@
  * OUTSIDE the ProseMirror doc — mirroring v1 so the stored `footnotes` field (fnList.innerHTML)
  * round-trips unchanged. The number N is NOT stored in the doc; `reconcileFootnotes()` walks the
  * refs in document order on every update, numbers them, and reorders the body list to match;
- * bodies whose ref was deleted stay in the list unnumbered (see "orphaned bodies" below).
+ * bodies whose ref was deleted stay in the list, gray and unnumbered (see "orphaned bodies" below).
  */
 
 import { Node } from '../../vendor/lib.bundle.js'
@@ -237,12 +237,67 @@ function createFnEntry(id) {
 
 /* ---------------------------------------------------------- orphaned bodies
  * Footnote BODIES live outside the ProseMirror doc, so deleting a reference must not
- * destroy its text: the <li> stays in the list, unnumbered ("orphan"), and sinks below
- * the numbered notes. Undoing the deletion re-attaches it by fnId; inserting a NEW
- * footnote adopts the topmost orphan instead of starting empty. Orphans are part of
+ * destroy its text: the <li> stays in the list, gray with a bullet instead of a number
+ * ("orphan"), below the numbered notes. Undoing the deletion re-attaches it by fnId;
+ * clicking its bullet (shown as × on hover) deletes it for good. An orphan with no text
+ * has nothing worth keeping, so it's dropped instead. Orphans are part of
  * fnList.innerHTML, so they persist with the draft — but are skipped at publish time. */
 
-let lastSig = ''
+// No words and no image — nothing worth keeping.
+function isEmptyBody(body) {
+  return !body || (!(body.textContent || '').trim() && !body.querySelector('img'))
+}
+
+// Delete a footnote entry outright (an orphan's × / Backspace) and save.
+function removeFnEntry(li) {
+  const fnList = li.parentNode
+  if (!fnList) return
+  // Removing the focused body fires a synchronous focusout, whose handler (below) may remove
+  // this same entry first — so blur up front and bail if that already did the job.
+  if (li.contains(document.activeElement)) document.activeElement.blur()
+  if (!li.isConnected) return
+  li.remove()
+  const section = $('footnotes')
+  if (section) section.hidden = fnList.children.length === 0
+  fnList.dispatchEvent(new Event('input', { bubbles: true })) // → save
+}
+
+// Scroll the one scroller (#scrollArea) so `el` sits in the middle of the screen.
+function centerOnScreen(el) {
+  const area = $('scrollArea')
+  if (!area) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+  const a = area.getBoundingClientRect(); const r = el.getBoundingClientRect()
+  const top = area.scrollTop + (r.top + r.height / 2) - (a.top + a.height / 2)
+  area.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+}
+
+// Take the caret to footnote `id`'s body, centred on screen, with a brief highlight.
+function revealFootnote(id) {
+  const li = document.querySelector(`#fnList li[data-fn="${id}"]`)
+  if (!li) return
+  li.querySelector('.fn-body').focus({ preventScroll: true })
+  centerOnScreen(li)
+  if (li.animate) {
+    li.animate([{ backgroundColor: 'rgba(230, 178, 60, 0.32)' }, { backgroundColor: 'rgba(230, 178, 60, 0)' }],
+      { duration: 1600, easing: 'ease-out' })
+  }
+}
+
+// And back: caret just after footnote `id`'s marker in the text, centred on screen.
+function revealRef(editor, id) {
+  let at = -1
+  editor.state.doc.descendants((n, p) => {
+    if (at < 0 && n.type.name === 'footnoteRef' && n.attrs.fnId === id) at = p
+    return at < 0
+  })
+  if (at < 0) return
+  editor.commands.setTextSelection(at + 1)
+  editor.view.focus()
+  const ref = editor.view.dom.querySelector(`.fn-ref[data-fn="${id}"]`)
+  if (ref) centerOnScreen(ref)
+}
+
+let lastSig = null // null, not '': a draft with no refs must still get one full pass
 export function reconcileFootnotes(editor) {
   const fnList = $('fnList'); const section = $('footnotes')
   if (!fnList || !section) return
@@ -262,9 +317,12 @@ export function reconcileFootnotes(editor) {
 
   const entries = {}
   Array.from(fnList.children).forEach((li) => (entries[li.dataset.fn] = li))
-  // ref gone → keep the body, unnumbered; undo re-attaches it, a new insert adopts it
+  // ref gone → keep the body, gray and unnumbered (undo re-attaches it) — unless it's empty
   Object.values(entries).forEach((li) => {
     if (seen.has(li.dataset.fn)) return
+    if (isEmptyBody(li.querySelector('.fn-body')) && !li.contains(document.activeElement)) {
+      li.remove(); delete entries[li.dataset.fn]; return
+    }
     li.classList.add('fn-orphan')
     li.querySelector('.fn-num').textContent = '•'
   })
@@ -283,14 +341,13 @@ export function reconcileFootnotes(editor) {
 export function insertFootnote(editor) {
   const id = uid()
   const fnList = $('fnList')
-  // an orphaned body (its ref was deleted) is adopted by the next new footnote
-  const orphan = fnList && fnList.querySelector('li.fn-orphan')
-  if (orphan) { orphan.dataset.fn = id; orphan.classList.remove('fn-orphan') }
-  else if (fnList) fnList.appendChild(createFnEntry(id))
-  editor.chain().focus().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
+  if (fnList) fnList.appendChild(createFnEntry(id))
+  // No .focus() in the chain: when the article isn't focused (the toolbar button took it),
+  // TipTap's focus() re-focuses it a frame later — pulling the caret back out of the new
+  // footnote body and scrolling back up to the marker.
+  editor.chain().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
   reconcileFootnotes(editor)
-  const li = fnList && fnList.querySelector(`li[data-fn="${id}"]`)
-  if (li) li.querySelector('.fn-body').focus()
+  revealFootnote(id)
 }
 
 // Called by main.js: wire buttons, reconcile on updates, click-ref-to-body, and save on body edits.
@@ -300,6 +357,25 @@ export function setupFootnotes(editor, onFootnoteEdit) {
   const fnList = $('fnList')
   if (fnList) {
     fnList.addEventListener('input', () => onFootnoteEdit && onFootnoteEdit())
+    // An orphan emptied of its text goes away once the caret leaves it, or straight away on
+    // Backspace/Delete (caret then lands at the end of the footnote above).
+    fnList.addEventListener('focusout', (e) => {
+      const li = e.target.closest && e.target.closest('li.fn-orphan')
+      if (li && li.isConnected && isEmptyBody(li.querySelector('.fn-body'))) removeFnEntry(li)
+    })
+    fnList.addEventListener('keydown', (e) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return
+      const li = e.target.closest && e.target.closest('li.fn-orphan')
+      if (!li || !isEmptyBody(li.querySelector('.fn-body'))) return
+      e.preventDefault()
+      const prev = li.previousElementSibling && li.previousElementSibling.querySelector('.fn-body')
+      if (prev) {
+        prev.focus({ preventScroll: true })
+        const sel = window.getSelection()
+        if (sel) { sel.selectAllChildren(prev); sel.collapseToEnd() }
+      }
+      removeFnEntry(li) // a no-op if leaving it (the focusout above) already removed it
+    })
     // Paste into a footnote body: keep the words and inline formatting, drop the source
     // page's styling. (These are raw contenteditable divs — the browser's default paste
     // would inject its spans/fonts/colors verbatim, which normalizeFnBody only cleans up
@@ -349,6 +425,14 @@ export function setupFootnotes(editor, onFootnoteEdit) {
     // new tab, as in the article (main.js handleClick); hold any modifier to click INTO it
     // instead — the caret lands inside, the preview chip appears, ⌘K edits the URL.
     fnList.addEventListener('click', (e) => {
+      // the number → back to its marker in the text; an orphan's bullet (× on hover) → delete
+      const num = e.target.closest && e.target.closest('.fn-num')
+      if (num && e.button === 0) {
+        const li = num.closest('li')
+        if (li.classList.contains('fn-orphan')) removeFnEntry(li)
+        else revealRef(editor, li.dataset.fn)
+        return
+      }
       const a = e.target.closest && e.target.closest('.fn-body a[href]')
       if (a && e.button === 0 && !(e.metaKey || e.ctrlKey || e.altKey || e.shiftKey)) {
         e.preventDefault()
@@ -385,12 +469,10 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       imageFileInput.addEventListener('cancel', () => { target = null })
     }
   }
-  // click a ref → focus its body
+  // click a ref → its body, centred on screen
   editor.view.dom.addEventListener('click', (e) => {
     const ref = e.target.closest && e.target.closest('.fn-ref')
-    if (!ref) return
-    const li = document.querySelector(`li[data-fn="${ref.dataset.fn}"]`)
-    if (li) { li.scrollIntoView({ behavior: 'smooth', block: 'center' }); li.querySelector('.fn-body').focus() }
+    if (ref) revealFootnote(ref.dataset.fn)
   })
   $('footnoteBtn').addEventListener('click', () => insertFootnote(editor))
   $('bubbleFootnote').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); insertFootnote(editor) })
@@ -402,6 +484,6 @@ export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML 
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''
-  lastSig = '' // force a re-number on the next reconcile
+  lastSig = null // force a full pass (re-number, drop empty orphans) on the next reconcile
   reconcileFootnotes(editor)
 }

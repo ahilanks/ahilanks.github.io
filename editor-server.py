@@ -758,6 +758,105 @@ def fetch_gdoc(url):
     return 200, {kind: body[:GDOC_MAX_TEXT], "title": title, "truncated": truncated}
 
 
+LINKCHECK_MAX_BYTES = 512 * 1024
+LINKCHECK_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+HTML_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
+DOI_IN_URL_RE = re.compile(r"(10\.\d{4,9}/[^\s?#]+)")
+
+
+def _public_host(host):
+    """True if every address `host` resolves to is public (never localhost / the LAN)."""
+    import socket
+    import ipaddress
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not ip.is_global:
+            return False
+    return bool(infos)
+
+
+def _meta_content(text, key):
+    for m in re.finditer(r"<meta\b[^>]*>", text, re.I):
+        tag = m.group(0)
+        if re.search(r"""(?:name|property)\s*=\s*["']%s["']""" % re.escape(key), tag, re.I):
+            c = re.search(r"""content\s*=\s*(?:"([^"]*)"|'([^']*)')""", tag, re.I)
+            if c:
+                return (c.group(1) or c.group(2) or "").strip()
+    return ""
+
+
+def _crossref_title(doi):
+    """A published paper's title from Crossref's open metadata API ("" if unknown). Publisher
+    pages (Springer, ACM, IEEE...) often answer a script with a bot check, not the paper."""
+    import urllib.request
+    from urllib.parse import quote
+    req = urllib.request.Request("https://api.crossref.org/works/" + quote(doi, safe="/"),
+                                 headers={"User-Agent": "editor-server/1.0 (link check)"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read(1024 * 1024).decode("utf-8", "replace"))
+        titles = (data.get("message") or {}).get("title") or []
+        return re.sub(r"\s+", " ", htmlmod.unescape(re.sub(r"<[^>]+>", "", titles[0]))).strip()[:300] if titles else ""
+    except Exception:
+        return ""
+
+
+def check_link(url):
+    """Does a page exist at `url`, and what is it called? For the AI's web-link suggestions
+    (ai-suggest.js): a link is only offered if the page loads and its title matches what
+    the model said it links to. → (status, {ok, status, title, url, type} | {ok: False, ...})"""
+    import urllib.request
+    import urllib.error
+    p = urlparse(url)
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return 400, {"ok": False, "error": "not an http(s) URL"}
+    if not _public_host(p.hostname):
+        return 400, {"ok": False, "error": "not a public host"}
+
+    class _PublicRedirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            host = urlparse(newurl).hostname
+            if not host or not _public_host(host):
+                raise urllib.error.URLError("redirects to a non-public host")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    opener = urllib.request.build_opener(_PublicRedirects)
+    req = urllib.request.Request(url, headers={
+        "User-Agent": LINKCHECK_UA,
+        "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en",
+    })
+    doi = DOI_IN_URL_RE.search(p.path)
+    if doi:  # a DOI names the paper: trust Crossref's title over whatever the publisher serves
+        title = _crossref_title(doi.group(1).rstrip("."))
+        if title:
+            return 200, {"ok": True, "status": 200, "title": title, "url": url, "type": "doi"}
+    try:
+        with opener.open(req, timeout=12) as resp:
+            final, status = resp.geturl(), resp.status
+            ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            raw = resp.read(LINKCHECK_MAX_BYTES)
+    except urllib.error.HTTPError as e:
+        return 200, {"ok": False, "status": e.code}
+    except Exception as e:  # DNS, timeout, refused, bad redirect...
+        return 200, {"ok": False, "error": str(e)[:200]}
+    title = ""
+    if not ctype or "html" in ctype:
+        text = raw.decode("utf-8", "replace")
+        # a paper's own title beats the page's (arXiv: "[1706.03762] Attention Is All You Need")
+        title = _meta_content(text, "citation_title") or _meta_content(text, "og:title")
+        if not title:
+            m = HTML_TITLE_RE.search(text)
+            title = m.group(1) if m else ""
+        title = re.sub(r"\s+", " ", htmlmod.unescape(title)).strip()[:300]
+    return 200, {"ok": True, "status": status, "title": title, "url": final, "type": ctype}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=ROOT, **k)
@@ -808,6 +907,9 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send_json(m)
         if path == "/api/gdoc":          # a Google Doc's HTML, for Review's context
             code, payload = fetch_gdoc((self._query().get("url") or [""])[0].strip())
+            return self._send_json(payload, code)
+        if path == "/api/linkcheck":     # does an AI-suggested web link exist? (ai-suggest.js)
+            code, payload = check_link((self._query().get("url") or [""])[0].strip())
             return self._send_json(payload, code)
         if path == "/api/media":         # list a draft's backed-up media files
             draft = (self._query().get("draft") or [""])[0]

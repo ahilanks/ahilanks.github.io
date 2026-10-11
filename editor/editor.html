@@ -72,7 +72,7 @@
         <button class="tb-btn" id="quoteBtn" title="Quote (blockquote)">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6.5 7C4.6 7 3 8.6 3 10.5S4.6 14 6.5 14c.2 0 .4 0 .5-.05C6.7 15.1 5.7 16 4.3 16.3l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C9 8.6 7.4 7 6.5 7zm9 0C13.6 7 12 8.6 12 10.5S13.6 14 15.5 14c.2 0 .4 0 .5-.05-.3 1.15-1.3 2.05-2.7 2.35l.4 1.5c2.6-.6 4.3-2.7 4.3-5.5V10.5C18 8.6 16.4 7 15.5 7z"/></svg>
         </button>
-        <button class="tb-btn ai" id="mathBtn" title="Insert math with AI (describe it)">
+        <button class="tb-btn ai" id="mathBtn" title="Math — describe it in words, or click the equation to type it (⌘M)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14l-7 8 7 8H5"/></svg>
         </button>
       </div>
@@ -172,26 +172,21 @@
       </div>
     </div>
 
-    <!-- ===================== FLOATING: AI math popover ===================== -->
-    <div class="popover hidden" id="aiPop">
-      <label>Describe the math to add</label>
-      <div class="ctx hidden" id="aiCtx"></div>
-      <textarea id="aiInput" placeholder="e.g. the sum of 1 over n squared from 1 to infinity"></textarea>
-      <div class="math-preview hidden" id="aiPreview"></div>
-      <div class="row">
-        <label style="margin:0;display:flex;align-items:center;gap:0.35rem;font-size:0.8rem;">
-          <input type="checkbox" id="aiDisplay" style="width:auto;" /> Force block
-        </label>
-        <span class="grow"></span>
-        <button class="pop-btn ghost" id="aiCancel">Cancel</button>
-        <button class="pop-btn" id="aiGenerate">Generate</button>
-      </div>
-      <div class="pop-spin" id="aiSpin">Asking the model…</div>
-      <div class="pop-msg" id="aiMsg"></div>
+    <!-- ===================== FLOATING: describe the open equation in words (ai-math.js) ===================== -->
+    <div class="math-ask hidden" id="mathAsk">
+      <svg class="ma-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+      <input type="text" id="mathAskInput" placeholder="Describe it in words — e.g. add a KL penalty weighted by β" autocomplete="off" spellcheck="false" />
+      <span class="ma-status" id="mathAskStatus"></span>
+      <button type="button" class="ma-undo" id="mathAskUndo" hidden>Undo</button>
+      <span class="ma-key" title="From inside the equation">⌘K</span>
     </div>
 
     <!-- ===================== FLOATING: AI suggestions menu (ai-suggest.js) ===================== -->
     <div class="sg-menu hidden" id="sgMenu">
+      <form class="sg-ask" id="sgAskForm" autocomplete="off">
+        <input type="text" id="sgAskInput" placeholder="Ask about the draft…" spellcheck="true" />
+        <button type="submit" class="sg-ask-go" title="Ask (↵)">↵</button>
+      </form>
       <div class="sg-scope" id="sgScope"></div>
       <button type="button" class="sg-item" data-mode="proofread">
         <span class="sg-item-t">Proofread</span>
@@ -199,15 +194,35 @@
       </button>
       <button type="button" class="sg-item" data-mode="review">
         <span class="sg-item-t">Review</span>
-        <span class="sg-item-d">Clarity, flow, style — and ideas for visuals</span>
+        <span class="sg-item-d">Clarity, flow, style, formatting, math, links — and ideas for visuals</span>
+      </button>
+      <button type="button" class="sg-item" data-mode="links">
+        <span class="sg-item-t">Find links</span>
+        <span class="sg-item-d">Sources from your notes and the web, to accept one by one</span>
       </button>
       <button type="button" class="sg-item sg-item-plain" id="sgStop" hidden>Stop</button>
       <button type="button" class="sg-item sg-item-plain" id="sgClear" hidden>Clear suggestions</button>
       <div class="sg-ctx">
-        <div class="sg-ctx-label">Context for Review</div>
+        <div class="sg-ctx-label">Your notes (context + links)</div>
         <div id="sgCtxList"></div>
         <button type="button" class="sg-ctx-add" id="sgCtxAdd">+ Add a Google Doc or notes</button>
       </div>
+    </div>
+
+    <!-- ===================== FLOATING: Ask about the draft (ai-suggest.js) ===================== -->
+    <div class="ask-panel hidden" id="askPanel">
+      <div class="ask-head">
+        <span class="ask-title">Ask</span>
+        <button type="button" class="ask-hbtn" id="askClear" title="Start a new conversation">New</button>
+        <button type="button" class="ask-hbtn ask-x" id="askClose" title="Close (the conversation is kept)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+        </button>
+      </div>
+      <div class="ask-thread" id="askThread"></div>
+      <form class="ask-form" id="askForm" autocomplete="off">
+        <textarea id="askInput" rows="1" placeholder="Ask about the draft…"></textarea>
+        <button type="submit" class="ask-send" title="Ask (↵)">↵</button>
+      </form>
     </div>
 
     <!-- ===================== FLOATING: recently closed (closed.js) ===================== -->

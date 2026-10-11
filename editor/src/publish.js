@@ -268,10 +268,105 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix) {
   let html = '\n      <hr class="fn-divider" />\n      <ol class="footnotes">\n'
   Array.from(wrap.children).forEach((bodyClone, idx) => {
     const n = idx + 1 // index order matches the re-numbered body refs above
+    // ↩ back to the marker, on the note's last line (inside a trailing <p>/<div>, else
+    // appended). U+FE0E keeps iOS from drawing it as an emoji.
+    const back = document.createElement('a')
+    back.className = 'fn-back'
+    back.href = '#fnref-' + n
+    back.setAttribute('aria-label', 'Back to text')
+    back.textContent = '↩︎'
+    const last = bodyClone.lastElementChild
+    const trailing = last && /^(P|DIV)$/.test(last.tagName) && !(last.nextSibling && last.nextSibling.textContent.trim())
+    const host = trailing ? last : bodyClone
+    host.append(' ', back)
     html += '        <li id="fn-' + n + '">' + bodyClone.innerHTML + '</li>\n'
   })
   html += '      </ol>\n'
   return { html, files }
+}
+
+/* ------------------------------------------------------ footnote round trip (page) */
+// Runs INSIDE the published article (embedded via fnTrip.toString(), same rules as
+// provWidget below). A footnote marker glides to its note and raises a floating
+// "Back to reading" pill that returns to the exact spot the reader left — the jump is a
+// history entry, so the browser's Back does the same. A note's ↩ makes the same trip home,
+// or, when the reader scrolled down to the notes on their own, centres its marker. The
+// pill drops away if the reader scrolls back up by hand.
+function fnTrip() {
+  var pill = document.getElementById('fnReturn')
+  if (!pill) return
+  var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  var trip = null // { y, ref, n, left } while the reader is away at note n
+
+  function flash(el) {
+    el.classList.remove('fn-flash')
+    void el.offsetWidth // restart the animation
+    el.classList.add('fn-flash')
+  }
+  // focus without a second scroll, so Tab carries on from here
+  function land(el) { el.focus({ preventScroll: true }) }
+  function restore(mode) { if ('scrollRestoration' in history) history.scrollRestoration = mode }
+  function end() { trip = null; pill.hidden = true }
+  function home() {
+    var t = trip
+    end()
+    if (!t) return
+    window.scrollTo({ top: t.y, behavior: motion })
+    flash(t.ref)
+    land(t.ref.querySelector('a') || t.ref)
+  }
+  function goHome() {
+    // pop the #fn-n entry pushed on the way out; popstate (below) then brings the reader home
+    if (history.state && history.state.fnTrip) history.back()
+    else home()
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    var a = e.target.closest && e.target.closest('a[href^="#fn"]')
+    if (!a) return
+    var href = a.getAttribute('href')
+    var out = /^#fn-(\d+)$/.exec(href)
+    var back = /^#fnref-(\d+)$/.exec(href)
+    if (out) {
+      var li = document.getElementById('fn-' + out[1])
+      var ref = a.closest('sup')
+      if (!li || !ref) return
+      e.preventDefault()
+      trip = { y: window.scrollY, ref: ref, n: out[1], left: false }
+      // One entry per trip, however many markers are followed before coming back. The entry
+      // left behind is 'manual': Chrome restores scroll AFTER popstate, so its remembered
+      // spot (stale if the reader wandered back up and took another marker) would win over
+      // home() and cut its glide short.
+      if (history.state && history.state.fnTrip) history.replaceState({ fnTrip: true }, '', href)
+      else { restore('manual'); history.pushState({ fnTrip: true }, '', href); restore('auto') }
+      li.setAttribute('tabindex', '-1')
+      li.scrollIntoView({ block: 'center', behavior: motion })
+      flash(li)
+      land(li)
+      pill.hidden = false
+    } else if (back) {
+      e.preventDefault()
+      if (trip && trip.n === back[1]) { goHome(); return }
+      end()
+      var sup = document.getElementById('fnref-' + back[1])
+      if (!sup) return
+      sup.scrollIntoView({ block: 'center', behavior: motion })
+      flash(sup)
+      land(sup.querySelector('a') || sup)
+    }
+  })
+  pill.addEventListener('click', goHome)
+  window.addEventListener('popstate', function (e) {
+    if (e.state && e.state.fnTrip) return
+    restore('auto') // back on the reading entry: reloads restore normally again
+    if (trip) home()
+  })
+  window.addEventListener('scroll', function () {
+    if (!trip) return
+    if (Math.abs(window.scrollY - trip.y) > window.innerHeight * 0.6) trip.left = true
+    else if (trip.left) end() // back at the text on their own
+  }, { passive: true })
 }
 
 /* ------------------------------------------------------ provenance widget (page) */
@@ -610,6 +705,17 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }',
     '      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }',
     '      ol.footnotes img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.5rem 0; }',
+    '      ol.footnotes li:focus { outline:none; }',
+    '      .fn-back { font-family:system-ui, -apple-system, sans-serif; color:var(--muted); text-decoration:none; padding:0 0.15em; }',
+    '      .fn-back:hover { color:var(--text-color); }',
+    // the brief highlight on a note (going out) or its marker (coming back), as in the editor
+    '      @keyframes fn-flash { from { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); } to { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); } }',
+    '      .fn-flash { animation:fn-flash 1.6s ease-out; border-radius:3px; }',
+    footHtml ? '      .fn-return { position:fixed; left:50%; bottom:calc(1.4rem + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); z-index:20; display:inline-flex; align-items:center; gap:0.45rem; padding:0.6rem 1.05rem 0.6rem 0.9rem; border:none; border-radius:999px; background:var(--text-color); color:var(--bg-color); font:600 0.8rem/1 system-ui, -apple-system, sans-serif; letter-spacing:0.01em; white-space:nowrap; cursor:pointer; box-shadow:0 1px 3px rgba(39,50,63,0.14), 0 6px 18px rgba(39,50,63,0.2); animation:fn-return-in 0.2s ease-out; }' : '',
+    footHtml ? '      .fn-return[hidden] { display:none; }' : '',
+    footHtml ? '      .fn-return:hover { background:#1b2430; }' : '',
+    footHtml ? '      @keyframes fn-return-in { from { opacity:0; transform:translate(-50%, 0.5rem); } }' : '',
+    footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-return { animation:none; } }' : '',
     ...(version || draft ? PROV_CSS : []),
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
@@ -639,8 +745,10 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ' + bodyHtml,
     footHtml,
     '    </main>',
+    footHtml ? '    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>' : '',
     tocScript,
     provScript,
+    footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
     '',

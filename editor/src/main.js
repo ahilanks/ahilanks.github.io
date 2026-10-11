@@ -502,9 +502,13 @@ document.addEventListener('keydown', (e) => {
   // e.key is 'µ' on a Mac, so the plain ⌘M math branch below never sees it either way.
   if (e.altKey && e.code === 'KeyM') { e.preventDefault(); comments.add(); return }
   const k = e.key.toLowerCase()
+  if (k === 's') { e.preventDefault(); scheduleSave(); return }
+  // inside an equation (⌘B/⌘I style the math there — mathlive-config.js), its words bar,
+  // or a box you're typing a question into
+  const t = e.target
+  if (t && (t.tagName === 'MATH-FIELD' || (t.closest && t.closest('#mathAsk, #askPanel, #sgMenu')))) return
   if (k === 'b') { e.preventDefault(); cmd.bold() }
   else if (k === 'i') { e.preventDefault(); cmd.italic() }
-  else if (k === 's') { e.preventDefault(); scheduleSave() }
   else if (k === 'm') { e.preventDefault(); insertAndEditMath(editor, { block: e.shiftKey }) }
 })
 

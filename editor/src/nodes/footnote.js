@@ -271,30 +271,90 @@ function centerOnScreen(el) {
   area.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
 }
 
+// The brief highlight on a note (going out) or its marker (coming back).
+function flash(el) {
+  if (!el.animate) return
+  el.animate([
+    { backgroundColor: 'rgba(230, 178, 60, 0.32)', boxShadow: '0 0 0 0.3em rgba(230, 178, 60, 0.32)' },
+    { backgroundColor: 'rgba(230, 178, 60, 0)', boxShadow: '0 0 0 0.3em rgba(230, 178, 60, 0)' },
+  ], { duration: 1600, easing: 'ease-out' })
+}
+
 // Take the caret to footnote `id`'s body, centred on screen, with a brief highlight.
 function revealFootnote(id) {
   const li = document.querySelector(`#fnList li[data-fn="${id}"]`)
   if (!li) return
   li.querySelector('.fn-body').focus({ preventScroll: true })
   centerOnScreen(li)
-  if (li.animate) {
-    li.animate([{ backgroundColor: 'rgba(230, 178, 60, 0.32)' }, { backgroundColor: 'rgba(230, 178, 60, 0)' }],
-      { duration: 1600, easing: 'ease-out' })
-  }
+  flash(li)
 }
 
-// And back: caret just after footnote `id`'s marker in the text, centred on screen.
-function revealRef(editor, id) {
+// Caret just after footnote `id`'s marker in the text → the marker's element, or null.
+function caretAfterRef(editor, id) {
   let at = -1
   editor.state.doc.descendants((n, p) => {
     if (at < 0 && n.type.name === 'footnoteRef' && n.attrs.fnId === id) at = p
     return at < 0
   })
-  if (at < 0) return
+  if (at < 0) return null
   editor.commands.setTextSelection(at + 1)
   editor.view.focus()
-  const ref = editor.view.dom.querySelector(`.fn-ref[data-fn="${id}"]`)
-  if (ref) centerOnScreen(ref)
+  return editor.view.dom.querySelector(`.fn-ref[data-fn="${id}"]`)
+}
+
+// And back from note `id`: home to where you were if you came from there (below), else to
+// its marker, centred on screen.
+function revealRef(editor, id) {
+  if (trip && trip.id === id) { goHome(editor); return }
+  endTrip()
+  const ref = caretAfterRef(editor, id)
+  if (ref) { centerOnScreen(ref); flash(ref) }
+}
+
+/* ---------------------------------------------------------- the round trip
+ * As on the published page (publish.js fnTrip): going to a note — clicking its marker, or
+ * inserting a new footnote — remembers where you were and raises a "Back to reading" pill.
+ * The pill, the note's number, or Escape in the note brings you back to that exact spot,
+ * caret after the marker. The pill drops away if you scroll back up to the text yourself. */
+let trip = null // { top, id, left } while you're away at note `id`
+let pill = null
+
+function startTrip(id) {
+  const area = $('scrollArea')
+  trip = { top: area ? area.scrollTop : 0, id, left: false }
+  if (pill) pill.hidden = false
+}
+function endTrip() {
+  trip = null
+  if (pill) pill.hidden = true
+}
+function goHome(editor) {
+  const t = trip
+  endTrip()
+  if (!t) return
+  const ref = caretAfterRef(editor, t.id)
+  const area = $('scrollArea')
+  if (area) area.scrollTo({ top: t.top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  if (ref) flash(ref)
+}
+function setupTrip(editor) {
+  pill = document.createElement('button')
+  pill.type = 'button'
+  pill.className = 'fn-return'
+  pill.hidden = true
+  pill.innerHTML = '<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading'
+  pill.addEventListener('mousedown', (e) => e.preventDefault()) // the note keeps focus until we move it
+  pill.addEventListener('click', () => goHome(editor))
+  document.body.appendChild(pill)
+  const area = $('scrollArea')
+  if (area) {
+    area.addEventListener('scroll', () => {
+      if (!trip) return
+      if (Math.abs(area.scrollTop - trip.top) > area.clientHeight * 0.6) trip.left = true
+      else if (trip.left) endTrip() // back at the text on your own
+    }, { passive: true })
+  }
 }
 
 let lastSig = null // null, not '': a draft with no refs must still get one full pass
@@ -347,6 +407,7 @@ export function insertFootnote(editor) {
   // footnote body and scrolling back up to the marker.
   editor.chain().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
   reconcileFootnotes(editor)
+  startTrip(id)
   revealFootnote(id)
 }
 
@@ -364,6 +425,12 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       if (li && li.isConnected && isEmptyBody(li.querySelector('.fn-body'))) removeFnEntry(li)
     })
     fnList.addEventListener('keydown', (e) => {
+      // Escape in the note you came to → back to where you were reading
+      if (e.key === 'Escape' && trip) {
+        const li = e.target.closest && e.target.closest('li')
+        if (li && li.dataset.fn === trip.id) { e.preventDefault(); goHome(editor) }
+        return
+      }
       if (e.key !== 'Backspace' && e.key !== 'Delete') return
       const li = e.target.closest && e.target.closest('li.fn-orphan')
       if (!li || !isEmptyBody(li.querySelector('.fn-body'))) return
@@ -469,10 +536,13 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       imageFileInput.addEventListener('cancel', () => { target = null })
     }
   }
-  // click a ref → its body, centred on screen
+  // click a ref → its body, centred on screen, with the way back remembered
+  setupTrip(editor)
   editor.view.dom.addEventListener('click', (e) => {
     const ref = e.target.closest && e.target.closest('.fn-ref')
-    if (ref) revealFootnote(ref.dataset.fn)
+    if (!ref) return
+    startTrip(ref.dataset.fn)
+    revealFootnote(ref.dataset.fn)
   })
   $('footnoteBtn').addEventListener('click', () => insertFootnote(editor))
   $('bubbleFootnote').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); insertFootnote(editor) })
@@ -484,6 +554,7 @@ export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML 
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''
+  endTrip() // another draft: the way back pointed into the old one
   lastSig = null // force a full pass (re-number, drop empty orphans) on the next reconcile
   reconcileFootnotes(editor)
 }

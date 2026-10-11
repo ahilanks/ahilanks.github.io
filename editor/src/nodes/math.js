@@ -14,7 +14,7 @@ import { Node, nodeInputRule, katex, NodeSelection, Selection } from '../../vend
 window.__MATHLOG = window.__MATHLOG || []
 const mlog = (m) => { try { window.__MATHLOG.push(m) } catch (e) {} }
 import { CONFIG } from '../config.js'
-import { configureMathfield, mathKeyboard, toKatexTex } from '../mathlive-config.js'
+import { configureMathfield, mathKeyboard, toKatexTex, trimGaps } from '../mathlive-config.js'
 import { escapeHtml } from '../dom.js'
 
 function renderKatex(el, tex, displayMode) {
@@ -48,6 +48,8 @@ function renderKatex(el, tex, displayMode) {
  *   2. the field is focused synchronously on mount, so PM's editorOwnsSelection early-out
  *      also skips that draw.
  */
+const inAskBar = (el) => !!(el && el.closest && el.closest('#mathAsk'))
+
 function mathNodeView(isBlock) {
   return ({ node, editor, getPos }) => {
     const dom = document.createElement(isBlock ? 'div' : 'span')
@@ -68,7 +70,7 @@ function mathNodeView(isBlock) {
     // append usually takes; the `mount` event and a timer are belt-and-suspenders for the
     // rare case the element isn't focusable yet (rAF alone was the original fragile path).
     function focusField() {
-      if (!mf || !editing || document.activeElement === mf) return
+      if (!mf || !editing || document.activeElement === mf || inAskBar(document.activeElement)) return
       try { mf.focus(); mf.executeCommand('moveToMathfieldEnd') } catch (e) {}
     }
     function startEdit() {
@@ -93,7 +95,15 @@ function mathNodeView(isBlock) {
       dom.appendChild(mf)
       focusField()
       setTimeout(focusField, 0)
+      announce('open')
     }
+    // The "describe it in words" bar (ai-math.js) follows whichever field is open.
+    const handle = {
+      get mf() { return mf }, dom, isBlock, editor, getPos,
+      get editing() { return editing },
+      leaveIfFocusGone: () => leaveIfFocusGone(),
+    }
+    function announce(what) { document.dispatchEvent(new CustomEvent('math-edit-' + what, { detail: handle })) }
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); exit() }
       else if (e.key === 'Enter' && !isBlock) { e.preventDefault(); exit() }
@@ -103,24 +113,23 @@ function mathNodeView(isBlock) {
     // and NOT back into the node, commit. Deferred so keycap clicks (which briefly blur then
     // refocus) don't commit mid-formula. The in-editor click-away case is already handled by
     // deselectNode; this also covers focus escaping to the title/toolbar/page.
-    function onFocusOut() {
-      setTimeout(() => {
-        if (!editing) return
-        const a = document.activeElement
-        if (a === mf || dom.contains(a)) return
-        if (a && a.closest && a.closest('.ML__keyboard, .MLK__container, .ML__popover')) return
-        commit()
-        // commit() re-renders KaTeX but leaves the atom node-selected, so the blue selection
-        // ring lingers after focus left the editor (this path only fires when focus escaped
-        // the editor entirely; an in-editor click goes through deselectNode). Collapse the
-        // selection to a caret past the node so the highlight clears. Focus is elsewhere now,
-        // so the view isn't focused and this won't steal it back.
-        const pos = getPos()
-        const sel = editor.state.selection
-        if (typeof pos === 'number' && sel instanceof NodeSelection && sel.from === pos) {
-          editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(pos + node.nodeSize))))
-        }
-      }, 0)
+    function onFocusOut() { setTimeout(leaveIfFocusGone, 0) }
+    function leaveIfFocusGone() {
+      if (!editing) return
+      const a = document.activeElement
+      if (a === mf || dom.contains(a) || inAskBar(a)) return
+      if (a && a.closest && a.closest('.ML__keyboard, .MLK__container, .ML__popover')) return
+      commit()
+      // commit() re-renders KaTeX but leaves the atom node-selected, so the blue selection
+      // ring lingers after focus left the editor (this path only fires when focus escaped
+      // the editor entirely; an in-editor click goes through deselectNode). Collapse the
+      // selection to a caret past the node so the highlight clears. Focus is elsewhere now,
+      // so the view isn't focused and this won't steal it back.
+      const pos = getPos()
+      const sel = editor.state.selection
+      if (typeof pos === 'number' && sel instanceof NodeSelection && sel.from === pos) {
+        editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(pos + node.nodeSize))))
+      }
     }
     // Leave edit mode by moving the outer selection off the node → deselectNode → commit.
     function exit() {
@@ -132,8 +141,9 @@ function mathNodeView(isBlock) {
       if (!editing) return
       editing = false
       dom.classList.remove('math-editing')
-      const tex = mf ? toKatexTex(mf.getValue('latex')).trim() : node.attrs.tex
+      const tex = mf ? trimGaps(toKatexTex(mf.getValue('latex'))) : node.attrs.tex
       if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('focusout', onFocusOut); mf = null }
+      announce('close')
       const pos = getPos()
       idle() // KaTeX comes back immediately
       if (typeof pos !== 'number') return
@@ -179,6 +189,7 @@ function mathNodeView(isBlock) {
       ignoreMutation() { return true },
       destroy() {
         if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('focusout', onFocusOut); try { mf.remove() } catch (e) {} mf = null }
+        if (editing) { editing = false; announce('close') }
       },
       // expose for the corner-keyboard "insert & edit" flow
       _startEdit: startEdit,

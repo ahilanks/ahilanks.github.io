@@ -157,6 +157,7 @@ export function setupLinks(editor) {
   // ⌘K / Ctrl-K (main.js's shortcut handler ignores 'k', so there's no conflict).
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+      if (e.target && e.target.closest && e.target.closest('#mathAsk')) return // the equation's words bar
       e.preventDefault(); openLinkPop()
     } else if (e.key === 'Escape' && isPopOpen()) {
       closeLinkPop()

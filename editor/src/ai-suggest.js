@@ -1,15 +1,23 @@
 /* ai-suggest.js — AI writing suggestions in the margin, like Google Docs' "suggesting".
  *
- * The writer asks (toolbar pen → Proofread / Review). The model reads the selection, or
- * else the whole draft (a long Proofread in parallel parts), with the whole draft as
- * context, and returns a handful of suggestions. Nothing changes until one is accepted:
- *   edit — small fixes (a word, a phrase, at most a sentence), drawn inline as the
- *          struck-out words + the proposed ones. Accept applies it as one ⌘Z-able step.
- *   link — turn a phrase into a link to a source from the writer's notes (ai-context.js).
- *          Only URLs that literally appear in the notes are offered.
- *   note — an observation or idea: a missing step, an undefined symbol, a figure or an
- *          interactive that would explain it better. No prose is written for you;
- *          "Keep as comment" turns it into an ordinary comment.
+ * The writer asks (toolbar pen → Proofread / Review / Find links, or a question typed into
+ * Ask). The model reads the selection, or else the whole draft (a long Proofread in
+ * parallel parts), with the whole draft as context, and returns a handful of suggestions.
+ * Nothing changes until one is accepted:
+ *   edit     — small fixes (a word, a phrase, at most a sentence), drawn inline as the
+ *              struck-out words + the proposed ones. Accept applies it as one ⌘Z-able step.
+ *   link     — turn a phrase into a link: to a source in the writer's notes (ai-context.js),
+ *              copied verbatim, or to a well-known page on the web (an arXiv abstract, a
+ *              Wikipedia article), which is only offered once the local server has loaded it
+ *              and its title matches what the model said it is (/api/linkcheck).
+ *   format   — bold or italic on a few words, previewed in place.
+ *   math     — plain-text notation ("x_t", "O(n^2)") typeset as inline math.
+ *   equation — a display equation to insert after a sentence that describes one in words.
+ *   note     — an observation or idea: a missing step, an undefined symbol, a figure or an
+ *              interactive that would explain it better. No prose is written for you;
+ *              "Keep as comment" turns it into an ordinary comment.
+ * Ask answers the question in a panel (with follow-ups); anything the answer points at in
+ * the draft comes back as the same accept/dismiss suggestions.
  *
  * Suggestions are DECORATIONS in a ProseMirror plugin, never marks or nodes, so they are
  * not part of the doc: they don't save, sync, publish or enter undo history, and they
@@ -32,9 +40,10 @@ import { freshContext, setupContextUI } from './ai-context.js'
 
 const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
-  visual: 'Visual idea', interactive: 'Interactive idea', link: 'Link',
+  visual: 'Visual idea', interactive: 'Interactive idea', link: 'Link', format: 'Format', math: 'Math',
 }
-const MAX_ITEMS = { proofread: 80, review: 30 } // safety caps per run; the prompt asks for far fewer
+const MAX_ITEMS = { proofread: 80, review: 40, links: 40, ask: 30 } // safety caps per run; the prompt asks for fewer
+const LINK_LIMIT = { review: 8, links: 25, ask: 10 }
 const PROOF_BATCH_WORDS = 1200 // a long Proofread is split into parts this size, read in parallel
 const PARALLEL = 6
 const MAX_CLOSED = 30
@@ -258,33 +267,79 @@ const cleanComment = (c) => String(c || '')
 const cleanUrl = (u) => String(u || '').trim().replace(/[.,;:!?]+$/, '')
 const urlAllowed = (url, allowed) => !!url && (allowed.has(url) || allowed.has(url.replace(/\/$/, '')) || allowed.has(url + '/'))
 
+// Math the model proposes: no delimiters, and it must render in KaTeX (which draws the
+// published page) — anything else is shown as a note instead.
+const cleanTex = (t) => String(t || '').trim()
+  .replace(/^\$\$([\s\S]*)\$\$$/, '$1').replace(/^\$([\s\S]*)\$$/, '$1').trim()
+function katexOK(tex, displayMode) {
+  if (!tex || tex.length > 600) return false
+  try { katex.renderToString(tex, { ...CONFIG.katex, displayMode, throwOnError: true }); return true } catch (e) { return false }
+}
+// every character of [from, to) already has the mark (so there's nothing to suggest)
+function allMarked(doc, from, to, type) {
+  let all = true
+  doc.nodesBetween(from, to, (n) => { if (n.isText && !type.isInSet(n.marks)) all = false })
+  return all
+}
+// Where a display equation can go after the block that holds `pos` (out of a caption or
+// list paragraph if need be), or null.
+function blockSpotAfter(doc, pos) {
+  const $p = doc.resolve(pos)
+  const type = doc.type.schema.nodes.blockMath
+  for (let d = $p.depth; d >= 1; d--) {
+    const parent = $p.node(d - 1), i = $p.indexAfter(d - 1)
+    if (parent.canReplaceWith(i, i, type)) return $p.after(d)
+  }
+  return null
+}
+
 // One model suggestion → an item in the START doc's coordinates (or null to drop it).
-// `allowed` is the set of URLs that appear in the writer's notes.
+// `allowed` is the set of URLs that appear in the writer's notes; any other link is a web
+// link, checked by verifyWebLinks before it's shown.
 function toItem(sg, blocks, mode, doc, allowed) {
   const hit = locate(sg.quote, blocks, (sg.paragraph | 0) - 1)
   if (!hit) return null
   const b = hit.block
   const comment = cleanComment(sg.comment)
-  const category = CATEGORY_LABELS[sg.category] ? sg.category : 'clarity'
+  const kind = sg.kind
+  const category = kind === 'format' ? 'format' : kind === 'math' || kind === 'equation' ? 'math'
+    : CATEGORY_LABELS[sg.category] ? sg.category : 'clarity'
   const base = { id: uid(), mode, category, comment }
-  if (b.math) return comment && sg.kind === 'note' ? { ...base, kind: 'note', block: true, from: b.pos, to: b.pos + b.size } : null
+  if (b.math) return comment && kind === 'note' ? { ...base, kind: 'note', block: true, from: b.pos, to: b.pos + b.size } : null
 
   const from = b.at[hit.start].pos
   const to = b.at[hit.end - 1].end
   const note = comment ? { ...base, kind: 'note', from, to } : null
+  const text = textOf(doc, from, to)
+  const touchesAtoms = b.at.slice(hit.start, hit.end).some((c) => c.atom) // math, footnote refs
 
-  if (sg.kind === 'link') {
+  if (kind === 'link') {
     const url = cleanUrl(sg.url)
-    const linkType = doc.type.schema.marks.link
-    if (!urlAllowed(url, allowed || new Set()) || !/^https?:\/\//.test(url)) return null // never a URL the notes don't contain
-    if (b.at.slice(hit.start, hit.end).some((c) => c.atom) || doc.rangeHasMark(from, to, linkType)) return null
-    return { ...base, category: 'link', kind: 'link', from, to, text: textOf(doc, from, to), url }
+    if (!/^https?:\/\/\S+$/.test(url) || touchesAtoms || doc.rangeHasMark(from, to, doc.type.schema.marks.link)) return null
+    const source = urlAllowed(url, allowed || new Set()) ? 'notes' : 'web'
+    return { ...base, category: 'link', kind: 'link', from, to, text, url, source, title: String(sg.title || '').trim().slice(0, 300) }
   }
-  if (sg.kind !== 'edit' || !hit.unique) return note
+  if (kind === 'format') {
+    const type = (sg.format === 'bold' || sg.format === 'italic') && doc.type.schema.marks[sg.format]
+    if (!type || !hit.unique || touchesAtoms || spansSentences(text) || text.length > 160) return note
+    if (allMarked(doc, from, to, type)) return null // it already is
+    return { ...base, kind: 'format', format: sg.format, from, to, text }
+  }
+  if (kind === 'math' || kind === 'equation') {
+    const tex = cleanTex(sg.latex)
+    if (!katexOK(tex, kind === 'equation')) return note
+    if (kind === 'equation') {
+      const at = blockSpotAfter(doc, from)
+      return at == null ? note : { ...base, kind: 'equation', tex, from, to, at }
+    }
+    if (!hit.unique || touchesAtoms || spansSentences(text) || text.length > 120) return note
+    return { ...base, kind: 'math', tex, from, to, text }
+  }
+  if (kind !== 'edit' || !hit.unique) return note
 
   const orig = b.str.slice(hit.start, hit.end)
   const changes = wordHunks(orig, String(sg.replacement || ''))
-  if (!changes.length) return mode === 'review' ? note : null // an "edit" that changes nothing
+  if (!changes.length) return mode === 'proofread' ? null : note // an "edit" that changes nothing
   const hunks = []
   for (const h of changes) {
     const s0 = hit.start + h.start
@@ -297,7 +352,42 @@ function toItem(sg, blocks, mode, doc, allowed) {
   }
   const changed = hunks.reduce((n, h) => n + h.del.length + h.ins.length, 0)
   if (hunks.length > 4 || changed > 320) return note // that's a rewrite, not a fix
-  return { ...base, kind: 'edit', from, to, text: textOf(doc, from, to), hunks }
+  return { ...base, kind: 'edit', from, to, text, hunks }
+}
+
+/* Web links (not from the writer's notes) are only offered once the local server has loaded
+ * the page and its title matches what the model said it links to — a model can misremember
+ * an arXiv id, and a wrong id is usually some other paper, not a 404. */
+const TITLE_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'that', 'this', 'are', 'its', 'via', 'how', 'why',
+  'what', 'wikipedia', 'arxiv', 'home', 'page', 'official', 'site', 'pdf', 'abs', 'org', 'com', 'www', 'github'])
+const titleWords = (t) => new Set((flat(String(t || '')).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])
+  .filter((w) => w.length > 2 && !TITLE_STOP.has(w)))
+function titleMatches(claimed, actual, fallback) {
+  const a = titleWords(actual)
+  let c = titleWords(claimed)
+  if (!c.size) c = titleWords(fallback)
+  if (!a.size || !c.size) return false
+  let hit = 0
+  for (const w of c) if (a.has(w)) hit++
+  return hit >= Math.max(1, Math.ceil(c.size / 2))
+}
+async function verifyWebLinks(items, signal) {
+  const web = items.filter((it) => it.kind === 'link' && it.source === 'web')
+  if (!web.length) return items
+  const bad = new Set()
+  await Promise.all(web.map(async (it) => {
+    try {
+      const res = await fetch('/api/linkcheck?url=' + encodeURIComponent(it.url), { signal, cache: 'no-store' })
+      const j = await res.json()
+      if (!res.ok || !j.ok || !titleMatches(it.title, j.title, it.text)) { bad.add(it); return }
+      it.pageTitle = j.title
+    } catch (e) {
+      if (e.name === 'AbortError') throw e
+      bad.add(it) // server unreachable (or too old to have /api/linkcheck): never show an unchecked link
+    }
+  }))
+  if (bad.size) console.info('[suggest] dropped ' + bad.size + ' web link(s) that did not check out: ' + [...bad].map((it) => it.url + ' (“' + it.title + '”)').join(', '))
+  return items.filter((it) => !bad.has(it))
 }
 
 /* ===================================================================== plugin */
@@ -308,17 +398,21 @@ const key = new PluginKey('aiSuggestions')
 const hunkKey = (h) => h.delFrom + ':' + h.del + '→' + h.ins
 const sayKey = (it) => it.kind === 'edit' ? 'e|' + it.hunks.map(hunkKey).join('|')
   : it.kind === 'link' ? 'l|' + it.from + '|' + it.url
+  : it.kind === 'format' ? 'f|' + it.from + '|' + it.to + '|' + it.format
+  : it.kind === 'math' || it.kind === 'equation' ? 'm|' + it.from + '|' + it.tex
   : 'n|' + it.category + '|' + it.from + '|' + it.to
 let onChange = null // set by setupSuggestions: refresh cards after any state change
 
-// Carry an item through a change. Edits and links only survive while their text is untouched.
+// Carry an item through a change. Notes and equations stay while their sentence does; the
+// rest (edits, links, formatting, math) only while their text is untouched.
 function mapItem(it, mapping, doc) {
   const from = mapping.map(it.from, 1)
   const to = mapping.map(it.to, -1)
   if (to <= from) return null // its text is gone
   if (it.kind === 'note') return { ...it, from, to }
+  if (it.kind === 'equation') return { ...it, from, to, at: mapping.map(it.at, -1) }
   if (textOf(doc, from, to) !== it.text) return null
-  if (it.kind === 'link') return { ...it, from, to }
+  if (it.kind !== 'edit') return { ...it, from, to }
   const hunks = it.hunks.map((h) => {
     if (h.delTo === h.delFrom) { const p = mapping.map(h.delFrom, 1); return { ...h, delFrom: p, delTo: p } }
     return { ...h, delFrom: mapping.map(h.delFrom, 1), delTo: mapping.map(h.delTo, -1) }
@@ -336,6 +430,17 @@ function insWidget(id, h, on) {
   }
 }
 
+// the proposed math, drawn after the plain-text notation it would replace
+function mathWidget(id, tex, on) {
+  return () => {
+    const span = document.createElement('span')
+    span.className = 'sg-ins sg-math after-del' + on
+    span.dataset.sg = id
+    try { katex.render(tex, span, { ...CONFIG.katex, displayMode: false }) } catch (e) { span.textContent = tex }
+    return span
+  }
+}
+
 function buildDecorations(doc, items, active) {
   const decos = []
   for (const it of items) {
@@ -345,6 +450,11 @@ function buildDecorations(doc, items, active) {
         if (h.delTo > h.delFrom) decos.push(Decoration.inline(h.delFrom, h.delTo, { class: 'sg-del' + on, 'data-sg': it.id }))
         if (h.ins) decos.push(Decoration.widget(h.delTo, insWidget(it.id, h, on), { side: 1, key: 'sg-' + it.id + '-' + i + on, ignoreSelection: true }))
       })
+    } else if (it.kind === 'math') {
+      decos.push(Decoration.inline(it.from, it.to, { class: 'sg-del' + on, 'data-sg': it.id }))
+      decos.push(Decoration.widget(it.to, mathWidget(it.id, it.tex, on), { side: 1, key: 'sgm-' + it.id + on, ignoreSelection: true }))
+    } else if (it.kind === 'format') {
+      decos.push(Decoration.inline(it.from, it.to, { class: 'sg-fmt sg-fmt-' + it.format + on, 'data-sg': it.id }))
     } else if (it.block) {
       decos.push(Decoration.node(it.from, it.to, { class: 'sg-note-block' + on, 'data-sg': it.id }))
     } else {
@@ -418,35 +528,77 @@ export const Suggestions = Extension.create({
 })
 
 /* ===================================================================== the model */
-const SCHEMA = {
+const ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['suggestions'],
+  required: ['paragraph', 'quote', 'kind', 'category', 'comment', 'replacement', 'url', 'title', 'format', 'latex'],
   properties: {
-    suggestions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['paragraph', 'quote', 'kind', 'category', 'comment', 'replacement', 'url'],
-        properties: {
-          paragraph: { type: 'integer', description: 'The [P#] number the quote is in.' },
-          quote: { type: 'string', description: 'Text copied exactly from that paragraph.' },
-          kind: { type: 'string', enum: ['edit', 'note', 'link'] },
-          category: { type: 'string', enum: ['grammar', 'style', 'flow', 'clarity', 'visual', 'interactive', 'link'] },
-          comment: { type: 'string' },
-          replacement: { type: 'string', description: 'For an edit: what the quote becomes. Otherwise "".' },
-          url: { type: 'string', description: 'For a link: the URL, copied from the notes. Otherwise "".' },
-        },
-      },
-    },
+    paragraph: { type: 'integer', description: 'The [P#] number the quote is in.' },
+    quote: { type: 'string', description: 'Text copied exactly from that paragraph.' },
+    kind: { type: 'string', enum: ['edit', 'note', 'link', 'format', 'math', 'equation'] },
+    category: { type: 'string', enum: ['grammar', 'style', 'flow', 'clarity', 'visual', 'interactive', 'link', 'format', 'math'] },
+    comment: { type: 'string' },
+    replacement: { type: 'string', description: 'For an edit: what the quote becomes. Otherwise "".' },
+    url: { type: 'string', description: 'For a link: the URL. Otherwise "".' },
+    title: { type: 'string', description: 'For a link: the linked page’s own title. Otherwise "".' },
+    format: { type: 'string', enum: ['bold', 'italic', ''], description: 'For a format suggestion. Otherwise "".' },
+    latex: { type: 'string', description: 'For math or an equation: the LaTeX, without $. Otherwise "".' },
   },
 }
+const schemaFor = (mode) => mode === 'ask'
+  ? { type: 'object', additionalProperties: false, required: ['answer', 'suggestions'],
+      properties: { answer: { type: 'string' }, suggestions: { type: 'array', items: ITEM_SCHEMA } } }
+  : { type: 'object', additionalProperties: false, required: ['suggestions'],
+      properties: { suggestions: { type: 'array', items: ITEM_SCHEMA } } }
 
 const ANCHOR_RULES =
   '- "paragraph" is the [P#] number; "quote" is copied character-for-character from that paragraph ' +
   '(same punctuation, capitalisation and $…$ math, without the [P#] label), and is unique within it.\n' +
-  '- Never change math ($…$), footnote markers ([^n]), code or URLs.\n'
+  '- Never change math ($…$), footnote markers ([^n]), code or URLs.\n' +
+  '- Fields a kind doesn’t use are "".\n'
+
+// The writer's whole toolbox, as suggestions (Review and Ask).
+const KINDS =
+  'Kinds of suggestion (the author accepts or dismisses each one; nothing changes until they do):\n' +
+  '- "edit": a small, concrete fix. "quote" is the text to change and "replacement" what it becomes. Change a ' +
+  'word, a phrase or at most one sentence; keep the rest of the quote identical. Never rewrite several sentences.\n' +
+  '- "note": an observation or idea with NO rewritten text. Use a note whenever the fix is bigger than one ' +
+  'sentence, structural, or the author’s call. Say what the problem is and, if useful, which direction to take — do ' +
+  'not write the new prose for them. Visual and interactive ideas are always notes; quote the sentence they would illustrate.\n' +
+  '- "format": bold or italic — "format" is "bold" or "italic" and "quote" is exactly the words to format. Italic ' +
+  'for a term at the point it is defined, the title of a work, or a word that needs stress to be read right; bold ' +
+  'only for a key term being introduced. Sparingly: only where it helps a reader.\n' +
+  '- "math": notation written as plain text that should be typeset as math — a variable, symbol or formula such ' +
+  'as "x_t", "theta", "O(n^2)" or "p(y|x)". "quote" is exactly those characters; "latex" is the KaTeX LaTeX that ' +
+  'replaces them (no $). Follow the notation the draft already uses.\n' +
+  '- "equation": a display equation that would make the passage clearer, where the prose describes a formula in ' +
+  'words without showing it. "quote" is the sentence it should follow; "latex" is the equation (KaTeX; use aligned ' +
+  'for several lines, never align or equation environments). Only standard, correct formulas — never invent the ' +
+  'author’s results. At most 2.\n' +
+  '- "link": see LINKS below.\n'
+
+const LINKS =
+  '\n\nLINKS. Suggest a link where a reader would want the source or a reference: a paper, article, post, talk, ' +
+  'book, repo, dataset, model, benchmark or a concept worth looking up. Return kind "link", category "link":\n' +
+  '- "quote": the exact words in the passage that name the thing (usually 2–8 words); they become the link text.\n' +
+  '- "url": from the author’s notes (in <author_notes>, if any), copied EXACTLY — prefer these. Otherwise from the ' +
+  'web, but only a canonical URL you are certain of: an arXiv abstract page (https://arxiv.org/abs/ID, never /pdf/), ' +
+  'a DOI link (https://doi.org/…) for a published paper with no arXiv version, a Wikipedia article, or an official ' +
+  'project, docs or repo page. Never guess an id, a DOI or a path; if unsure, ' +
+  'skip it. Every web link is checked: one that doesn’t load, or whose page title doesn’t match "title", is thrown away.\n' +
+  '- "title": the linked page’s own title — the paper’s title, the Wikipedia article’s name.\n' +
+  '- "comment": what it is (e.g. "Ng et al. 1999, reward shaping"); for a link from the notes, also where it is ' +
+  'in them (e.g. "journal, Mar 3").\n' +
+  '- Link each source at most once, at its first mention in the passage, and never words that are already a link ' +
+  '([text](url) in the document).\n' +
+  '- At most {L} links.'
+
+const NOTES =
+  '\n\nTHE AUTHOR’S NOTES. The author has shared their own notes (in <author_notes>) — e.g. a research journal of ' +
+  'what they have been reading and thinking (a long journal arrives as the excerpts most relevant to the passage, ' +
+  'each under its heading — often a date). Use them to understand what the author means and is building toward ' +
+  '(a term the notes explain but the passage leaves undefined is worth a clarity note), and as the first place to ' +
+  'look for links: the notes are full of sources the author has read.'
 
 const PROMPTS = {
   proofread:
@@ -460,7 +612,6 @@ const PROMPTS = {
     '- "quote": the erroneous words plus a word or two around them, so it is unique within its paragraph.\n' +
     '- "replacement": the same text with ONLY that error fixed.\n' +
     '- "comment": names the error in a few words (e.g. "Subject–verb agreement.").\n' +
-    '- "url": "".\n' +
     ANCHOR_RULES +
     '- Return at most {N}, in passage order. If there are no errors, return an empty list.',
   review:
@@ -476,37 +627,45 @@ const PROMPTS = {
     'Never impose your taste; leave deliberate choices (first person, fragments, informal tone, rhetorical questions) alone.\n' +
     '4. Grammar: actual errors only.\n' +
     '5. Explaining better: where an idea would land far better as a VISUAL (a diagram, plot or figure — say what it ' +
-    'shows) or an INTERACTIVE element (a slider, toggle or small simulation — say what the reader changes and what ' +
-    'they see happen). Only where it would genuinely help; at most 2.\n\n' +
-    'Kinds of suggestion:\n' +
-    '- "edit": a small, concrete fix. "quote" is the text to change and "replacement" what it becomes. Change a ' +
-    'word, a phrase or at most one sentence; keep the rest of the quote identical. Never rewrite several sentences.\n' +
-    '- "note": an observation or idea with NO rewritten text ("replacement" is ""). Use a note whenever the fix is ' +
-    'bigger than one sentence, structural, or the author’s call. Say what the problem is and, if useful, which ' +
-    'direction to take — do not write the new prose for them. Visual and interactive ideas are always notes; quote ' +
-    'the sentence they would illustrate.\n' +
-    '- "link": only when the author has shared notes — see below.\n\n' +
+    'shows), an INTERACTIVE element (a slider, toggle or small simulation — say what the reader changes and what ' +
+    'they see happen), or an equation. Only where it would genuinely help; at most 2 visual/interactive ideas.\n' +
+    '6. Typesetting: notation written as plain text that should be math; a defined term or a title that should be ' +
+    'italic.\n\n' +
+    KINDS + '\n' +
     'Rules:\n' +
     '- Only suggest within the PASSAGE; the rest of the document is context (e.g. to know what is already defined).\n' +
     ANCHOR_RULES +
     '- "comment": one or two plain sentences (under ~30 words) saying what is wrong and why it matters to a reader. ' +
     'No praise, no hedging. Write any math in it as $…$.\n' +
-    '- "url" is "" except for links.\n' +
     '- Match the author’s spelling conventions and terminology.\n' +
-    '- Fewer is better: at most {N} edits and notes, most important first. If the passage is already clear and ' +
-    'correct, return an empty list — that is a good outcome.',
-  // appended to the review prompt when the writer has attached notes (ai-context.js)
+    '- Fewer is better: at most {N} suggestions besides links, most important first. If the passage is already ' +
+    'clear and correct, return an empty list — that is a good outcome.',
   links:
-    '\n\nTHE AUTHOR’S NOTES. The author has shared their own notes (in <author_notes>) — e.g. a research journal of ' +
-    'what they have been reading and thinking (a long journal arrives as the excerpts most relevant to the passage, ' +
-    'each under its heading — often a date). Use them to understand what the author means and is building toward ' +
-    '(a term the notes explain but the passage leaves undefined is worth a clarity note).\n' +
-    'Also suggest LINKS: when the passage names or clearly relies on something the notes link to — a paper, article, ' +
-    'post, talk, repo or dataset — and that phrase is not already linked, return kind "link", category "link":\n' +
-    '- "quote": the exact words in the passage that name the thing (usually 2–8 words), to become the link text.\n' +
-    '- "url": copied EXACTLY from the notes. Never guess, shorten or build a URL; if the notes have no URL for it, skip it.\n' +
-    '- "comment": what it is and where it is in the notes, e.g. "Ng et al. 1999, reward shaping — journal, Mar 3."\n' +
-    'Link each source at most once in the passage, at its first mention. At most 5 links; they don’t count toward the {N}.',
+    'You find links for a draft essay (technical writing about AI and machine learning, published as a web page). ' +
+    'Your only job is LINKS, and you are thorough: every paper, method, model, dataset, benchmark, library, person’s ' +
+    'work or technical concept named in the PASSAGE that a curious reader might want to look up deserves a link, ' +
+    'if there is a reliable URL for it. Return only kind "link" suggestions.\n\n' +
+    'Rules:\n' + ANCHOR_RULES +
+    '- If nothing in the passage needs a link, return an empty list.',
+  ask:
+    'You are a sharp editor and a knowledgeable colleague helping an author with a draft essay (technical writing ' +
+    'about AI and machine learning for curious readers, published as web pages). The author asks you a question ' +
+    'about the draft, or about the PASSAGE (their selection, or else the whole draft).\n\n' +
+    'Put your reply in "answer": answer the question directly and honestly — no preamble, no praise, no hedging. ' +
+    'Usually under 200 words; longer only if the question needs it. Plain text: short paragraphs, "- " bullet lines, ' +
+    '**bold** for emphasis, $…$ for math. To point at a place in the draft, quote a few of its words in quotation ' +
+    'marks — never a [P#] number.\n\n' +
+    'The author keeps full control and their own voice: you SUGGEST, you never rewrite. When your answer points at ' +
+    'specific places in the PASSAGE, ALSO attach them as suggestions so they appear in the margin beside the text. ' +
+    'If the author asks you to rewrite something, give direction in the answer and at most small edits (a phrase or ' +
+    'one sentence) as suggestions — never a rewritten paragraph. Requests for links, formatting or math become ' +
+    'suggestions too. If nothing needs attaching, return an empty list.\n\n' +
+    KINDS + '\n' +
+    'Rules:\n' +
+    '- Only attach suggestions within the PASSAGE.\n' +
+    ANCHOR_RULES +
+    '- "comment": one or two plain sentences saying what and why. Write any math as $…$.\n' +
+    '- At most {N} suggestions besides links.',
 }
 
 async function requestSuggestions(mode, input, signal) {
@@ -516,19 +675,27 @@ async function requestSuggestions(mode, input, signal) {
     : ''
   // stable parts first (notes, then the draft) so repeated runs hit the prompt cache. When
   // the passage IS the whole draft, the draft isn't sent twice — just its footnotes.
-  const user =
+  let user =
     notes +
     'Title: ' + (input.title || '(untitled)') + '\n' +
     (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
     (input.docText ? '\n<document>\n' + input.docText + '\n</document>\n' : '') +
-    '\nPASSAGE (' + input.where + '). Suggest only within it. Paragraphs are labelled [P#]:\n' +
-    '<passage>\n' + input.passage + '\n</passage>' +
+    '\nPASSAGE (' + input.where + '). ' + (mode === 'ask' ? 'Attach suggestions only within it.' : 'Suggest only within it.') +
+    ' Paragraphs are labelled [P#]:\n' +
+    '<passage>\n' + (input.passage || '(empty)') + '\n</passage>' +
     (input.footnotes ? '\n\nThe draft’s footnotes, for context:' + input.footnotes : '')
-  const system = (PROMPTS[mode] + (mode === 'review' && notes ? PROMPTS.links : '')).replaceAll('{N}', String(input.limit))
+  if (mode === 'ask') {
+    if (input.history && input.history.length) {
+      user += '\n\nEarlier in this conversation:\n' + input.history.map((t) => 'Author: ' + t.q + '\nYou: ' + t.a).join('\n\n')
+    }
+    user += '\n\nTHE AUTHOR’S QUESTION:\n' + input.question
+  }
+  const system = (PROMPTS[mode] + (mode !== 'proofread' ? LINKS : '') + (mode !== 'proofread' && notes ? NOTES : ''))
+    .replaceAll('{N}', String(input.limit)).replaceAll('{L}', String(LINK_LIMIT[mode] || 0))
   const base = {
     model: settings.writingModel || CONFIG.openai.writingModel,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    response_format: { type: 'json_schema', json_schema: { name: 'suggestions', strict: true, schema: SCHEMA } },
+    response_format: { type: 'json_schema', json_schema: { name: 'suggestions', strict: true, schema: schemaFor(mode) } },
   }
   // reasoning models take an effort; a 400 may mean this model doesn't — retry plainer
   const attempts = [Object.assign({ reasoning_effort: mode === 'proofread' ? 'low' : 'medium' }, base), base]
@@ -546,7 +713,7 @@ async function requestSuggestions(mode, input, signal) {
       if (msg && msg.refusal) throw new Error('The model declined: ' + msg.refusal)
       if (!msg || !msg.content) throw new Error('Empty response.')
       const parsed = JSON.parse(msg.content)
-      return Array.isArray(parsed.suggestions) ? parsed.suggestions : []
+      return { answer: typeof parsed.answer === 'string' ? parsed.answer : '', suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [] }
     }
     let errText = ''
     try { const j = await res.json(); errText = (j.error && j.error.message) || '' } catch (e) {}
@@ -564,6 +731,7 @@ const ICONS = {
 }
 
 const WIDE = '(min-width: 1300px)' // same breakpoint as the comment margin
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
 const shortUrl = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
 // a comment as HTML: plain text, with any $…$ drawn by KaTeX
@@ -573,6 +741,53 @@ function commentHTML(text) {
     if (!m) return escapeHtml(part)
     try { return katex.renderToString(m[1], { ...CONFIG.katex, displayMode: false }) } catch (e) { return escapeHtml(part) }
   }).join('')
+}
+const texHTML = (tex, displayMode) => {
+  try { return katex.renderToString(tex, { ...CONFIG.katex, displayMode }) } catch (e) { return escapeHtml(tex) }
+}
+
+// A suggestion in one line (Recently closed, the Ask panel's list of what it attached).
+function summary(it, text) {
+  const fmt = { bold: 'Bold', italic: 'Italic' }
+  switch (it.kind) {
+    case 'edit': return it.hunks.map((h) => (h.del ? h.del + ' → ' : '+ ') + (h.ins || '∅')).join(' · ')
+    case 'link': return shortUrl(it.url) + (it.pageTitle ? ' — ' + it.pageTitle : '')
+    case 'format': return fmt[it.format] + ': “' + text + '”'
+    case 'math': return '“' + text + '” → $' + it.tex + '$'
+    case 'equation': return 'Equation: $' + it.tex + '$'
+    default: return it.comment
+  }
+}
+
+// The Ask panel's answers: short paragraphs, bullet or numbered lines, **bold**, *italic*,
+// `code` and $math$ — the little Markdown the prompt allows. Everything else is text.
+function inlineMd(t) {
+  return t.split(/(\$\$[^$]+\$\$|\$[^$\n]+\$)/).map((part) => {
+    const m = part.match(/^\$\$?([^$]+)\$\$?$/)
+    if (m) return texHTML(m[1], false)
+    return escapeHtml(part)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*\w])\*([^*\n]+)\*(?![*\w])/g, '$1<em>$2</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+  }).join('')
+}
+function answerHTML(text) {
+  const out = []
+  let list = null
+  const flush = () => { if (list) out.push('<' + list.tag + '>' + list.items.join('') + '</' + list.tag + '>'); list = null }
+  for (const line of String(text || '').split('\n')) {
+    const li = line.match(/^\s*(?:([-*•])|\d+[.)])\s+(.*)$/)
+    if (li) {
+      const tag = li[1] ? 'ul' : 'ol'
+      if (!list || list.tag !== tag) { flush(); list = { tag, items: [] } }
+      list.items.push('<li>' + inlineMd(li[2]) + '</li>')
+    } else {
+      flush()
+      if (line.trim()) out.push('<p>' + inlineMd(line.trim()) + '</p>')
+    }
+  }
+  flush()
+  return out.join('')
 }
 
 /**
@@ -595,10 +810,13 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   const st = () => key.getState(editor.state)
   const find = (id) => st().items.find((it) => it.id === id)
   const dispatchMeta = (meta) => editor.view.dispatch(editor.state.tr.setMeta(key, meta).setMeta('addToHistory', false))
-  const fingerprint = (it) => {
-    const what = it.kind === 'edit' ? it.hunks.map((h) => h.del + '→' + h.ins).join('|') : it.kind === 'link' ? it.url : it.category
-    return [it.mode, it.kind, loosen(textOf(editor.state.doc, it.from, it.to)).s, what].join('|')
+  // what a suggestion says, whichever run it came from (an Ask doesn't repeat what's shown)
+  const says = (it) => {
+    const what = it.kind === 'edit' ? it.hunks.map((h) => h.del + '→' + h.ins).join('|') : it.kind === 'link' ? it.url
+      : it.kind === 'format' ? it.format : it.kind === 'math' || it.kind === 'equation' ? it.tex : it.category
+    return [it.kind, loosen(textOf(editor.state.doc, it.from, it.to)).s, what].join('|')
   }
+  const fingerprint = (it) => it.mode + '|' + says(it)
 
   function setActive(id) {
     if (st().active === id) return
@@ -611,10 +829,16 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     const it = find(id)
     if (!it || it.kind === 'note') return
     const { state } = editor
-    if (textOf(state.doc, it.from, it.to) !== it.text) { dispatchMeta({ remove: id }); return }
+    if (it.kind !== 'equation' && textOf(state.doc, it.from, it.to) !== it.text) { dispatchMeta({ remove: id }); return }
     const tr = state.tr
     if (it.kind === 'link') {
       tr.addMark(it.from, it.to, state.schema.marks.link.create({ href: it.url }))
+    } else if (it.kind === 'format') {
+      tr.addMark(it.from, it.to, state.schema.marks[it.format].create())
+    } else if (it.kind === 'math') {
+      tr.replaceWith(it.from, it.to, state.schema.nodes.inlineMath.create({ tex: it.tex }))
+    } else if (it.kind === 'equation') {
+      try { tr.insert(it.at, state.schema.nodes.blockMath.create({ tex: it.tex })) } catch (e) { dispatchMeta({ remove: id }); return }
     } else {
       // last change first, so the earlier positions still hold
       for (const h of [...it.hunks].sort((a, b) => b.delFrom - a.delFrom)) {
@@ -653,8 +877,8 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   const closedSource = {
     list: () => st().closed.map((c) => ({
       key: c.id, kind: 'ai', label: 'AI · ' + CATEGORY_LABELS[c.category], how: c.how, closedAt: c.closedAt,
-      text: c.kind === 'edit' ? c.hunks.map((h) => (h.del ? h.del + ' → ' : '+ ') + (h.ins || '∅')).join(' · ') + (c.comment ? ' — ' + c.comment : '')
-        : c.kind === 'link' ? shortUrl(c.url) + (c.comment ? ' — ' + c.comment : '') : c.comment,
+      text: c.kind === 'note' ? c.comment
+        : summary(c, c.stale ? c.text || '' : textOf(editor.state.doc, c.from, c.to)) + (c.comment ? ' — ' + c.comment : ''),
       quote: c.stale || c.block ? '' : textOf(editor.state.doc, c.from, c.to),
       canReopen: !c.stale,
     })),
@@ -674,17 +898,32 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         return del + (del && ins ? '<span class="sg-arrow">→</span>' : '') + ins
       }).join('<span class="sg-sep">·</span>') + '</div>'
     } else if (it.kind === 'link') {
-      body = '<a class="sg-url" target="_blank" rel="noopener"></a>'
+      body = '<a class="sg-url" target="_blank" rel="noopener"></a>' + (it.pageTitle ? '<div class="sg-ltitle"></div>' : '')
+    } else if (it.kind === 'format') {
+      const tag = it.format === 'bold' ? 'strong' : 'em'
+      body = '<div class="sg-diff"><' + tag + ' class="sg-i">' + escapeHtml(it.text) + '</' + tag + '></div>'
+    } else if (it.kind === 'math') {
+      body = '<div class="sg-diff"><span class="sg-d">' + escapeHtml(it.text) + '</span><span class="sg-arrow">→</span>' +
+        '<span class="sg-i">' + texHTML(it.tex, false) + '</span></div>'
+    } else if (it.kind === 'equation') {
+      body = '<div class="sg-eq">' + texHTML(it.tex, true) + '</div>'
     }
+    const acceptTitle = { link: 'Add link', format: it.format === 'bold' ? 'Make bold' : 'Make italic', math: 'Typeset as math', equation: 'Insert equation' }
     const btns = it.kind !== 'note'
-      ? '<button class="sg-btn sg-accept" type="button" title="' + (it.kind === 'link' ? 'Add link' : 'Accept') + '">' + ICONS.accept + '</button>'
+      ? '<button class="sg-btn sg-accept" type="button" title="' + (acceptTitle[it.kind] || 'Accept') + '">' + ICONS.accept + '</button>'
       : it.block ? '' : '<button class="sg-btn sg-keep" type="button" title="Keep as a comment">' + ICONS.keep + '</button>'
+    const label = it.kind === 'format' ? (it.format === 'bold' ? 'Bold' : 'Italic')
+      : it.kind === 'equation' ? 'Equation'
+      : it.kind === 'link' ? 'Link' + (it.source === 'web' ? ' · web' : ' · your notes')
+      : CATEGORY_LABELS[it.category]
     card.innerHTML =
-      '<div class="sg-head"><span class="sg-cat">' + CATEGORY_LABELS[it.category] + '</span><span class="sg-btns">' + btns +
+      '<div class="sg-head"><span class="sg-cat">' + label + '</span><span class="sg-btns">' + btns +
       '<button class="sg-btn sg-dismiss" type="button" title="Dismiss">' + ICONS.dismiss + '</button></span></div>' +
       body + (it.comment ? '<div class="sg-why">' + commentHTML(it.comment) + '</div>' : '')
     const a = card.querySelector('.sg-url')
     if (a) { a.href = it.url; a.textContent = shortUrl(it.url); a.title = it.url }
+    const lt = card.querySelector('.sg-ltitle')
+    if (lt) lt.textContent = it.pageTitle
     const on = (sel, fn) => {
       const b = card.querySelector(sel)
       if (b) b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); fn(it.id) })
@@ -707,6 +946,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
       card.classList.toggle('active', it.id === active)
     }
     btn.classList.toggle('has', items.length > 0)
+    document.querySelectorAll('#askThread .ask-ref').forEach((b) => b.classList.toggle('gone', !live.has(b.dataset.sg)))
     comments.layout()
   }
   onChange = sync
@@ -746,7 +986,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   /* ---- the caret selects the suggestion it's in ---- */
   const contains = (it, p) => it.kind === 'edit'
     ? it.hunks.some((h) => p >= h.delFrom && p <= h.delTo)
-    : !it.block && p >= it.from && p <= it.to
+    : !it.block && p >= it.from && p <= it.to // a math suggestion's widget sits at its `to`
   editor.on('selectionUpdate', () => {
     const { from, empty } = editor.state.selection
     const it = empty ? st().items.find((x) => contains(x, from)) : null
@@ -803,7 +1043,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   function pendingCard(mode) {
     const card = document.createElement('div')
     card.className = 'cmt-card sg-card sg-pending'
-    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : 'Reading…') +
+    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : 'Reading…') +
       '</span><button class="sg-stop" type="button">Stop</button>'
     card.querySelector('.sg-stop').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); stop() })
     card.addEventListener('mousedown', (e) => e.preventDefault())
@@ -812,7 +1052,10 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   }
 
   // map a position from the doc the request was made against to the doc now
-  editor.on('transaction', ({ transaction }) => { if (run && transaction.docChanged) run.maps.push(transaction.mapping) })
+  editor.on('transaction', ({ transaction }) => {
+    if (!transaction.docChanged) return
+    for (const r of [run, askRun]) if (r) r.maps.push(transaction.mapping)
+  })
 
   async function start(mode) {
     closeMenu()
@@ -834,20 +1077,21 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     layer.appendChild(run.card)
     btn.classList.add('busy')
     comments.layout()
-    if (scope.whole) toast((mode === 'proofread' ? 'Proofreading' : 'Reviewing') + ' the whole draft…')
+    if (scope.whole) toast({ proofread: 'Proofreading', review: 'Reviewing', links: 'Finding links in' }[mode] + ' the whole draft…')
 
     const thisRun = run
     try {
-      // the writer's notes (Review only): refetched first if a Google Doc has gone stale;
-      // a long journal is cut down to the excerpts relevant to this passage
+      // the writer's notes (not for Proofread): refetched first if a Google Doc has gone
+      // stale; a long journal is cut down to the excerpts relevant to this passage
       const query = scope.label + '\n' + blocks.map((b) => b.str).join('\n')
-      const notes = mode === 'review' ? await freshContext(query) : { parts: [], urls: new Set() }
+      const notes = mode !== 'proofread' ? await freshContext(query) : { parts: [], urls: new Set() }
       if (controller.signal.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' })
       const parts = batches(blocks, mode)
       const docText = documentText(state.doc, fnNum)
       const footnotes = footnotesText()
       // Review scales with length: ~1 suggestion per 300 words, between 6 and 15
-      const limit = mode === 'proofread' ? 15 : Math.max(6, Math.min(15, Math.round(countWords(blocks.map((b) => b.str).join(' ')) / 300)))
+      const limit = mode === 'proofread' ? 15 : mode === 'links' ? 0
+        : Math.max(6, Math.min(15, Math.round(countWords(blocks.map((b) => b.str).join(' ')) / 300)))
       const results = await pool(parts, (part, i) => requestSuggestions(mode, {
         title: ($('docTitle') || {}).textContent || '',
         subtitle: ($('docSubtitle') || {}).textContent || '',
@@ -862,31 +1106,39 @@ export function setupSuggestions(editor, comments, { getDocId }) {
       if (thisRun.docId !== getDocId()) return // switched drafts while it was thinking
       const failed = results.filter((r) => r.status === 'rejected')
       if (failed.length === results.length) throw failed[0].reason
+      let unplaced = 0, overtaken = 0
+      const raw = []
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return
+        for (const sg of r.value.suggestions) {
+          const it = toItem(sg, parts[i], mode, state.doc, notes.urls)
+          if (it) raw.push(it); else unplaced++
+        }
+      })
+      const checked = await verifyWebLinks(raw, controller.signal)
+      if (thisRun.docId !== getDocId()) return
       const mapping = { map: (p, assoc) => thisRun.mapPos(p, assoc) }
       const seen = new Set()
       const items = []
       // a fix the other mode already shows (Review re-finding a Proofread typo) isn't repeated
       const shown = new Set(st().items.filter((it) => it.mode !== mode && it.kind === 'edit').flatMap((it) => it.hunks.map(hunkKey)))
-      let unplaced = 0, overtaken = 0
-      results.forEach((r, i) => {
-        if (r.status !== 'fulfilled') return
-        for (const sg of r.value) {
-          if (items.length >= MAX_ITEMS[mode]) return
-          let it = toItem(sg, parts[i], mode, state.doc, notes.urls)
-          if (!it) { unplaced++; continue }
-          it = mapItem(it, mapping, editor.state.doc) // carry it over edits made while waiting
-          if (!it) { overtaken++; continue }
-          if (it.kind === 'edit') {
-            const hunks = it.hunks.filter((h) => !shown.has(hunkKey(h)))
-            if (!hunks.length) continue
-            it = { ...it, hunks }
-          }
-          const fp = fingerprint(it)
-          if (dismissed.has(fp) || seen.has(fp)) continue
-          seen.add(fp)
-          items.push(it)
+      // nor is a link another run already offers
+      const linked = new Set(st().items.filter((it) => it.mode !== mode && it.kind === 'link').map(says))
+      for (let it of checked) {
+        if (items.length >= MAX_ITEMS[mode]) break
+        it = mapItem(it, mapping, editor.state.doc) // carry it over edits made while waiting
+        if (!it) { overtaken++; continue }
+        if (it.kind === 'edit') {
+          const hunks = it.hunks.filter((h) => !shown.has(hunkKey(h)))
+          if (!hunks.length) continue
+          it = { ...it, hunks }
         }
-      })
+        if (it.kind === 'link' && linked.has(says(it))) continue
+        const fp = fingerprint(it)
+        if (dismissed.has(fp) || seen.has(fp)) continue
+        seen.add(fp)
+        items.push(it)
+      }
       if (unplaced) console.info('[suggest] ' + unplaced + ' suggestion(s) could not be placed')
       if (failed.length) console.warn('[suggest] ' + failed.length + ' part(s) failed:', failed.map((f) => f.reason && f.reason.message))
       dispatchMeta({
@@ -894,7 +1146,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         add: items,
       })
       if (!items.length && overtaken) toast('The text changed while it was reading — try again')
-      else if (!items.length) toast(mode === 'proofread' ? 'No errors found' : 'Nothing to suggest — it reads well')
+      else if (!items.length) toast({ proofread: 'No errors found', review: 'Nothing to suggest — it reads well', links: 'No links to suggest' }[mode])
       else toast(items.length + (items.length === 1 ? ' suggestion' : ' suggestions') + (wide.matches ? '' : ' — tap the marked text') +
         (failed.length ? ' (' + failed.length + ' of ' + results.length + ' parts failed — run it again for those)' : ''))
     } catch (err) {
@@ -909,6 +1161,178 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   }
   function stop() { if (run) run.controller.abort() }
 
+  /* ---- Ask: a question about the draft (or the selection), answered in a panel; anything
+     the answer points at in the text comes back as ordinary suggestions in the margin ---- */
+  const askPanel = $('askPanel')
+  const askThread = $('askThread')
+  const askInput = $('askInput')
+  let askRun = null
+  let thread = []       // this draft's conversation: { q, a } (sent back as context for follow-ups)
+  let threadDoc = null
+
+  function placeAsk() {
+    // bottom-left, in the gutter beside the text when there's room (the margin on the right
+    // is where its suggestions land); on a narrow screen, across the bottom
+    const col = $('surface').getBoundingClientRect()
+    const w = col.left >= 330 ? Math.min(440, col.left - 32) : Math.min(420, window.innerWidth - 32)
+    askPanel.style.width = w + 'px'
+  }
+  function openAsk({ focus = true } = {}) {
+    if (threadDoc !== getDocId()) clearThread()
+    askPanel.classList.remove('hidden')
+    placeAsk()
+    if (focus) askInput.focus()
+  }
+  function closeAsk() { askPanel.classList.add('hidden') }
+  function clearThread() {
+    if (askRun) askRun.controller.abort()
+    thread = []
+    threadDoc = getDocId()
+    askThread.innerHTML = '<div class="ask-empty">Ask anything about the draft — or select a passage first to ask about just that. ' +
+      'Anything the answer points at shows up in the margin to accept or dismiss.</div>'
+  }
+  window.addEventListener('resize', () => { if (!askPanel.classList.contains('hidden')) placeAsk() })
+
+  function goTo(id) {
+    const it = find(id)
+    if (!it) { toast('Already accepted or dismissed'); return }
+    comments.deactivate()
+    dispatchMeta({ active: id })
+    const at = it.kind === 'edit' ? it.hunks[0].delFrom : it.from
+    editor.chain().focus().setTextSelection(at).scrollIntoView().run()
+  }
+
+  function askEntry(q, scopeLabel) {
+    const el = document.createElement('div')
+    el.className = 'ask-entry'
+    el.innerHTML = '<div class="ask-q"></div><div class="ask-meta"></div>' +
+      '<div class="ask-a pending"><span class="sg-spin"></span><span>Thinking…</span><button class="sg-stop" type="button">Stop</button></div>'
+    el.querySelector('.ask-q').textContent = q
+    el.querySelector('.ask-meta').textContent = scopeLabel
+    el.querySelector('.sg-stop').addEventListener('click', () => { if (askRun) askRun.controller.abort() })
+    const empty = askThread.querySelector('.ask-empty')
+    if (empty) empty.remove()
+    askThread.appendChild(el)
+    askThread.scrollTop = askThread.scrollHeight
+    return el
+  }
+  function fillEntry(el, answer, items, note) {
+    const a = el.querySelector('.ask-a')
+    a.className = 'ask-a'
+    a.innerHTML = answerHTML(answer) || '<p class="ask-faint">No answer.</p>'
+    if (items.length) {
+      const refs = document.createElement('div')
+      refs.className = 'ask-refs'
+      refs.innerHTML = '<div class="ask-refs-h">In the margin</div>'
+      for (const it of items) {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'ask-ref'
+        b.dataset.sg = it.id
+        const label = it.kind === 'format' ? (it.format === 'bold' ? 'Bold' : 'Italic') : it.kind === 'equation' ? 'Equation' : CATEGORY_LABELS[it.category]
+        const text = textOf(editor.state.doc, it.from, it.to)
+        const line = it.kind === 'format' ? '“' + text + '”' : it.kind === 'equation' ? '$' + it.tex + '$' : summary(it, text)
+        b.innerHTML = '<span class="ask-ref-k">' + label + '</span><span class="ask-ref-t">' + commentHTML(line.slice(0, 160)) + '</span>'
+        b.addEventListener('click', () => goTo(it.id))
+        refs.appendChild(b)
+      }
+      a.after(refs)
+    }
+    if (note) {
+      const n = document.createElement('div')
+      n.className = 'ask-note'
+      n.textContent = note
+      el.appendChild(n)
+    }
+    askThread.scrollTop = askThread.scrollHeight
+  }
+
+  async function ask(question) {
+    question = String(question || '').trim()
+    if (!question || askRun) return
+    if (!aiSettings().apiKey) { toast('Add your OpenAI key in Settings first'); openSettings(); return }
+    openAsk({ focus: false })
+    const state = editor.state
+    const scope = scopeOf(state)
+    const fnNum = footnoteNumbers(state.doc)
+    const blocks = passageBlocks(state.doc, scope.from, scope.to, fnNum)
+    const el = askEntry(question, 'About: ' + scope.label)
+    askInput.value = ''
+    askInput.placeholder = 'Ask a follow-up…'
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    const maps = []
+    const thisRun = askRun = {
+      maps, controller, docId: getDocId(),
+      mapPos: (p, assoc) => maps.reduce((q, m) => m.map(q, assoc), p),
+    }
+    askPanel.classList.add('busy')
+    try {
+      const notes = await freshContext(question + '\n' + blocks.map((b) => b.str).join('\n'))
+      if (controller.signal.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' })
+      const docText = documentText(state.doc, fnNum)
+      const footnotes = footnotesText()
+      const res = await requestSuggestions('ask', {
+        title: ($('docTitle') || {}).textContent || '',
+        subtitle: ($('docSubtitle') || {}).textContent || '',
+        docText: scope.whole ? '' : docText + footnotes,
+        footnotes: scope.whole ? footnotes : '',
+        passage: blocks.map((b, j) => '[P' + (j + 1) + (b.kind ? ', ' + b.kind : '') + '] ' + b.str).join('\n\n'),
+        where: scope.where,
+        notes: notes.parts,
+        limit: 8,
+        question,
+        history: thread.slice(-6),
+      }, controller.signal)
+      if (thisRun.docId !== getDocId()) return // switched drafts while it was thinking
+      let unplaced = 0
+      const raw = []
+      for (const sg of res.suggestions) {
+        const it = toItem(sg, blocks, 'ask', state.doc, notes.urls)
+        if (it) raw.push(it); else unplaced++
+      }
+      const checked = await verifyWebLinks(raw, controller.signal)
+      if (thisRun.docId !== getDocId()) return
+      const mapping = { map: (p, assoc) => thisRun.mapPos(p, assoc) }
+      const showing = new Set(st().items.map(says)) // already in the margin from another run
+      const items = []
+      let overtaken = 0
+      for (let it of checked) {
+        if (items.length >= MAX_ITEMS.ask) break
+        it = mapItem(it, mapping, editor.state.doc)
+        if (!it) { overtaken++; continue }
+        const said = says(it)
+        if (dismissed.has(fingerprint(it)) || showing.has(said)) continue
+        showing.add(said)
+        items.push(it)
+      }
+      if (unplaced) console.info('[ask] ' + unplaced + ' suggestion(s) could not be placed')
+      if (items.length) dispatchMeta({ add: items })
+      thread.push({ q: question, a: res.answer })
+      fillEntry(el, res.answer, items, overtaken ? 'The text changed while it was thinking, so some of its suggestions no longer apply.' : '')
+    } catch (err) {
+      const a = el.querySelector('.ask-a')
+      a.className = 'ask-a ask-err'
+      a.textContent = err.name === 'AbortError' ? 'Stopped.' : (err.message || 'Something went wrong.')
+    } finally {
+      clearTimeout(timer)
+      if (askRun === thisRun) askRun = null
+      askPanel.classList.remove('busy')
+    }
+  }
+
+  $('askForm').addEventListener('submit', (e) => { e.preventDefault(); ask(askInput.value) })
+  askInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(askInput.value) }
+    else if (e.key === 'Escape') { e.preventDefault(); closeAsk(); editor.commands.focus() }
+  })
+  askInput.addEventListener('input', () => { askInput.style.height = 'auto'; askInput.style.height = Math.min(askInput.scrollHeight, 140) + 'px' })
+  $('askClose').addEventListener('click', closeAsk)
+  $('askClear').addEventListener('click', () => { clearThread(); askInput.placeholder = 'Ask about the draft…'; askInput.focus() })
+  // keep the editor's selection (the question's scope) when clicking around the panel
+  askPanel.addEventListener('mousedown', (e) => { if (!e.target.closest('textarea, input, a')) e.preventDefault() })
+
   /* ---- the menu ---- */
   function openMenu() {
     const scope = scopeOf(editor.state)
@@ -922,6 +1346,8 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     const w = menu.offsetWidth
     menu.style.top = (r.bottom + 6) + 'px'
     menu.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)) + 'px'
+    $('sgAskInput').value = ''
+    if (!TOUCH) $('sgAskInput').focus() // type a question straight away (the selection stays the scope)
   }
   function closeMenu() { menu.classList.add('hidden') }
 
@@ -935,14 +1361,21 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   $('sgStop').addEventListener('click', () => { stop(); closeMenu() })
   $('sgClear').addEventListener('click', () => { clearAll(); closeMenu() })
   $('sgCtxAdd').addEventListener('click', () => { closeMenu(); context.openAdd() })
+  $('sgAskForm').addEventListener('submit', (e) => {
+    e.preventDefault()
+    const q = $('sgAskInput').value
+    closeMenu()
+    if (q.trim()) ask(q); else openAsk()
+  })
   document.addEventListener('mousedown', (e) => {
     if (!menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) closeMenu()
   })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.classList.contains('hidden')) closeMenu() })
+  clearThread()
 
   // exposed for console debugging / verification
   return {
-    start, stop, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment, closedSource,
-    _internal: { locate, wordHunks, toItem, passageBlocks, scopeOf, documentText },
+    start, stop, ask, openAsk, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment, closedSource,
+    _internal: { locate, wordHunks, toItem, passageBlocks, scopeOf, documentText, verifyWebLinks, titleMatches, answerHTML },
   }
 }

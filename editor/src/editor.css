@@ -244,6 +244,18 @@ ol.fn-list { list-style: none; margin: 0; padding: 0; }
 ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.95rem; line-height: 1.5; color: var(--text); margin-bottom: 0.7rem; position: relative; border-radius: 4px; }
 /* the number jumps back to its marker in the text (footnote.js) */
 .fn-num { color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 1.2rem; cursor: pointer; user-select: none; }
+/* "Back to reading" while you're away at a note (footnote.js) — same pill as the published page */
+.fn-return {
+  position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60;
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1.05rem 0.6rem 0.9rem;
+  border: none; border-radius: 999px; background: var(--text); color: var(--bg);
+  font: 600 0.8rem/1 system-ui, -apple-system, sans-serif; letter-spacing: 0.01em; white-space: nowrap; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(39, 50, 63, 0.14), 0 6px 18px rgba(39, 50, 63, 0.2); animation: fn-return-in 0.2s ease-out;
+}
+.fn-return[hidden] { display: none; }
+.fn-return:hover { background: #1b2430; }
+@keyframes fn-return-in { from { opacity: 0; transform: translate(-50%, 0.5rem); } }
+@media (prefers-reduced-motion: reduce) { .fn-return { animation: none; } }
 .fn-num:hover { color: var(--text); }
 .fn-body { flex: 1; outline: none; }
 .fn-body p, .fn-body div { margin: 0 0 0.4rem; }
@@ -420,6 +432,29 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .sg-sep { color: var(--faint); margin: 0 0.4em; }
 
 /* menu: Context for Review */
+/* formatting / math suggestions in the text: a preview, marked like the rest */
+.doc-body .sg-fmt {
+  text-decoration: underline dashed rgba(43, 138, 110, 0.8); text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px; cursor: pointer; border-radius: 2px;
+}
+.doc-body .sg-fmt-bold { font-weight: 600; }
+.doc-body .sg-fmt-italic { font-style: italic; }
+.doc-body .sg-fmt.sg-on { background: rgba(43, 138, 110, 0.15); }
+.doc-body .sg-ins.sg-math { text-decoration: none; padding: 0 2px; }
+.doc-body .sg-ins.sg-math .katex { color: var(--sg); }
+.sg-diff .katex { font-size: 1.05em; }
+.sg-eq { overflow-x: auto; margin: 0.15rem 0 0.25rem; color: var(--sg); }
+.sg-eq .katex-display { margin: 0.3em 0; }
+.sg-ltitle { font-size: 0.78rem; color: var(--muted); font-style: italic; margin: 0.05rem 0 0.15rem; }
+
+/* Ask, at the top of the suggestions menu */
+.sg-ask { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0.1rem 0.2rem; padding: 0.15rem 0.2rem 0.15rem 0.55rem;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.sg-ask:focus-within { border-color: rgba(43, 138, 110, 0.6); }
+.sg-ask input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 0.86rem; color: var(--text); padding: 0.35rem 0; }
+.sg-ask-go, .ask-send { border: none; background: none; color: var(--faint); border-radius: 7px; padding: 2px 8px; font-size: 0.9rem; flex: none; }
+.sg-ask-go:hover, .ask-send:hover { background: rgba(43, 138, 110, 0.12); color: var(--sg); }
+
 .sg-ctx { border-top: 1px solid var(--line-soft); margin-top: 0.3rem; padding-top: 0.3rem; }
 .sg-ctx-label { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding: 0.3rem 0.6rem 0.2rem; }
 .sg-ctx-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.3rem 0.2rem 0.6rem; font-size: 0.82rem; }
@@ -553,6 +588,31 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .pop-msg.err { color: #c0392b; }
 .pop-spin { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; display: none; }
 .pop-spin.show { display: block; }
+
+/* the "describe it in words" bar under an open equation (ai-math.js) */
+.math-ask {
+  position: fixed; z-index: 90; width: min(460px, calc(100vw - 16px));
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.35rem 0.25rem 0.6rem;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  font: 400 0.85rem/1.3 "Inter", system-ui, sans-serif;
+}
+.math-ask.hidden { display: none; }
+.math-ask:focus-within { border-color: rgba(43, 138, 110, 0.55); }
+.ma-icon { width: 15px; height: 15px; flex: none; color: var(--sg); }
+.math-ask.busy .ma-icon { animation: sg-pulse 1.1s ease-in-out infinite; }
+.math-ask input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font: inherit; color: var(--text); padding: 0.3rem 0;
+}
+.math-ask input::placeholder { color: var(--faint); }
+.ma-status { font-size: 0.75rem; color: var(--muted); white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.ma-status:empty { display: none; }
+.ma-status.err { color: #c0392b; white-space: normal; }
+.ma-undo { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 7px; padding: 1px 8px; font-size: 0.75rem; flex: none; }
+.ma-undo:hover { border-color: var(--text); }
+.ma-undo[hidden] { display: none; }
+.ma-key { font-size: 0.7rem; color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; flex: none; }
+.math-ask:focus-within .ma-key, .math-ask.busy .ma-key { display: none; }
 
 .math-preview { margin-top: 0.6rem; padding: 0.5rem; text-align: center; background: var(--bg); border-radius: 8px; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
 
@@ -695,3 +755,45 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
   .source-view { margin: 1.4rem auto 4rem; padding: 0 1rem; }
   .source-view pre { padding: 1rem; font-size: 0.8rem; }
 }
+
+/* ----------------------------- ASK (ai-suggest.js) ----------------------------- */
+.ask-panel {
+  position: fixed; left: 16px; bottom: 16px; z-index: 92; width: 400px; max-width: calc(100vw - 32px);
+  max-height: min(70vh, 640px); display: flex; flex-direction: column;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  font: 400 0.86rem/1.5 "Inter", system-ui, sans-serif; color: var(--text);
+}
+.ask-panel.hidden { display: none; }
+.ask-head { display: flex; align-items: center; gap: 0.3rem; padding: 0.5rem 0.5rem 0.35rem 0.9rem; border-bottom: 1px solid var(--line-soft); }
+.ask-title { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg); flex: 1; }
+.ask-panel.busy .ask-title { animation: sg-pulse 1.1s ease-in-out infinite; }
+.ask-hbtn { border: none; background: none; color: var(--muted); border-radius: 6px; padding: 2px 7px; font-size: 0.75rem; }
+.ask-hbtn:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.ask-x { padding: 3px 5px; display: flex; }
+.ask-x svg { width: 13px; height: 13px; }
+.ask-thread { overflow-y: auto; overscroll-behavior: contain; padding: 0.4rem 0.9rem 0.2rem; flex: 1; min-height: 3rem; }
+.ask-empty { color: var(--muted); font-size: 0.8rem; padding: 0.4rem 0 0.6rem; }
+.ask-entry + .ask-entry { border-top: 1px solid var(--line-soft); margin-top: 0.4rem; padding-top: 0.5rem; }
+.ask-q { font-weight: 600; white-space: pre-wrap; word-break: break-word; }
+.ask-meta { font-size: 0.7rem; color: var(--faint); margin-bottom: 0.25rem; }
+.ask-a { word-break: break-word; }
+.ask-a p { margin: 0 0 0.45rem; }
+.ask-a ul, .ask-a ol { margin: 0 0 0.45rem; padding-left: 1.2rem; }
+.ask-a li { margin: 0.1rem 0; }
+.ask-a code { font: 0.8rem/1.4 "JetBrains Mono", ui-monospace, monospace; background: rgba(39, 50, 63, 0.06); border-radius: 4px; padding: 0 3px; }
+.ask-a.pending { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); padding: 0.2rem 0 0.5rem; }
+.ask-a.ask-err { color: #c0392b; padding-bottom: 0.4rem; }
+.ask-faint { color: var(--muted); }
+.ask-refs { margin: 0.1rem 0 0.5rem; }
+.ask-refs-h { font-size: 0.64rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); margin-bottom: 0.15rem; }
+.ask-ref { display: flex; gap: 0.45rem; width: 100%; text-align: left; border: none; background: none; border-radius: 7px; padding: 0.25rem 0.35rem; margin: 0 -0.35rem; font: inherit; font-size: 0.8rem; color: var(--text); }
+.ask-ref:hover { background: rgba(43, 138, 110, 0.1); }
+.ask-ref-k { font-size: 0.64rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sg); flex: none; padding-top: 0.15rem; min-width: 4.2rem; }
+.ask-ref-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ask-ref.gone { opacity: 0.45; }
+.ask-ref.gone .ask-ref-t { text-decoration: line-through; }
+.ask-note { font-size: 0.75rem; color: var(--muted); font-style: italic; margin-bottom: 0.4rem; }
+.ask-form { display: flex; align-items: flex-end; gap: 0.25rem; margin: 0.4rem 0.5rem 0.5rem; padding: 0.2rem 0.2rem 0.2rem 0.6rem;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.ask-form:focus-within { border-color: rgba(43, 138, 110, 0.6); }
+.ask-form textarea { flex: 1; min-width: 0; border: none; outline: none; background: transparent; resize: none; font: inherit; color: var(--text); padding: 0.3rem 0; max-height: 140px; }

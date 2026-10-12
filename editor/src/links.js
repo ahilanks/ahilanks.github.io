@@ -2,13 +2,14 @@
  *
  * StarterKit's Link mark is already enabled in main.js (autolink:true, target=_blank/
  * rel=noopener). Opening a link is main.js's handleClick — a plain click on a link opens
- * it in a new tab; hovering does nothing. This module only wires the CHROME around it:
+ * it in a new tab. This module only wires the CHROME around it:
  *
  *   • ⌘K / the toolbar #linkBtn / the bubble #bubbleLink open #linkPop near the selection,
  *     prefilled with the current href. Apply runs extendMarkRange('link').setLink({href})
  *     (href is normalised: a bare host gets https://; empty unsets). Remove unsets.
  *   • A #linkPreview chip shows the URL (as a real clickable <a target=_blank>) whenever the
- *     CARET is inside a link, with an Edit button back into the popover. Not on hover.
+ *     CARET is inside a link, or the pointer has rested on one for a second, with an Edit
+ *     button back into the popover.
  *   • Footnote bodies are raw contenteditables outside the doc, so the same popover + chip
  *     run in a "footnote mode" (fnCtx) whenever a footnote body owns the caret: the edits
  *     go through footnote.js's execCommand helpers instead of TipTap commands.
@@ -197,9 +198,12 @@ export function setupLinks(editor) {
     return anchorFrom(node)
   }
 
-  function showPreview(a) {
+  // hover: `hoverShown` is the link the chip is showing because the pointer rested on it
+  let hoverShown = null
+  function showPreview(a, { hover = false } = {}) {
     clearTimeout(lpHideTimer)
     lpAnchor = a
+    hoverShown = hover ? a : null
     const href = a.getAttribute('href') || ''
     linkPreviewUrl.textContent = href.length > 60 ? href.slice(0, 57) + '…' : href
     linkPreviewUrl.setAttribute('href', href)
@@ -208,29 +212,38 @@ export function setupLinks(editor) {
   }
   function positionPreview(a) {
     const rect = a.getBoundingClientRect() // chip CSS is translate(-50%,-100%): sits centered, above
-    linkPreview.style.left = rect.left + rect.width / 2 + 'px'
+    const half = (linkPreview.offsetWidth || 0) / 2 // kept on screen near either edge
+    linkPreview.style.left = Math.max(half + 8, Math.min(rect.left + rect.width / 2, window.innerWidth - half - 8)) + 'px'
     linkPreview.style.top = rect.top - 8 + 'px'
   }
+  // the link the caret is in (article or footnote), if any
+  const caretAnchor = () => anchorAtSelection() || footnoteAnchorAtSelection()
   function hidePreview() {
     clearTimeout(lpHideTimer)
-    // small delay so the mouse can travel from the link to the chip to click Edit
-    lpHideTimer = setTimeout(() => { linkPreview.classList.remove('show'); lpAnchor = null }, 220)
+    // small delay so the mouse can travel from the link to the chip to click Edit; then back
+    // to the caret's link if it's in one (a hover chip only borrows the spot), else gone
+    lpHideTimer = setTimeout(() => {
+      const a = caretAnchor()
+      if (a) { showPreview(a); return }
+      linkPreview.classList.remove('show'); lpAnchor = null; hoverShown = null
+    }, 220)
   }
   function hidePreviewNow() {
     clearTimeout(lpHideTimer)
+    cancelDwell()
     linkPreview.classList.remove('show')
     lpAnchor = null
+    hoverShown = null
   }
 
-  // caret inside a link → show; caret left the link → hide.
-  // Hover deliberately does NOT show the chip: a click opens the link (main.js's
-  // handleClick), so pointing at one has no side effect at all. The chip is the *editing*
-  // affordance — it appears once the caret is actually inside the link (modifier-click,
-  // arrow keys, or a drag-selection), and its Edit button opens the URL popover.
+  // caret inside a link → show; caret left the link → hide (a chip you're hovering stays).
+  // A click opens the link (main.js's handleClick), so the chip is how you edit one: it
+  // appears once the caret is inside the link (modifier-click, arrow keys, a drag-selection)
+  // or after the pointer rests on it (below), and its Edit button opens the URL popover.
   editor.on('selectionUpdate', () => {
     const a = anchorAtSelection()
     if (a) showPreview(a)
-    else if (lpAnchor) hidePreview()
+    else if (lpAnchor && lpAnchor !== hoverShown) hidePreview()
   })
   // Same for the footnote bodies, which ProseMirror knows nothing about: follow the DOM
   // selection. Only ever hides a chip it showed itself (a footnote link's), never the
@@ -238,8 +251,48 @@ export function setupLinks(editor) {
   document.addEventListener('selectionchange', () => {
     const a = footnoteAnchorAtSelection()
     if (a) showPreview(a)
-    else if (lpAnchor && inFootnote(lpAnchor)) hidePreview()
+    else if (lpAnchor && inFootnote(lpAnchor) && lpAnchor !== hoverShown) hidePreview()
   })
+
+  // Rest the pointer on a link (article or footnote) for a second → the chip. Just passing
+  // over one, clicking, typing or scrolling never shows it.
+  const HOVER_MS = 1000
+  let dwellTimer = null
+  let dwellAnchor = null
+  const linkAt = (t) => {
+    const a = t && t.closest && t.closest('a[href]')
+    return a && (editor.view.dom.contains(a) || inFootnote(a)) ? a : null
+  }
+  function cancelDwell() { clearTimeout(dwellTimer); dwellTimer = null; dwellAnchor = null }
+  function onLinkOver(e) {
+    const a = linkAt(e.target)
+    if (!a || a === dwellAnchor) return
+    if (a === lpAnchor && linkPreview.classList.contains('show')) {
+      // back on the link its chip is showing for (e.g. from the chip): keep it up
+      clearTimeout(lpHideTimer)
+      if (a !== caretAnchor()) hoverShown = a
+      return
+    }
+    cancelDwell()
+    dwellAnchor = a
+    dwellTimer = setTimeout(() => {
+      dwellTimer = null; dwellAnchor = null
+      if (a.isConnected && !isPopOpen()) showPreview(a, { hover: true })
+    }, HOVER_MS)
+  }
+  function onLinkOut(e) {
+    const a = linkAt(e.target)
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return // still inside the link
+    if (a === dwellAnchor) cancelDwell()
+    if (a === hoverShown) hidePreview()
+  }
+  for (const el of [editor.view.dom, $('fnList')]) {
+    if (!el) continue
+    el.addEventListener('mouseover', onLinkOver)
+    el.addEventListener('mouseout', onLinkOut)
+  }
+  document.addEventListener('mousedown', cancelDwell, true)
+  document.addEventListener('keydown', cancelDwell, true)
 
   // keep the chip alive while the pointer is on it (so Edit stays clickable)
   linkPreview.addEventListener('mouseenter', () => clearTimeout(lpHideTimer))
@@ -269,6 +322,7 @@ export function setupLinks(editor) {
 
   // Anchored-once popover/chip drift on scroll: close the editor, re-anchor the chip.
   $('scrollArea')?.addEventListener('scroll', () => {
+    cancelDwell()
     if (isPopOpen()) closeLinkPop()
     if (lpAnchor && linkPreview.classList.contains('show')) positionPreview(lpAnchor)
   }, { passive: true })

@@ -127,16 +127,39 @@
         }
       }
 
-      /* Projects Section */
-      .projects-section {
+      /* Research / Projects Section */
+      .work-section {
         max-width: 820px; /* match container width for aligned left edges */
         margin: 1rem auto 4rem;
       }
 
-      .projects-section h2 {
+      /* Section headings double as tabs: the open one is dark, the other faded */
+      .tabs {
+        display: flex;
+        gap: 1.75rem;
+        margin: 1.66rem 0 1.1rem;
+      }
+
+      .tab {
+        font: inherit;
         font-size: 2rem; /* slightly smaller than main header */
-        margin-bottom: 1.1rem;
         font-weight: 600;
+        color: var(--text-color);
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.3;
+        transition: opacity 0.2s;
+      }
+
+      .tab:hover {
+        opacity: 0.6;
+      }
+
+      .tab[aria-selected="true"] {
+        opacity: 1;
+        cursor: default;
       }
 
       .project-item {
@@ -219,11 +242,6 @@
         }
       }
 
-      /* Extra space below the section subtitle */
-      .projects-section > p {
-        margin: 0 0 1.5rem; /* increase space before first project item */
-      }
-
       /* Hover enlarge effect for project images only */
       .project-media {
         cursor: pointer;
@@ -271,8 +289,8 @@
       <section>
         <h1>Ahilan Karuppusami</h1>
         <p>
-        I'm a third year undergraduate at UC Berkeley. I'm interested
-        in making LLMs cheaper and more personalized through routing, persistent-memory, and cross-model caching. <br>
+        I am a fourth year undergraduate at UC Berkeley. I'm interested
+        in dynamics models, intrinsic learning signals, and plastic online RL. <br>
         <br>
         I enjoy playing badminton and <a href="writings.html">writing</a>.
         </p>
@@ -301,44 +319,62 @@
       />
     </main>
 
-    <!-- Projects Section -->
-    <section class="projects-section">
-      <h2>projects</h2>
-
-      <div class="project-item">
-        <div>
-          <div class="project-header">
-            <h3>Orchestrator AI</h3>
-            <p class="project-date">May 2025</p>
-          </div>
-          <p>Routes to the best and cheapest LLM based on each individual query. 50-90% cheaper than best model with 2-3% quality loss.</p>
-          <a href="https://orchestrator.live" target="_blank" class="project-link">Link</a>
-        </div>
-        <img src="media/orchestrator.png" alt="Project 1 media" class="project-media" />
+    <!-- Research / Projects Section (tabs; research is open by default) -->
+    <section class="work-section">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-research" aria-controls="panel-research" aria-selected="true">research</button>
+        <button class="tab" role="tab" id="tab-projects" aria-controls="panel-projects" aria-selected="false" tabindex="-1">projects</button>
       </div>
 
-      <div class="project-item">
-        <div>
-          <div class="project-header">
-            <h3>Introspect</h3>
-            <p class="project-date">June 2025</p>
+      <div role="tabpanel" id="panel-research" aria-labelledby="tab-research">
+        <div class="project-item">
+          <div>
+            <div class="project-header">
+              <h3>Learning from Intrinsic Signals</h3>
+              <p class="project-date">work in progress</p>
+            </div>
+            <p>Investigating a tabula rasa dynamics model that learns through exploratory signals like learning progress, RND, and empowerment.</p>
+            <a href="https://github.com/ahilanks/curious-robot" target="_blank" rel="noopener noreferrer" class="project-link">GitHub</a>
           </div>
-          <p>A way to visualize GPT/Claude conversations in interactive 3D space. Built with <a href="https://www.linkedin.com/in/devpatelio/" target="_blank" rel="noopener noreferrer">Dev</a> and <a href="https://www.linkedin.com/in/neel-gajare/" target="_blank" rel="noopener noreferrer">Neel</a>.</p>
-          <a href="https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B" target="_blank" class="project-link">Demo</a>
         </div>
-        <img src="media/introspect.png" alt="Project 2 media" class="project-media" />
       </div>
 
-      <div class="project-item">
-        <div>
-          <div class="project-header">
-            <h3>Oski Eats</h3>
-            <p class="project-date">November 2024</p>
+      <div role="tabpanel" id="panel-projects" aria-labelledby="tab-projects" hidden>
+        <div class="project-item">
+          <div>
+            <div class="project-header">
+              <h3>Orchestrator AI</h3>
+              <p class="project-date">May 2025</p>
+            </div>
+            <p>Routes to the best and cheapest LLM based on each individual query. 50-90% cheaper than best model with 2-3% quality loss.</p>
+            <a href="https://orchestrator.live" target="_blank" class="project-link">Link</a>
           </div>
-          <p>An iOS app for Berkeley students. 3k daily users. 1.5M+ total uses.</p>
-          <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
+          <img src="media/orchestrator.png" alt="Project 1 media" class="project-media" />
         </div>
-        <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
+
+        <div class="project-item">
+          <div>
+            <div class="project-header">
+              <h3>Introspect</h3>
+              <p class="project-date">June 2025</p>
+            </div>
+            <p>A way to visualize GPT/Claude conversations in interactive 3D space. Built with <a href="https://www.linkedin.com/in/devpatelio/" target="_blank" rel="noopener noreferrer">Dev</a> and <a href="https://www.linkedin.com/in/neel-gajare/" target="_blank" rel="noopener noreferrer">Neel</a>.</p>
+            <a href="https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B" target="_blank" class="project-link">Demo</a>
+          </div>
+          <img src="media/introspect.png" alt="Project 2 media" class="project-media" />
+        </div>
+
+        <div class="project-item">
+          <div>
+            <div class="project-header">
+              <h3>Oski Eats</h3>
+              <p class="project-date">November 2024</p>
+            </div>
+            <p>An iOS app for Berkeley students. 3k daily users. 1.5M+ total uses.</p>
+            <a href="https://apps.apple.com/us/app/oski-eats/id6741076699" target="_blank" class="project-link">Link</a>
+          </div>
+          <img src="media/oski2.png" alt="Project 2 media" class="project-media" />
+        </div>
       </div>
 
     </section>
@@ -350,6 +386,31 @@
     </div>
 
     <script>
+      // Research / projects tabs. #projects in the URL opens the projects tab.
+      (function () {
+        const tabs = [...document.querySelectorAll('.tab')];
+        function select(tab) {
+          tabs.forEach((t) => {
+            const on = t === tab;
+            t.setAttribute('aria-selected', on);
+            t.tabIndex = on ? 0 : -1;
+            document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+          });
+          const hash = tab.id === 'tab-projects' ? '#projects' : '';
+          history.replaceState(null, '', location.pathname + location.search + hash);
+        }
+        tabs.forEach((tab, i) => {
+          tab.addEventListener('click', () => select(tab));
+          tab.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+            select(next);
+            next.focus();
+          });
+        });
+        if (location.hash === '#projects') select(tabs[1]);
+      })();
+
       (function () {
         const modal = document.getElementById('img-modal');
         const modalImg = document.getElementById('img-modal-content');

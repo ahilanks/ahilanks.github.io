@@ -57,6 +57,9 @@
         <button class="tb-btn" id="imageBtn" title="Insert image">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
         </button>
+        <button class="tb-btn" id="gifBtn" title="Insert GIF — a link (Giphy, Tenor, .gif) or a file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><text x="12" y="15.2" font-size="7.2" font-weight="700" font-family="Inter, system-ui, sans-serif" text-anchor="middle" fill="currentColor" stroke="none">GIF</text></svg>
+        </button>
         <button class="tb-btn" id="videoBtn" title="Upload video">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 9l6-3v12l-6-3"/></svg>
         </button>
@@ -169,6 +172,15 @@
       <div class="row">
         <button class="pop-btn ghost grow" id="linkRemove">Remove</button>
         <button class="pop-btn grow" id="linkApply">Apply</button>
+      </div>
+    </div>
+
+    <div class="popover hidden" id="gifPop">
+      <label>GIF link — Giphy, Tenor, or a .gif address</label>
+      <input type="text" id="gifInput" placeholder="https://giphy.com/gifs/…" autocomplete="off" spellcheck="false" />
+      <div class="row">
+        <button class="pop-btn ghost grow" id="gifUpload">Upload a file…</button>
+        <button class="pop-btn grow" id="gifInsert">Insert</button>
       </div>
     </div>
 
@@ -346,6 +358,7 @@
     </button>
 
     <input type="file" id="imageFileInput" accept="image/*" hidden />
+    <input type="file" id="gifFileInput" accept="image/gif,image/webp,image/png" hidden />
     <input type="file" id="videoFileInput" accept="video/*" hidden />
     <div class="toast" id="toast"></div>
 

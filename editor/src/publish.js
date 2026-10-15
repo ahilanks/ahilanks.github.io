@@ -70,6 +70,12 @@ function dataUrlToBlob(dataUrl) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
   return new Blob([arr], { type: mime })
 }
+const DRAFT_MEDIA = '/drafts/media/'
+async function fetchDraftMedia(src) {
+  const r = await fetch(src, { cache: 'no-store' })
+  if (!r.ok) throw new Error('Missing image ' + src.split('/').pop() + ' — publish stopped')
+  return r.blob()
+}
 const utf8 = (s) => new TextEncoder().encode(s)
 async function sha256Hex(bytes) {
   const buf = await crypto.subtle.digest('SHA-256', bytes)
@@ -219,12 +225,19 @@ function bodyToPublishHtml(clone) {
 // Rewrite every data-URI <img> under `root` to <mediaPrefix><prefix>-<hash12>.<ext>, pushing
 // the bytes onto `files`. Names carry a content hash so a re-publish never overwrites an
 // image an older frozen version still references (and identical images are written once).
+// Images the editor stored as files on the local server (GIFs: figures.js → /api/gif) are
+// copied out the same way.
 async function extractDataImages(root, prefix, files, mediaPrefix) {
   for (const img of Array.from(root.querySelectorAll('img'))) {
     const src = img.getAttribute('src') || ''
-    if (!src.startsWith('data:')) continue
-    const ext = (src.substring(5, src.indexOf(';')).split('/')[1] || 'png').replace('jpeg', 'jpg')
-    const blob = dataUrlToBlob(src)
+    let ext, blob
+    if (src.startsWith('data:')) {
+      ext = (src.substring(5, src.indexOf(';')).split('/')[1] || 'png').replace('jpeg', 'jpg')
+      blob = dataUrlToBlob(src)
+    } else if (src.startsWith(DRAFT_MEDIA)) {
+      ext = src.split('.').pop().toLowerCase()
+      blob = await fetchDraftMedia(src)
+    } else continue
     const hash = (await sha256Hex(await blob.arrayBuffer())).slice(0, 12)
     const name = prefix + '-' + hash + '.' + ext
     if (!files.some((f) => f.name === name)) files.push({ name, blob })
@@ -920,6 +933,11 @@ export function setupPublish({ editor, currentSnapshot }) {
       return 'media/' + name
     }
     const p = pendingThumb.path || ''
+    if (p.startsWith(DRAFT_MEDIA)) {           // a GIF stored on the local server
+      const name = slug + '-thumb.' + p.split('.').pop().toLowerCase()
+      await sink.add('media/' + name, await fetchDraftMedia(p))
+      return 'media/' + name
+    }
     if (/^https?:/i.test(p)) return p
     if (p.startsWith('media/')) return 'writings/' + p        // article-relative → index-relative
     if (p.startsWith('../media/')) return 'writings/' + p.slice(3)

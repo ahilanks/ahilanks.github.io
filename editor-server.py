@@ -217,6 +217,8 @@ def externalize_media(draft_id, body):
             return f"\n\n▶ video: `media/{draft_id}/{fname}` (kept local-only — durable on disk, not in this repo)\n\n"
         return "\n\n▶ video (local-only)\n\n"
 
+    body = body.replace('src="/drafts/media/', 'src="media/')  # stored GIFs (save_gif), .md-relative
+
     body = re.sub(r'<figure[^>]*data-vid="([A-Za-z0-9_\-]+)"[^>]*>.*?</figure>', vid_sub, body, flags=re.S)
     return body, used
 
@@ -818,14 +820,7 @@ def check_link(url):
     if not _public_host(p.hostname):
         return 400, {"ok": False, "error": "not a public host"}
 
-    class _PublicRedirects(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            host = urlparse(newurl).hostname
-            if not host or not _public_host(host):
-                raise urllib.error.URLError("redirects to a non-public host")
-            return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-    opener = urllib.request.build_opener(_PublicRedirects)
+    opener = _public_opener()
     req = urllib.request.Request(url, headers={
         "User-Agent": LINKCHECK_UA,
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
@@ -855,6 +850,119 @@ def check_link(url):
             title = m.group(1) if m else ""
         title = re.sub(r"\s+", " ", htmlmod.unescape(title)).strip()[:300]
     return 200, {"ok": True, "status": status, "title": title, "url": final, "type": ctype}
+
+
+GIF_MAX_BYTES = 40 * 1024 * 1024
+GIPHY_PAGE_RE = re.compile(r"^https?://(?:www\.)?giphy\.com/(?:gifs|stickers|embed)/(?:[^/?#]*-)?([A-Za-z0-9]+)/?(?:[?#].*)?$")
+GIPHY_MEDIA_RE = re.compile(r"^https?://(?:media\d*|i)\.giphy\.com/(?:media/(?:v1\.[^/]+/)?)?([A-Za-z0-9]+)(?:/[^/?#]*|\.\w+)?(?:[?#].*)?$")
+META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
+
+
+def save_gif(draft_id, raw, mime):
+    """Store GIF (or other image) bytes under drafts/media/<draft>/gif-<hash>.<ext> and return the
+    editor src. GIFs live as files, not inline data-URIs: a few MB of base64 in the draft would
+    overflow the browser's ~5 MB localStorage and silently stop saves. The gif- prefix keeps
+    prune_media (which only sweeps bare-hash names extracted from data-URIs) off them."""
+    ext = MIME_EXT.get(mime, "")
+    if not ext or ext == "svg":
+        return None
+    fname = "gif-%s.%s" % (hashlib.sha1(raw).hexdigest()[:12], ext)
+    d = media_dir(draft_id)
+    os.makedirs(d, exist_ok=True)
+    fp = os.path.join(d, fname)
+    if not os.path.exists(fp):
+        with open(fp + ".tmp", "wb") as f:
+            f.write(raw)
+        os.replace(fp + ".tmp", fp)
+    return "/drafts/media/%s/%s" % (draft_id, fname)
+
+
+def _sniff_image(raw):
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if raw[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp"
+    return ""
+
+
+def _public_opener():
+    import urllib.request
+    import urllib.error
+
+    class _PublicRedirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            host = urlparse(newurl).hostname
+            if not host or not _public_host(host):
+                raise urllib.error.URLError("redirects to a non-public host")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    return urllib.request.build_opener(_PublicRedirects)
+
+
+def _gif_from_page(text, base):
+    """A GIF page (Tenor, Imgur, Reddit...) → the animated image it's about, from its meta tags."""
+    from urllib.parse import urljoin
+    urls = []
+    for m in META_TAG_RE.finditer(text):
+        c = re.search(r"""content\s*=\s*(?:"([^"]*)"|'([^']*)')""", m.group(0), re.I)
+        if c:
+            u = htmlmod.unescape((c.group(1) or c.group(2) or "").strip())
+            if re.match(r"^(https?:)?//", u):
+                urls.append(urljoin(base, u))
+    gifs = [u for u in urls if re.search(r"\.gif(?:[?#]|$)", u, re.I)]
+    if gifs:
+        return gifs[0]
+    return _meta_content(text, "og:image") or _meta_content(text, "twitter:image")
+
+
+def fetch_gif(draft_id, url):
+    """Download the GIF a link points at (a .gif URL, or a Giphy/Tenor/etc. page) and store it
+    with save_gif. → (status, {src, bytes} | {error})"""
+    import urllib.request
+    import urllib.error
+    url = (url or "").strip()
+    m = GIPHY_PAGE_RE.match(url) or GIPHY_MEDIA_RE.match(url)
+    if m:  # any Giphy link → the canonical animated GIF
+        url = "https://i.giphy.com/media/%s/giphy.gif" % m.group(1)
+    opener = _public_opener()
+    for _hop in range(2):  # the link itself, then (if it was a page) the image the page names
+        p = urlparse(url)
+        if p.scheme not in ("http", "https") or not p.hostname:
+            return 400, {"error": "That isn't a web link."}
+        if not _public_host(p.hostname):
+            return 400, {"error": "That link isn't on the public web."}
+        req = urllib.request.Request(url, headers={
+            "User-Agent": LINKCHECK_UA,
+            "Accept": "image/gif,image/*;q=0.9,*/*;q=0.5",  # no text/html: Tenor then serves a viewer page, not the .gif
+        })
+        try:
+            with opener.open(req, timeout=20) as resp:
+                final = resp.geturl()
+                ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                raw = resp.read(GIF_MAX_BYTES + 1)
+        except urllib.error.HTTPError as e:
+            return 502, {"error": "The site answered %d." % e.code}
+        except Exception as e:
+            return 502, {"error": "Couldn't fetch it: %s" % str(e)[:160]}
+        if len(raw) > GIF_MAX_BYTES:
+            return 413, {"error": "That GIF is over 40 MB."}
+        mime = _sniff_image(raw) or (ctype if ctype.startswith("image/") else "")
+        if mime:
+            src = save_gif(draft_id, raw, mime)
+            if not src:
+                return 415, {"error": "That image type isn't supported."}
+            return 200, {"src": src, "bytes": len(raw), "type": mime}
+        if "html" not in ctype and not raw.lstrip()[:1] == b"<":
+            return 415, {"error": "That link isn't an image (it's %s)." % (ctype or "unknown")}
+        nxt = _gif_from_page(raw.decode("utf-8", "replace"), final)
+        if not nxt:
+            break
+        url = nxt
+    return 415, {"error": "Couldn't find a GIF on that page — try copying the GIF's own address."}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -1002,6 +1110,24 @@ class Handler(SimpleHTTPRequestHandler):
             changed = upgrade_proofs("manual")
             pending = provenance.pending_count() if provenance else 0
             return self._send_json({"ok": True, "changed": {k: [v["n"] for v in vs] for k, vs in changed.items()}, "pending": pending})
+        if path == "/api/gif":           # a GIF for the draft: raw bytes (upload) or ?url= (fetch)
+            q = self._query()
+            draft = (q.get("draft") or [""])[0]
+            if not SAFE_ID_RE.match(draft):
+                return self._send_json({"error": "bad draft id"}, 400)
+            url = (q.get("url") or [""])[0]
+            if url:
+                code, payload = fetch_gif(draft, url)
+                return self._send_json(payload, code)
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length or length > GIF_MAX_BYTES:
+                return self._send_json({"error": "That GIF is empty or over 40 MB."}, 413)
+            raw = self.rfile.read(length)
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            src = save_gif(draft, raw, _sniff_image(raw) or ctype)
+            if not src:
+                return self._send_json({"error": "That file isn't a supported image."}, 415)
+            return self._send_json({"src": src, "bytes": len(raw)})
         if path == "/api/media":         # editor uploads a video blob for backup
             q = self._query()
             draft = (q.get("draft") or [""])[0]

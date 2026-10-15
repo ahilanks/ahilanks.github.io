@@ -423,7 +423,7 @@ window.__suggest = setupSuggestions(editor, comments, { getDocId })
 window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean))
 
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
-setupFigures(editor)
+setupFigures(editor, { getDocId })
 
 // Links: ⌘K / toolbar / bubble link popover + hover URL preview chip.
 setupLinks(editor)

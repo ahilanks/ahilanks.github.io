@@ -140,6 +140,8 @@ function figureNodeView() {
       if (isVideo || !editor.isEditable) return
       const currentSrc = node.attrs.src
       if (!currentSrc) return
+      // cropping redraws through a canvas, which keeps only the first frame
+      if (/^data:image\/gif|\.gif(?:[?#]|$)/i.test(currentSrc)) { toast("GIFs can't be cropped — it would stop the animation"); return }
 
       let box = { x: 0, y: 0, w: 0, h: 0 }, drag = null
 

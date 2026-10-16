@@ -12,7 +12,7 @@
  * returns. The same parking covers cut/paste of commented text and deleting it.
  *
  * Resolved comments are also kept — with the words they were on — in the draft's
- * `closedComments` field (the 30 most recent), listed under "Recently closed" (closed.js)
+ * `closedComments` field (the 500 most recent), listed under History (closed.js)
  * where Reopen finds those words again and re-attaches the comment.
  *
  * Comments never reach a published page: publish.js unwraps the anchor spans.
@@ -77,7 +77,7 @@ export const CommentMark = Mark.create({
 /* ------------------------------------------------------------------- setup */
 const WIDE = '(min-width: 1300px)' // room for a 224px card beside the 820px column
 const GAP = 8
-const MAX_CLOSED = 30
+const MAX_CLOSED = 500 // resolved comments kept with the draft (the History list shows them all)
 const ATOM = '\uFFFC' // how an inline atom (math, footnote ref) reads in a comment's quoted words
 
 // The doc's text as one string (blocks joined by newlines, atoms as ATOM) with each
@@ -114,7 +114,7 @@ export function setupComments(editor, scheduleSave) {
   const surface = $('surface')
   const btn = $('commentBtn')
   if (!layer || !surface) {
-    return { add() {}, addAt() {}, data: () => ({}), closedData: () => [], load() {}, addSource() {}, layout() {}, deactivate() {}, closedSource: { list: () => [], reopen() {} } }
+    return { add() {}, addAt() {}, data: () => ({}), closedData: () => [], load() {}, addSource() {}, layout() {}, deactivate() {}, closedSource: { list: () => [], reopen() {} }, openList: () => [], show() {} }
   }
 
   let store = {}            // id -> { text, created }   (saved with the draft)
@@ -384,6 +384,38 @@ export function setupComments(editor, scheduleSave) {
     reopen: (key) => reopen(key) || 'Its words are gone — select the text to attach it to, then Reopen.',
   }
 
+  // The open comments with the words they're on, in document order — for History and as
+  // context for the AI (the writer's own notes to self: "expand this", "TODO: figure").
+  function openList() {
+    const spans = new Map() // id -> { from, to }
+    const type = commentType()
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isInline) return
+      node.marks.forEach((m) => {
+        if (m.type !== type) return
+        const s = spans.get(m.attrs.id)
+        if (s) s.to = pos + node.nodeSize
+        else spans.set(m.attrs.id, { from: pos, to: pos + node.nodeSize })
+      })
+    })
+    const out = []
+    for (const [id, { from, to }] of spans) {
+      const body = store[id]
+      if (!body || !body.text.trim()) continue
+      out.push({ id, text: body.text, created: body.created, from, quote: editor.state.doc.textBetween(from, to, '\n', ATOM).replaceAll(ATOM, '…') })
+    }
+    return out
+  }
+  // jump to an open comment and open its card
+  function show(id) {
+    const c = openList().find((x) => x.id === id)
+    if (!c) return false
+    editor.chain().focus().setTextSelection(c.from + 1).scrollIntoView().run()
+    setActive(id)
+    layout()
+    return true
+  }
+
   // the draft's `closedComments` field
   function closedData() {
     return closed.map((c) => ({ id: c.id, text: c.text, created: c.created, closedAt: c.closedAt, quote: c.quote, pos: c.pos }))
@@ -438,7 +470,7 @@ export function setupComments(editor, scheduleSave) {
   function addSource(src) { sources.push(src); layoutSoon() }
 
   return {
-    add, addAt, data, closedData, load, addSource, layer, closedSource,
+    add, addAt, data, closedData, load, addSource, layer, closedSource, openList, show,
     layout: layoutSoon,               // also exposed for console debugging
     deactivate: () => setActive(null),
   }

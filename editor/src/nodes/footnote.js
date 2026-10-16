@@ -538,15 +538,100 @@ export function setupFootnotes(editor, onFootnoteEdit) {
   }
   // click a ref → its body, centred on screen, with the way back remembered
   setupTrip(editor)
+  const peek = setupPeek(editor)
   editor.view.dom.addEventListener('click', (e) => {
     const ref = e.target.closest && e.target.closest('.fn-ref')
     if (!ref) return
+    peek.hide()
     startTrip(ref.dataset.fn)
     revealFootnote(ref.dataset.fn)
   })
   $('footnoteBtn').addEventListener('click', () => insertFootnote(editor))
   $('bubbleFootnote').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); insertFootnote(editor) })
   reconcile()
+}
+
+/* --------------------------------------------------------- hover peek */
+// Hovering a ref shows its note, read-only, in a small card beside it — the same card the
+// published page has (publish.js fnPeek). It stays while the pointer is on the ref or the
+// card (a short grace covers the gap, so its links can be clicked) and goes when it leaves
+// both. Mouse/trackpad only; a click still makes the round trip to the note to edit it.
+function setupPeek(editor) {
+  const none = { hide() {} }
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return none
+  const card = document.createElement('div')
+  card.className = 'fn-peek'
+  card.id = 'fnPeek'
+  card.setAttribute('role', 'tooltip')
+  card.hidden = true
+  document.body.appendChild(card)
+  let ref = null
+  let openT = 0, closeT = 0
+  const refOf = (el) => (el && el.closest ? el.closest('.ProseMirror .fn-ref') : null)
+
+  function place() {
+    if (!ref || !ref.isConnected) { hide(); return }
+    const r = ref.getBoundingClientRect()
+    const gutter = 16
+    const w = Math.min(380, window.innerWidth - gutter * 2)
+    card.style.width = w + 'px'
+    const h = card.offsetHeight
+    const below = window.innerHeight - r.bottom
+    const up = below < h + 14 && r.top > below
+    card.style.left = Math.max(gutter, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - gutter)) + 'px'
+    card.style.top = (up ? r.top - h - 8 : r.bottom + 8) + 'px'
+    card.classList.toggle('up', up)
+  }
+  function show(el) {
+    const li = document.querySelector(`#fnList li[data-fn="${el.dataset.fn}"]`)
+    const body = li && li.querySelector('.fn-body')
+    if (!body) return
+    ref = el
+    const clone = body.cloneNode(true)
+    clone.removeAttribute('contenteditable')
+    clone.querySelectorAll('[contenteditable], [id]').forEach((x) => { x.removeAttribute('contenteditable'); x.removeAttribute('id') })
+    clone.className = 'fn-peek-body'
+    if (isEmptyBody(body)) { clone.textContent = 'Empty footnote — click to write it.'; clone.classList.add('fn-peek-empty') }
+    card.textContent = ''
+    const n = document.createElement('span')
+    n.className = 'fn-peek-n'
+    n.textContent = (el.textContent || '').trim()
+    card.append(n, clone)
+    card.hidden = false
+    place()
+  }
+  function hide() { clearTimeout(openT); clearTimeout(closeT); ref = null; card.hidden = true }
+  const keep = () => clearTimeout(closeT)
+  const leaveSoon = () => { clearTimeout(openT); clearTimeout(closeT); closeT = setTimeout(hide, 150) }
+
+  document.addEventListener('mouseover', (e) => {
+    if (card.contains(e.target)) { keep(); return }
+    const el = refOf(e.target)
+    if (!el) return
+    keep()
+    if (el === ref && !card.hidden) return
+    clearTimeout(openT)
+    openT = setTimeout(() => show(el), ref ? 0 : 60)
+  })
+  document.addEventListener('mouseout', (e) => {
+    const from = refOf(e.target) || (card.contains(e.target) ? card : null)
+    if (!from) return
+    const to = e.relatedTarget
+    if (to && (card.contains(to) || (ref && ref.contains(to)) || refOf(to) === from)) return
+    leaveSoon()
+  })
+  // links in the card open in a new tab (the note itself is edited down in the list)
+  card.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]')
+    if (!a) return
+    e.preventDefault()
+    window.open(a.href, '_blank', 'noopener')
+  })
+  document.addEventListener('scroll', () => { if (ref) place() }, { capture: true, passive: true })
+  window.addEventListener('resize', () => { if (ref) place() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide() })
+  editor.on('update', () => { if (ref && !ref.isConnected) hide() })
+  return { hide }
 }
 
 // storage helpers

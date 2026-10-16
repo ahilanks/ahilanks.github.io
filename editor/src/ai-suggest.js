@@ -42,12 +42,33 @@ const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
   visual: 'Visual idea', interactive: 'Interactive idea', link: 'Link', format: 'Format', math: 'Math',
 }
-const MAX_ITEMS = { proofread: 80, review: 40, links: 40, ask: 30 } // safety caps per run; the prompt asks for fewer
+const MAX_ITEMS = { proofread: 80, review: 90, links: 40, ask: 30 } // safety caps per run; the prompt asks for fewer
 const LINK_LIMIT = { review: 8, links: 25, ask: 10 }
-const PROOF_BATCH_WORDS = 1200 // a long Proofread is split into parts this size, read in parallel
+// a long draft is read in parts of about this many words, in parallel, so every part gets
+// a careful read instead of one skim of the whole thing (Review parts also share the
+// editor's read of the whole piece — see requestRead)
+const BATCH_WORDS = { proofread: 1200, review: 700 }
 const PARALLEL = 6
 const MAX_CLOSED = 30
-const TIMEOUT_MS = 240000
+const TIMEOUT_MS = 300000
+// How big an accepted edit may be. Proofread fixes one error; Review and Ask may line-edit
+// up to a paragraph (struck words + new ones, accepted or dismissed as one), never more.
+const EDIT_LIMITS = {
+  proofread: { hunks: 4, chars: 320, sentences: false },
+  review: { hunks: 14, chars: 1600, sentences: true },
+  ask: { hunks: 14, chars: 1600, sentences: true },
+  links: { hunks: 0, chars: 0, sentences: false },
+}
+// Remarks that the draft is unfinished — the writer knows. Dropped unless they asked for a
+// final polish (prompted against too; this is the backstop).
+const UNFINISHED = /\b(unfinished|incomplete|not (yet )?(finished|complete|written|fleshed out)|abrupt(ly)?|cuts? off|trails? off|ends? (mid|suddenly|without)|placeholder|todo|stub|left hanging|fragment(ary)?|needs (a |an )?(conclusion|ending)|underdeveloped|sketchy)\b/i
+const tellsUnfinished = (it, read) => (!read || read.stage !== 'polish') && UNFINISHED.test(it.comment)
+const STAGES = {
+  auto: '',
+  rough: 'ROUGH DRAFT — the author is still getting ideas down.',
+  revising: 'REVISING — the ideas are mostly down; the author is shaping and clarifying.',
+  polish: 'FINAL POLISH — the author considers it nearly done.',
+}
 
 /* ===================================================================== text model */
 // How inline atoms read in the text the model sees, and in the anchors we match:
@@ -150,6 +171,63 @@ function passageBlocks(doc, from, to, fnNum) {
     return false
   })
   return blocks
+}
+
+/* ===================================================================== linked sources */
+// The pages the draft links to — the writer's sources — read through the local server
+// (/api/source) so the editor knows what they actually say. Fetched once per session.
+const SOURCE_LIMIT = 16          // links read per run
+const SOURCE_BUDGET = 110000     // characters of source text per request, shared out
+const sourceCache = new Map()    // url -> Promise<{ ok, title, text }>
+
+function draftLinks(doc) {
+  const links = new Map() // url -> the words linked
+  doc.descendants((node) => {
+    if (!node.isText) return
+    const m = node.marks.find((x) => x.type.name === 'link')
+    const href = m && String(m.attrs.href || '')
+    if (href && /^https?:\/\//.test(href)) links.set(href, ((links.get(href) || '') + ' ' + node.text).trim().slice(0, 120))
+  })
+  return links
+}
+function readSource(url) {
+  if (!sourceCache.has(url)) {
+    sourceCache.set(url, fetch('/api/source?url=' + encodeURIComponent(url), { cache: 'no-store' })
+      .then((r) => r.json()).catch(() => ({ ok: false })))
+  }
+  return sourceCache.get(url)
+}
+async function linkedSources(doc) {
+  const links = [...draftLinks(doc)].slice(0, SOURCE_LIMIT)
+  const got = await Promise.all(links.map(async ([url, words]) => ({ url, words, ...(await readSource(url)) })))
+  const ok = got.filter((g) => g.ok && g.text)
+  const failed = got.length - ok.length
+  if (failed) console.info('[suggest] could not read ' + failed + ' linked source(s):', got.filter((g) => !g.ok).map((g) => g.url + ' (' + (g.error || '?') + ')'))
+  const each = ok.length ? Math.min(24000, Math.floor(SOURCE_BUDGET / ok.length)) : 0
+  return ok.map((g) => ({ url: g.url, words: g.words, title: g.title || '', text: g.text.slice(0, each), abstractOnly: !!g.abstractOnly }))
+}
+const sourcesBlock = (list) => list && list.length
+  ? '<linked_sources>\nThe pages the draft links to (the author’s sources), as text — long ones cut to their opening:\n' +
+    list.map((x) => '<source url="' + x.url.replace(/"/g, '%22') + '" title="' + x.title.replace(/"/g, "'") +
+      '" linked_from="' + x.words.replace(/"/g, "'") + '"' + (x.abstractOnly ? ' only="abstract"' : '') + '>\n' + x.text + '\n</source>').join('\n') +
+    '\n</linked_sources>\n\n'
+  : ''
+const SOURCES =
+  '\n\nTHE LINKED SOURCES. The pages the draft links to are in <linked_sources>. Read them: they are what the ' +
+  'author is building on. Use them to understand the ideas, to check that what the draft says about a paper or ' +
+  'method matches what the source says (a misstatement is worth a note that says what the source actually says), ' +
+  'and to suggest a precise term, definition or detail from the source where the draft is vague.'
+
+// The words already linked within a part's blocks (the passage the model sees is plain text,
+// so it can't tell — and would offer those links again).
+function linkedWords(doc, part) {
+  const ranges = part.map((b) => b.math ? null : [b.at[0].pos, b.at[b.at.length - 1].end]).filter(Boolean)
+  if (!ranges.length) return []
+  const seen = new Set()
+  doc.nodesBetween(ranges[0][0], ranges[ranges.length - 1][1], (n) => {
+    if (n.isText && n.marks.some((m) => m.type.name === 'link')) seen.add(n.text.trim())
+  })
+  return [...seen].filter(Boolean).slice(0, 80)
 }
 
 /* ===================================================================== matching */
@@ -337,6 +415,7 @@ function toItem(sg, blocks, mode, doc, allowed) {
   }
   if (kind !== 'edit' || !hit.unique) return note
 
+  const lim = EDIT_LIMITS[mode] || EDIT_LIMITS.proofread
   const orig = b.str.slice(hit.start, hit.end)
   const changes = wordHunks(orig, String(sg.replacement || ''))
   if (!changes.length) return mode === 'proofread' ? null : note // an "edit" that changes nothing
@@ -346,12 +425,13 @@ function toItem(sg, blocks, mode, doc, allowed) {
     const s1 = hit.start + h.end
     const del = b.str.slice(s0, s1)
     // each change stays small and keeps its hands off math, footnote refs and line breaks
-    if (b.at.slice(s0, s1).some((c) => c.atom) || /[$\n]|\[\^/.test(h.ins) || spansSentences(del) || spansSentences(h.ins)) return note
+    if (b.at.slice(s0, s1).some((c) => c.atom) || /[$\n]|\[\^/.test(h.ins)) return note
+    if (!lim.sentences && (spansSentences(del) || spansSentences(h.ins))) return note
     const delFrom = s1 > s0 ? b.at[s0].pos : s0 < b.at.length ? b.at[s0].pos : b.at[s0 - 1].end
     hunks.push({ delFrom, delTo: s1 > s0 ? b.at[s1 - 1].end : delFrom, del, ins: typeset(h.ins, b.str) })
   }
   const changed = hunks.reduce((n, h) => n + h.del.length + h.ins.length, 0)
-  if (hunks.length > 4 || changed > 320) return note // that's a rewrite, not a fix
+  if (hunks.length > lim.hunks || changed > lim.chars) return note // that's a rewrite, not an edit
   return { ...base, kind: 'edit', from, to, text, hunks }
 }
 
@@ -560,11 +640,17 @@ const ANCHOR_RULES =
 // The writer's whole toolbox, as suggestions (Review and Ask).
 const KINDS =
   'Kinds of suggestion (the author accepts or dismisses each one; nothing changes until they do):\n' +
-  '- "edit": a small, concrete fix. "quote" is the text to change and "replacement" what it becomes. Change a ' +
-  'word, a phrase or at most one sentence; keep the rest of the quote identical. Never rewrite several sentences.\n' +
-  '- "note": an observation or idea with NO rewritten text. Use a note whenever the fix is bigger than one ' +
-  'sentence, structural, or the author’s call. Say what the problem is and, if useful, which direction to take — do ' +
-  'not write the new prose for them. Visual and interactive ideas are always notes; quote the sentence they would illustrate.\n' +
+  '- "edit": a concrete line edit, shown to the author as struck-out words and inserted words. "quote" is the text ' +
+  'to change (copied exactly, from within ONE paragraph) and "replacement" what it becomes. It can be a word, a phrase, ' +
+  'a sentence, or several sentences of one paragraph: cutting a redundant sentence, tightening a wordy one, fixing a ' +
+  'muddled construction, moving the point of a sentence to the front, adding a missing connective or a short ' +
+  'clarifying clause. Keep everything you aren’t changing identical, and keep the author’s voice and word choices — ' +
+  'it should read like their sentence, edited, not yours. When you can show the fix, make it an edit, not a note.\n' +
+  '- "note": a margin comment with no rewritten text, for what only the author can fix — an idea that needs their ' +
+  'knowledge, a structural move across paragraphs, a question about what they mean. Write it the way a good editor ' +
+  'talks to a writer: specific, direct, warm, in plain words ("I lost the thread here — is this the same $\\pi$ as ' +
+  'above?"). Say what a reader will experience and what you’d try. Visual and interactive ideas are notes; quote the ' +
+  'sentence they would illustrate.\n' +
   '- "format": bold or italic — "format" is "bold" or "italic" and "quote" is exactly the words to format. Italic ' +
   'for a term at the point it is defined, the title of a work, or a word that needs stress to be read right; bold ' +
   'only for a key term being introduced. Sparingly: only where it helps a reader.\n' +
@@ -600,6 +686,37 @@ const NOTES =
   '(a term the notes explain but the passage leaves undefined is worth a clarity note), and as the first place to ' +
   'look for links: the notes are full of sources the author has read.'
 
+// The editor's first pass: read the whole piece before marking anything up.
+const READ_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['summary', 'stage', 'working', 'unfinished', 'priorities', 'voice'],
+  properties: {
+    summary: { type: 'string', description: 'What the piece is and what it argues or explores, in 2–4 sentences.' },
+    stage: { type: 'string', enum: ['rough', 'revising', 'polish'] },
+    working: { type: 'string', description: 'What is already working and should be kept.' },
+    unfinished: { type: 'array', items: { type: 'string' }, description: 'Parts that are visibly still being written.' },
+    priorities: { type: 'array', items: { type: 'string' }, description: 'The few things that would most improve it now.' },
+    voice: { type: 'string', description: 'The author’s voice and conventions, to preserve.' },
+  },
+}
+const READ_PROMPT =
+  'You are an experienced editor of technical essays (AI and machine learning, written for curious readers, ' +
+  'published as web pages). Before marking anything up, you read the WHOLE draft to understand it the way a good ' +
+  'editor does: what the author is trying to say, who it is for, how far along it is, and what would help most ' +
+  'right now.\n\n' +
+  'Write your read of the piece:\n' +
+  '- "summary": what the piece is about and what it argues or explores — the through-line, in the author’s terms.\n' +
+  '- "stage": "rough" (ideas still being found; sections missing or in note form), "revising" (the argument is ' +
+  'mostly there; shaping and clarifying) or "polish" (complete; line-level work left).\n' +
+  '- "working": what already works — the strongest ideas, passages, moves — so later edits don’t sand it off.\n' +
+  '- "unfinished": parts that are obviously still in progress (a section that stops, bullet notes, a placeholder, an ' +
+  'empty heading, a paragraph that ends mid-thought). The author KNOWS these are unfinished; listing them here is ' +
+  'so nobody wastes a comment telling them.\n' +
+  '- "priorities": the 2–5 things that would most improve the piece at this stage, concretely (e.g. "the jump from ' +
+  'curiosity to learning progress needs one bridging example", "§2 defines novelty twice, differently").\n' +
+  '- "voice": how the author writes (person, tone, sentence rhythm, spelling, notation conventions) so edits match.\n' +
+  'Be specific to THIS draft; no generic advice.'
+
 const PROMPTS = {
   proofread:
     'You are a meticulous proofreader for a draft essay (technical writing about AI and machine learning).\n\n' +
@@ -615,31 +732,42 @@ const PROMPTS = {
     ANCHOR_RULES +
     '- Return at most {N}, in passage order. If there are no errors, return an empty list.',
   review:
-    'You are a sharp, sparing editor leaving margin suggestions on a draft essay. The author writes technical essays ' +
-    'about AI and machine learning for curious readers. They are published as web pages, so figures, animations and ' +
-    'small interactive widgets are all possible.\n\n' +
-    'You SUGGEST; you do not rewrite. The author keeps full control and their own voice. Point out the few things ' +
-    'that would most improve the PASSAGE, in this order of importance:\n' +
-    '1. Clarity: where a reader would stumble — an undefined term or symbol, notation used before it is introduced, ' +
-    'a missing step in the reasoning, an ambiguous "this"/"it", a claim that needs an example.\n' +
-    '2. Flow: an abrupt jump between sentences or paragraphs, a missing transition, a sentence whose point is buried.\n' +
-    '3. Style: only real problems — wordiness that hides the point, needless repetition, a clumsy construction. ' +
-    'Never impose your taste; leave deliberate choices (first person, fragments, informal tone, rhetorical questions) alone.\n' +
-    '4. Grammar: actual errors only.\n' +
-    '5. Explaining better: where an idea would land far better as a VISUAL (a diagram, plot or figure — say what it ' +
-    'shows), an INTERACTIVE element (a slider, toggle or small simulation — say what the reader changes and what ' +
-    'they see happen), or an equation. Only where it would genuinely help; at most 2 visual/interactive ideas.\n' +
-    '6. Typesetting: notation written as plain text that should be math; a defined term or a title that should be ' +
-    'italic.\n\n' +
+    'You are an experienced, generous and demanding editor working through a draft essay with its author, ' +
+    'line by line. The author writes technical essays about AI and machine learning for curious readers; they are ' +
+    'published as web pages, so figures, animations and small interactive widgets are possible.\n\n' +
+    'You have already read the whole piece (your notes are in <editors_read>). Now go through the PASSAGE carefully, ' +
+    'sentence by sentence, and mark it up the way a real editor would: mostly concrete edits the author can accept ' +
+    'with one click — words struck out and words added — plus a few margin notes where only the author can make the ' +
+    'fix. Be thorough: read every sentence, and don’t stop at the first few things you notice. But every suggestion ' +
+    'must earn its place by making the piece better for a reader; no busywork, no taste-swaps.\n\n' +
+    'What to look for:\n' +
+    '- Clarity: a reader stumbles — an undefined term or symbol, notation before it is introduced, a skipped step, an ' +
+    'ambiguous "this"/"it", an abstract claim that wants an example, a sentence that says something other than what ' +
+    'the author means.\n' +
+    '- Flow and emphasis: a missing connective between two ideas, a buried point, a paragraph whose first sentence ' +
+    'isn’t its point, a repeated idea.\n' +
+    '- Line editing: wordiness, hedging, filler ("in order to", "it is important to note that"), a clumsy or overlong ' +
+    'sentence, weak verbs, a sentence that would be stronger cut. Show the edit.\n' +
+    '- Correctness: grammar and typos; and technical accuracy — a claim about a method, result or paper that is wrong ' +
+    'or overstated is worth a note.\n' +
+    '- Explaining better: where an idea would land far better as a VISUAL (say what it shows), an INTERACTIVE element ' +
+    '(say what the reader changes and what they see), or an equation. At most 2 such ideas, only where they really help.\n' +
+    '- Typesetting: notation written as plain text that should be math; a defined term or title that should be italic.\n\n' +
+    'Respect where the draft is. {STAGE}\n' +
+    'NEVER comment that something is unfinished, incomplete, abrupt, cut off, a placeholder, or missing an ending — the ' +
+    'author knows (see "unfinished" in your read). Work with what is written: a half-finished paragraph can still get ' +
+    'edits to the sentences that are there. Never pad the piece or write new sections for them.\n\n' +
     KINDS + '\n' +
     'Rules:\n' +
-    '- Only suggest within the PASSAGE; the rest of the document is context (e.g. to know what is already defined).\n' +
+    '- Only suggest within the PASSAGE; the rest of the document is context (e.g. to know what is already defined, or ' +
+    'what a later section will cover).\n' +
     ANCHOR_RULES +
-    '- "comment": one or two plain sentences (under ~30 words) saying what is wrong and why it matters to a reader. ' +
-    'No praise, no hedging. Write any math in it as $…$.\n' +
-    '- Match the author’s spelling conventions and terminology.\n' +
-    '- Fewer is better: at most {N} suggestions besides links, most important first. If the passage is already ' +
-    'clear and correct, return an empty list — that is a good outcome.',
+    '- "comment": for an edit, a short reason in plain words ("Cuts the throat-clearing; the point now leads."). For a ' +
+    'note, one to three natural sentences to the author. No praise padding, no hedging, no "consider…" boilerplate. ' +
+    'Write any math as $…$.\n' +
+    '- One suggestion per problem; don’t split one sentence’s fix into several edits, and don’t make overlapping ones.\n' +
+    '- Match the author’s voice, spelling and terminology (see "voice" in your read).\n' +
+    '- Up to {N} suggestions besides links, in passage order. Return fewer if the passage is genuinely clean.',
   links:
     'You find links for a draft essay (technical writing about AI and machine learning, published as a web page). ' +
     'Your only job is LINKS, and you are thorough: every paper, method, model, dataset, benchmark, library, person’s ' +
@@ -657,9 +785,9 @@ const PROMPTS = {
     'marks — never a [P#] number.\n\n' +
     'The author keeps full control and their own voice: you SUGGEST, you never rewrite. When your answer points at ' +
     'specific places in the PASSAGE, ALSO attach them as suggestions so they appear in the margin beside the text. ' +
-    'If the author asks you to rewrite something, give direction in the answer and at most small edits (a phrase or ' +
-    'one sentence) as suggestions — never a rewritten paragraph. Requests for links, formatting or math become ' +
-    'suggestions too. If nothing needs attaching, return an empty list.\n\n' +
+    'If the author asks you to edit or tighten something, attach the edits themselves (struck words + new ones, within ' +
+    'a paragraph) — never a whole new section. Requests for links, formatting or math become suggestions too. If ' +
+    'nothing needs attaching, return an empty list. Don’t tell the author a part is unfinished unless they ask; they know.\n\n' +
     KINDS + '\n' +
     'Rules:\n' +
     '- Only attach suggestions within the PASSAGE.\n' +
@@ -668,37 +796,16 @@ const PROMPTS = {
     '- At most {N} suggestions besides links.',
 }
 
-async function requestSuggestions(mode, input, signal) {
+// One structured chat completion → the parsed JSON. Reasoning models take an effort; a 400
+// may mean this model doesn't — retry plainer.
+async function chatJSON(system, user, schema, effort, signal) {
   const settings = aiSettings()
-  const notes = input.notes && input.notes.length
-    ? '<author_notes>\n' + input.notes.map((n) => '<source name="' + n.name.replace(/"/g, "'") + '">\n' + n.text + '\n</source>').join('\n') + '\n</author_notes>\n\n'
-    : ''
-  // stable parts first (notes, then the draft) so repeated runs hit the prompt cache. When
-  // the passage IS the whole draft, the draft isn't sent twice — just its footnotes.
-  let user =
-    notes +
-    'Title: ' + (input.title || '(untitled)') + '\n' +
-    (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
-    (input.docText ? '\n<document>\n' + input.docText + '\n</document>\n' : '') +
-    '\nPASSAGE (' + input.where + '). ' + (mode === 'ask' ? 'Attach suggestions only within it.' : 'Suggest only within it.') +
-    ' Paragraphs are labelled [P#]:\n' +
-    '<passage>\n' + (input.passage || '(empty)') + '\n</passage>' +
-    (input.footnotes ? '\n\nThe draft’s footnotes, for context:' + input.footnotes : '')
-  if (mode === 'ask') {
-    if (input.history && input.history.length) {
-      user += '\n\nEarlier in this conversation:\n' + input.history.map((t) => 'Author: ' + t.q + '\nYou: ' + t.a).join('\n\n')
-    }
-    user += '\n\nTHE AUTHOR’S QUESTION:\n' + input.question
-  }
-  const system = (PROMPTS[mode] + (mode !== 'proofread' ? LINKS : '') + (mode !== 'proofread' && notes ? NOTES : ''))
-    .replaceAll('{N}', String(input.limit)).replaceAll('{L}', String(LINK_LIMIT[mode] || 0))
   const base = {
     model: settings.writingModel || CONFIG.openai.writingModel,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    response_format: { type: 'json_schema', json_schema: { name: 'suggestions', strict: true, schema: schemaFor(mode) } },
+    response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema } },
   }
-  // reasoning models take an effort; a 400 may mean this model doesn't — retry plainer
-  const attempts = [Object.assign({ reasoning_effort: mode === 'proofread' ? 'low' : 'medium' }, base), base]
+  const attempts = [Object.assign({ reasoning_effort: effort }, base), base]
   let lastErr = 'Request failed.'
   for (const payload of attempts) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -712,8 +819,7 @@ async function requestSuggestions(mode, input, signal) {
       const msg = data.choices && data.choices[0] && data.choices[0].message
       if (msg && msg.refusal) throw new Error('The model declined: ' + msg.refusal)
       if (!msg || !msg.content) throw new Error('Empty response.')
-      const parsed = JSON.parse(msg.content)
-      return { answer: typeof parsed.answer === 'string' ? parsed.answer : '', suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [] }
+      return JSON.parse(msg.content)
     }
     let errText = ''
     try { const j = await res.json(); errText = (j.error && j.error.message) || '' } catch (e) {}
@@ -721,6 +827,78 @@ async function requestSuggestions(mode, input, signal) {
     if (res.status !== 400) break
   }
   throw new Error(lastErr)
+}
+
+const notesBlock = (notes) => notes && notes.length
+  ? '<author_notes>\n' + notes.map((n) => '<source name="' + n.name.replace(/"/g, "'") + '">\n' + n.text + '\n</source>').join('\n') + '\n</author_notes>\n\n'
+  : ''
+// the writer's own margin comments — mostly notes to self ("expand", "add figure") that say
+// what they already know needs doing
+const commentsBlock = (list) => list && list.length
+  ? '\n<author_comments>\nThe author’s own margin comments (notes to self — they already know about these):\n' +
+    list.map((c) => '- on “' + c.quote.replace(/\s+/g, ' ').slice(0, 160) + '”: ' + c.text.replace(/\s+/g, ' ').slice(0, 400)).join('\n') +
+    '\n</author_comments>\n'
+  : ''
+const readText = (r) => !r ? '' :
+  '\n<editors_read>\nWhat the piece is: ' + r.summary + '\nStage: ' + r.stage + '\nWhat’s working: ' + r.working +
+  (r.unfinished.length ? '\nStill being written (the author knows; don’t flag): ' + r.unfinished.join('; ') : '') +
+  (r.priorities.length ? '\nPriorities now: ' + r.priorities.join('; ') : '') +
+  '\nVoice: ' + r.voice + '\n</editors_read>\n'
+
+const STAGE_GUIDE = {
+  rough: 'It is a ROUGH DRAFT: put most of your effort into the thinking — is the idea clear, is a step missing, ' +
+    'does a claim need an example, is the order right — and line-edit sentences that obscure the idea. Skip pure polish.',
+  revising: 'It is being REVISED: clarity, flow and tightening matter most; line-edit generously.',
+  polish: 'It is in FINAL POLISH: line-edit closely — every sentence, word choice, rhythm, transitions, consistency. ' +
+    'Here you may point out a section that genuinely feels unfinished.',
+}
+
+// The editor's read of the whole piece (summary, stage, what's unfinished, priorities, voice).
+async function requestRead(input, signal) {
+  const user = notesBlock(input.notes) + sourcesBlock(input.sources) +
+    'Title: ' + (input.title || '(untitled)') + '\n' + (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
+    (input.stage ? 'The author says the draft is at this stage: ' + STAGES[input.stage] + '\n' : '') +
+    '\n<document>\n' + input.docText + '\n</document>\n' + commentsBlock(input.authorComments)
+  const r = await chatJSON(READ_PROMPT + (input.notes && input.notes.length ? NOTES : '') + (input.sources && input.sources.length ? SOURCES : ''),
+    user, READ_SCHEMA, 'medium', signal)
+  return {
+    summary: String(r.summary || ''), stage: input.stage || (STAGES[r.stage] !== undefined ? r.stage : 'revising'),
+    working: String(r.working || ''), voice: String(r.voice || ''),
+    unfinished: Array.isArray(r.unfinished) ? r.unfinished.map(String) : [],
+    priorities: Array.isArray(r.priorities) ? r.priorities.map(String) : [],
+  }
+}
+
+async function requestSuggestions(mode, input, signal) {
+  const notes = notesBlock(input.notes)
+  // stable parts first (notes, then the draft) so repeated runs hit the prompt cache. When
+  // the passage IS the whole draft, the draft isn't sent twice — just its footnotes.
+  const sources = mode !== 'proofread' ? sourcesBlock(input.sources) : ''
+  let user =
+    notes + sources +
+    'Title: ' + (input.title || '(untitled)') + '\n' +
+    (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
+    (input.docText ? '\n<document>\n' + input.docText + '\n</document>\n' : '') +
+    (mode !== 'proofread' ? commentsBlock(input.authorComments) + readText(input.read) : '') +
+    '\nPASSAGE (' + input.where + '). ' + (mode === 'ask' ? 'Attach suggestions only within it.' : 'Suggest only within it.') +
+    ' Paragraphs are labelled [P#]:\n' +
+    '<passage>\n' + (input.passage || '(empty)') + '\n</passage>' +
+    (input.linked && input.linked.length && mode !== 'proofread'
+      ? '\nAlready linked in the passage (don’t suggest links for these): ' + input.linked.map((w) => '“' + w + '”').join(', ') : '') +
+    (input.footnotes ? '\n\nThe draft’s footnotes, for context:' + input.footnotes : '')
+  if (mode === 'ask') {
+    if (input.history && input.history.length) {
+      user += '\n\nEarlier in this conversation:\n' + input.history.map((t) => 'Author: ' + t.q + '\nYou: ' + t.a).join('\n\n')
+    }
+    user += '\n\nTHE AUTHOR’S QUESTION:\n' + input.question
+  }
+  const stage = (input.read && input.read.stage) || input.stage || 'revising'
+  const system = (PROMPTS[mode] + (mode !== 'proofread' ? LINKS : '') + (mode !== 'proofread' && notes ? NOTES : '') + (sources ? SOURCES : ''))
+    .replaceAll('{N}', String(input.limit)).replaceAll('{L}', String(LINK_LIMIT[mode] || 0))
+    .replaceAll('{STAGE}', STAGE_GUIDE[stage] || STAGE_GUIDE.revising)
+  const effort = mode === 'proofread' ? 'low' : mode === 'links' ? 'medium' : 'high'
+  const parsed = await chatJSON(system, user, schemaFor(mode), effort, signal)
+  return { answer: typeof parsed.answer === 'string' ? parsed.answer : '', suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [] }
 }
 
 /* ===================================================================== UI */
@@ -804,6 +982,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   const cards = new Map()     // item id -> card
   const dismissed = new Set() // fingerprints of suggestions waved off this session
   let run = null              // the request in flight
+  const lastUnplaced = []     // the last run's suggestions that didn't anchor (console debugging)
   const wide = window.matchMedia(WIDE)
   const context = setupContextUI()
 
@@ -1012,13 +1191,15 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   }
 
   // Proofread reads a long passage in parts (faster, and nothing gets skimmed); a part
-  // ends at a block boundary once it passes PROOF_BATCH_WORDS.
+  // ends at a block boundary once it passes BATCH_WORDS (Review: also at a heading).
   function batches(blocks, mode) {
-    if (mode !== 'proofread') return [blocks]
+    const size = BATCH_WORDS[mode]
+    if (!size) return [blocks]
     const out = [[]]
     let n = 0
     for (const b of blocks) {
-      if (n >= PROOF_BATCH_WORDS) { out.push([]); n = 0 }
+      // a heading starts a new part once this one has some substance, so parts follow sections
+      if (n >= size || (b.kind === 'heading' && n >= size / 2)) { out.push([]); n = 0 }
       out[out.length - 1].push(b)
       n += countWords(b.str)
     }
@@ -1039,11 +1220,48 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     return results
   }
 
+  /* ---- the draft's stage (set in the menu; per draft, this browser) and the editor's read ---- */
+  const stageKey = () => 'ahilan.editor.aiStage.' + getDocId()
+  const getStage = () => { try { return localStorage.getItem(stageKey()) || 'auto' } catch (e) { return 'auto' } }
+  const setStage = (v) => { try { localStorage.setItem(stageKey(), v) } catch (e) {} }
+  const reads = new Map() // draft id -> { words, stage, read }: reused while the draft hasn't moved much
+  const authorComments = () => (comments.openList ? comments.openList() : [])
+  async function editorsRead(docText, footnotes, notes, sources, signal) {
+    const stage = getStage() === 'auto' ? '' : getStage()
+    const words = countWords(docText)
+    const cached = reads.get(getDocId())
+    if (cached && cached.stage === stage && Math.abs(cached.words - words) < Math.max(120, words * 0.04)) return { read: cached.read, fresh: false }
+    const read = await requestRead({
+      title: ($('docTitle') || {}).textContent || '', subtitle: ($('docSubtitle') || {}).textContent || '',
+      docText: docText + footnotes, notes, sources, stage, authorComments: authorComments(),
+    }, signal)
+    reads.set(getDocId(), { words, stage, read })
+    return { read, fresh: true }
+  }
+  const STAGE_NAMES = { rough: 'Rough draft', revising: 'Revising', polish: 'Final polish' }
+  function readAnswer(r) {
+    return '**What it is.** ' + r.summary + '\n\n' +
+      '**Stage:** ' + STAGE_NAMES[r.stage] + (getStage() === 'auto' ? ' (my guess — set it in the pen menu)' : '') + '\n\n' +
+      (r.working ? '**What’s working.** ' + r.working + '\n\n' : '') +
+      (r.priorities.length ? '**What I’d focus on now:**\n' + r.priorities.map((x) => '- ' + x).join('\n') + '\n\n' : '') +
+      (r.unfinished.length ? '**Still in progress (leaving these alone):**\n' + r.unfinished.map((x) => '- ' + x).join('\n') : '')
+  }
+  // put the read in the Ask thread, so it's visible and follow-up questions know it
+  function showRead(r) {
+    if (threadDoc !== getDocId()) clearThread()
+    const el = askEntry('Editor’s read of the draft', 'Before the Review')
+    const a = readAnswer(r)
+    fillEntry(el, a, [], '')
+    thread.push({ q: 'What is your overall read of the draft?', a })
+    askPanel.classList.remove('hidden')
+    placeAsk()
+  }
+
   /* ---- a run ---- */
   function pendingCard(mode) {
     const card = document.createElement('div')
     card.className = 'cmt-card sg-card sg-pending'
-    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : 'Reading…') +
+    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : mode === 'review' ? 'Reading the whole piece…' : 'Reading…') +
       '</span><button class="sg-stop" type="button">Stop</button>'
     card.querySelector('.sg-stop').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); stop() })
     card.addEventListener('mousedown', (e) => e.preventDefault())
@@ -1084,14 +1302,26 @@ export function setupSuggestions(editor, comments, { getDocId }) {
       // the writer's notes (not for Proofread): refetched first if a Google Doc has gone
       // stale; a long journal is cut down to the excerpts relevant to this passage
       const query = scope.label + '\n' + blocks.map((b) => b.str).join('\n')
-      const notes = mode !== 'proofread' ? await freshContext(query) : { parts: [], urls: new Set() }
+      const [notes, sources] = mode !== 'proofread'
+        ? await Promise.all([freshContext(query), mode === 'links' ? [] : linkedSources(state.doc)])
+        : [{ parts: [], urls: new Set() }, []]
       if (controller.signal.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' })
       const parts = batches(blocks, mode)
       const docText = documentText(state.doc, fnNum)
       const footnotes = footnotesText()
-      // Review scales with length: ~1 suggestion per 300 words, between 6 and 15
-      const limit = mode === 'proofread' ? 15 : mode === 'links' ? 0
-        : Math.max(6, Math.min(15, Math.round(countWords(blocks.map((b) => b.str).join(' ')) / 300)))
+      // Review: first read the whole piece (what it is, its stage, what's unfinished), then
+      // go through it part by part with that read in hand
+      let read = null
+      if (mode === 'review') {
+        const r = await editorsRead(docText, footnotes, notes.parts, sources, controller.signal)
+        read = r.read
+        if (thisRun.docId !== getDocId()) return
+        if (r.fresh) showRead(read)
+        thisRun.card.querySelector('span:not(.sg-spin)').textContent = parts.length > 1 ? 'Editing ' + parts.length + ' parts…' : 'Editing…'
+      }
+      // Review scales with length: ~1 suggestion per 90 words of a part, between 4 and 12
+      const limitFor = (part) => mode === 'proofread' ? 15 : mode === 'links' ? 0
+        : Math.max(4, Math.min(12, Math.round(countWords(part.map((b) => b.str).join(' ')) / 90)))
       const results = await pool(parts, (part, i) => requestSuggestions(mode, {
         title: ($('docTitle') || {}).textContent || '',
         subtitle: ($('docSubtitle') || {}).textContent || '',
@@ -1101,18 +1331,24 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         passage: part.map((b, j) => '[P' + (j + 1) + (b.kind ? ', ' + b.kind : '') + '] ' + b.str).join('\n\n'),
         where: scope.where + (parts.length > 1 ? ', part ' + (i + 1) + ' of ' + parts.length : ''),
         notes: notes.parts,
-        limit,
+        limit: limitFor(part),
+        read,
+        sources,
+        linked: linkedWords(state.doc, part),
+        authorComments: authorComments(),
       }, controller.signal))
       if (thisRun.docId !== getDocId()) return // switched drafts while it was thinking
       const failed = results.filter((r) => r.status === 'rejected')
       if (failed.length === results.length) throw failed[0].reason
       let unplaced = 0, overtaken = 0
       const raw = []
+      lastUnplaced.length = 0
       results.forEach((r, i) => {
         if (r.status !== 'fulfilled') return
         for (const sg of r.value.suggestions) {
           const it = toItem(sg, parts[i], mode, state.doc, notes.urls)
-          if (it) raw.push(it); else unplaced++
+          if (it && it.kind === 'note' && tellsUnfinished(it, read)) continue
+          if (it) raw.push(it); else { unplaced++; lastUnplaced.push({ ...sg, part: i }) }
         }
       })
       const checked = await verifyWebLinks(raw, controller.signal)
@@ -1269,7 +1505,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     }
     askPanel.classList.add('busy')
     try {
-      const notes = await freshContext(question + '\n' + blocks.map((b) => b.str).join('\n'))
+      const [notes, sources] = await Promise.all([freshContext(question + '\n' + blocks.map((b) => b.str).join('\n')), linkedSources(state.doc)])
       if (controller.signal.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' })
       const docText = documentText(state.doc, fnNum)
       const footnotes = footnotesText()
@@ -1282,6 +1518,11 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         where: scope.where,
         notes: notes.parts,
         limit: 8,
+        linked: linkedWords(state.doc, blocks),
+        read: (reads.get(getDocId()) || {}).read || null,
+        sources,
+        stage: getStage() === 'auto' ? '' : getStage(),
+        authorComments: authorComments(),
         question,
         history: thread.slice(-6),
       }, controller.signal)
@@ -1340,6 +1581,8 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     menu.querySelectorAll('[data-mode]').forEach((b) => { b.disabled = !!run })
     $('sgStop').hidden = !run
     $('sgClear').hidden = !st().items.length
+    const stage = getStage()
+    menu.querySelectorAll('[data-stage]').forEach((b) => b.classList.toggle('on', b.dataset.stage === stage))
     context.render()
     menu.classList.remove('hidden')
     const r = btn.getBoundingClientRect()
@@ -1358,6 +1601,10 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   // keep the editor's selection while using the menu (but let its inputs take focus)
   menu.addEventListener('mousedown', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault() })
   menu.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => start(b.dataset.mode)))
+  menu.querySelectorAll('[data-stage]').forEach((b) => b.addEventListener('click', () => {
+    setStage(b.dataset.stage)
+    menu.querySelectorAll('[data-stage]').forEach((x) => x.classList.toggle('on', x === b))
+  }))
   $('sgStop').addEventListener('click', () => { stop(); closeMenu() })
   $('sgClear').addEventListener('click', () => { clearAll(); closeMenu() })
   $('sgCtxAdd').addEventListener('click', () => { closeMenu(); context.openAdd() })
@@ -1376,6 +1623,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   // exposed for console debugging / verification
   return {
     start, stop, ask, openAsk, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment, closedSource,
-    _internal: { locate, wordHunks, toItem, passageBlocks, scopeOf, documentText, verifyWebLinks, titleMatches, answerHTML },
+    reads, getStage, lastUnplaced,
+    _internal: { requestRead, linkedWords, footnoteNumbers, locate, wordHunks, toItem, passageBlocks, scopeOf, documentText, verifyWebLinks, titleMatches, answerHTML },
   }
 }

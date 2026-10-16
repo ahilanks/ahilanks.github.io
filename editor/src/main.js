@@ -22,6 +22,7 @@ import { setupMathAlign } from './math-align.js'
 import { CommentMark, setupComments } from './comments.js'
 import { Suggestions, setupSuggestions } from './ai-suggest.js'
 import { setupClosedList } from './closed.js'
+import { setupVersions } from './versions.js'
 
 setupMathLive()
 setupMobileViewport() // phones: size the shell to the visual viewport (keyboard-aware)
@@ -419,8 +420,11 @@ window.__comments = comments // console debugging, like __editor
 // AI suggestions: toolbar pen → Proofread / Review the selection or whole draft → margin cards.
 window.__suggest = setupSuggestions(editor, comments, { getDocId })
 
-// Recently closed: resolved comments + dismissed/cleared/replaced AI suggestions → Reopen.
-window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean))
+// History: your comments (open + resolved, and closed AI suggestions → Reopen) and the draft's
+// past versions (each push to the drafts repo → diff against now, Restore). `versions` is
+// set up below, once the drafts module (which owns backing up) exists.
+let versions = null
+window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean), comments, () => versions)
 
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor, { getDocId })
@@ -516,5 +520,11 @@ load() // applySnapshot (called by load) rehydrates the displayed draft's videos
 // Drafts menu + per-draft scroll restore + server sync (sync is inert while SANDBOX=true).
 const drafts = setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, setDocId })
 window.__drafts = drafts
+versions = setupVersions({
+  getDocId, currentSnapshot, applySnapshot, backup: drafts.backup,
+  // a restore is applied without an update event: save it and send it to the server ourselves
+  scheduleSave: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },
+})
+window.__versions = versions
 if (SANDBOX) console.info('[editor] SANDBOX mode — real v1 drafts are untouched; using', LS.drafts)
 toast(SANDBOX ? 'Sandbox mode — v1 drafts safe' : 'Editor ready')

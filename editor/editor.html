@@ -69,7 +69,7 @@
         <button class="tb-btn" id="commentBtn" title="Comment (⌘⌥M)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
-        <button class="tb-btn" id="closedBtn" title="Recently closed comments and suggestions">
+        <button class="tb-btn" id="closedBtn" title="History — your comments and past versions">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></svg>
         </button>
         <button class="tb-btn" id="quoteBtn" title="Quote (blockquote)">
@@ -206,8 +206,12 @@
       </button>
       <button type="button" class="sg-item" data-mode="review">
         <span class="sg-item-t">Review</span>
-        <span class="sg-item-d">Clarity, flow, style, formatting, math, links — and ideas for visuals</span>
+        <span class="sg-item-d">Reads the whole piece, then line-edits it: clarity, flow, tightening, math, links, visuals</span>
       </button>
+      <div class="sg-stage" title="How far along the draft is — the Review edits to match">
+        <span class="sg-stage-l">Stage</span>
+        <span class="sg-stage-opts"><button type="button" data-stage="auto">Auto</button><button type="button" data-stage="rough">Rough</button><button type="button" data-stage="revising">Revising</button><button type="button" data-stage="polish">Polish</button></span>
+      </div>
       <button type="button" class="sg-item" data-mode="links">
         <span class="sg-item-t">Find links</span>
         <span class="sg-item-d">Sources from your notes and the web, to accept one by one</span>
@@ -239,9 +243,23 @@
 
     <!-- ===================== FLOATING: recently closed (closed.js) ===================== -->
     <div class="closed-menu hidden" id="closedMenu">
-      <div class="closed-head">Recently closed</div>
+      <div class="closed-head"><span>History</span>
+        <span class="cl-tabs"><button type="button" data-tab="comment">Comments</button><button type="button" data-tab="versions">Versions</button></span>
+      </div>
       <div class="closed-list" id="closedList"></div>
-      <div class="closed-foot">Resolved comments are kept with the draft; AI suggestions until you reload.</div>
+      <div class="closed-foot" id="closedFoot"></div>
+    </div>
+
+    <!-- ===================== VERSION DIFF (versions.js) ===================== -->
+    <div class="version-view hidden" id="versionView">
+      <div class="vd-head">
+        <div class="vd-head-t"><span class="vd-when"></span><span class="vd-stats"></span></div>
+        <div class="vd-legend"><del>gone since</del> <ins>new since</ins></div>
+        <label class="vd-onlyl"><input type="checkbox" class="vd-only" checked> Changes only</label>
+        <button type="button" class="vd-restore">Restore this version</button>
+        <button type="button" class="vd-close" title="Close (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+      <div class="vd-body"></div>
     </div>
 
     <!-- ===================== DRAFTS MENU ===================== -->

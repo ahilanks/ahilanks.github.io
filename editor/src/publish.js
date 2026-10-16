@@ -382,6 +382,87 @@ function fnTrip() {
   }, { passive: true })
 }
 
+/* ------------------------------------------------------ footnote peek (page) */
+// Runs INSIDE the published article (embedded via fnPeek.toString(), like fnTrip). Hovering
+// a footnote marker shows its note in a small card beside it, in the text; the card stays
+// while the pointer is on the marker or the card (a short grace period covers the gap, so
+// its links can be clicked) and goes when it leaves both. Mouse/trackpad only — on touch a
+// tap still makes the round trip to the note (fnTrip).
+function fnPeek() {
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
+  var card = document.createElement('div')
+  card.className = 'fn-peek'
+  card.setAttribute('role', 'tooltip')
+  card.id = 'fnPeek'
+  card.hidden = true
+  document.body.appendChild(card)
+  var ref = null      // the marker the card is for
+  var openT = 0, closeT = 0
+
+  function markerOf(el) {
+    var a = el && el.closest && el.closest('sup[id^="fnref-"] a[href^="#fn-"]')
+    return a ? a.closest('sup') : null
+  }
+  function place() {
+    var r = ref.getBoundingClientRect()
+    var gutter = 16
+    var w = Math.min(380, window.innerWidth - gutter * 2)
+    card.style.width = w + 'px'
+    var h = card.offsetHeight
+    var below = window.innerHeight - r.bottom, above = r.top
+    var up = below < h + 14 && above > below // flip above when it doesn't fit below
+    var left = Math.max(gutter, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - gutter))
+    card.style.left = (left + window.scrollX) + 'px'
+    card.style.top = (up ? r.top - h - 8 : r.bottom + 8) + window.scrollY + 'px'
+    card.classList.toggle('up', up)
+  }
+  function show(sup) {
+    var n = /^fnref-(\d+)$/.exec(sup.id)
+    var li = n && document.getElementById('fn-' + n[1])
+    if (!li) return
+    ref = sup
+    var body = li.cloneNode(true)
+    body.removeAttribute('id')
+    var backs = body.querySelectorAll('.fn-back')
+    for (var i = 0; i < backs.length; i++) backs[i].remove()
+    var ids = body.querySelectorAll('[id]')
+    for (var k = 0; k < ids.length; k++) ids[k].removeAttribute('id')
+    card.innerHTML = '<span class="fn-peek-n">' + n[1] + '</span><div class="fn-peek-body"></div>'
+    card.lastChild.innerHTML = body.innerHTML
+    card.hidden = false
+    sup.setAttribute('aria-describedby', 'fnPeek')
+    place()
+  }
+  function hide() {
+    clearTimeout(openT); clearTimeout(closeT)
+    if (ref) ref.removeAttribute('aria-describedby')
+    ref = null
+    card.hidden = true
+  }
+  function keep() { clearTimeout(closeT) }
+  function leaveSoon() { clearTimeout(openT); clearTimeout(closeT); closeT = setTimeout(hide, 150) }
+
+  document.addEventListener('mouseover', function (e) {
+    if (card.contains(e.target)) { keep(); return }
+    var sup = markerOf(e.target)
+    if (!sup) return
+    keep()
+    if (sup === ref && !card.hidden) return
+    clearTimeout(openT)
+    openT = setTimeout(function () { show(sup) }, ref ? 0 : 60) // moving between markers: switch at once
+  })
+  document.addEventListener('mouseout', function (e) {
+    var from = markerOf(e.target) || (card.contains(e.target) ? card : null)
+    if (!from) return
+    var to = e.relatedTarget
+    if (to && (card.contains(to) || (ref && ref.contains(to)) || markerOf(to) === from)) return
+    leaveSoon()
+  })
+  document.addEventListener('click', function (e) { if (markerOf(e.target)) hide() }, true) // off on the trip to the note
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+  window.addEventListener('resize', function () { if (ref) place() })
+}
+
 /* ------------------------------------------------------ provenance widget (page) */
 // Runs INSIDE the published article (embedded via provWidget.toString(), so keep it
 // self-contained: no imports, no closures over this module, no "</script>" literals).
@@ -729,6 +810,18 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     footHtml ? '      .fn-return:hover { background:#1b2430; }' : '',
     footHtml ? '      @keyframes fn-return-in { from { opacity:0; transform:translate(-50%, 0.5rem); } }' : '',
     footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-return { animation:none; } }' : '',
+    footHtml ? '      .fn-peek { position:absolute; z-index:30; box-sizing:border-box; max-height:min(50vh, 22rem); overflow-y:auto; display:flex; gap:0.55rem; padding:0.75rem 0.95rem; background:#faf6ee; color:var(--text-color); border:1px solid rgba(39,50,63,0.14); border-radius:10px; box-shadow:0 1px 3px rgba(39,50,63,0.1), 0 8px 26px rgba(39,50,63,0.16); font-size:0.9rem; line-height:1.5; text-align:left; animation:fn-peek-in 0.12s ease-out; }' : '',
+    footHtml ? '      .fn-peek[hidden] { display:none; }' : '',
+    footHtml ? '      .fn-peek-n { flex:none; font-weight:600; color:var(--muted); }' : '',
+    footHtml ? '      .fn-peek-body { flex:1; min-width:0; overflow-wrap:break-word; }' : '',
+    footHtml ? '      .fn-peek-body p, .fn-peek-body div { margin:0 0 0.4rem; }' : '',
+    footHtml ? '      .fn-peek-body p:last-child, .fn-peek-body div:last-child { margin-bottom:0; }' : '',
+    footHtml ? '      .fn-peek-body img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.4rem 0; }' : '',
+    footHtml ? '      .fn-peek-body .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
+    footHtml ? '      @keyframes fn-peek-in { from { opacity:0; transform:translateY(3px); } }' : '',
+    footHtml ? '      .fn-peek.up { animation-name:fn-peek-in-up; }' : '',
+    footHtml ? '      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }' : '',
+    footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }' : '',
     ...(version || draft ? PROV_CSS : []),
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
@@ -762,6 +855,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     tocScript,
     provScript,
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
+    footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
     '',

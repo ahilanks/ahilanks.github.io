@@ -272,8 +272,18 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
 
   /* ------ push-to-GitHub backup status (#pushBtn / #pushText) — also inert in
      sandbox so nothing hits the server ------ */
+  let lastBackupOk = false
+  let backupBtn = null
+  // Back up now (the cloud button's push), e.g. before restoring an old version → ok?
+  async function backup() {
+    if (SANDBOX || !backupBtn || !backupBtn.onclick) return false
+    lastBackupOk = false
+    await backupBtn.onclick()
+    return lastBackupOk
+  }
   function setupPushStatus() {
     const btn = $('pushBtn'), txt = $('pushText')
+    backupBtn = btn
     if (SANDBOX) { if (txt) txt.textContent = ''; return }               // *** no server contact in sandbox ***
     const show = (msg, color) => { if (txt) { txt.textContent = msg; txt.style.color = color || '#999' } }
     const ago = (ts) => {
@@ -329,6 +339,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
           show('⚠ backup failed', '#c0392b')
           if (txt) txt.title = res.detail || ''
         } else {
+          lastBackupOk = true
           show('Backed up ✓', '#3e8e53')
           if (btn) btn.classList.add('synced')
         }
@@ -369,5 +380,5 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     SYNC.schedulePush() // seed this device's existing drafts up to the shared store
   }
 
-  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), restoreScrollPos }
+  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), restoreScrollPos, backup }
 }

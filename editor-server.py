@@ -567,6 +567,93 @@ def push_status():
     return s
 
 
+INLINE_SRC_RE = re.compile(r"""(src|poster)=(["'])data:[^"']*\2""")
+SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+_PATH_IDS = {}  # (path, first commit) -> the draft id that file held
+
+
+def _draft_json_paths(draft_id):
+    """Every .json path in the drafts repo's history that held this draft. Files are named
+    by the title's slug, so a draft moves between paths as its title changes; git's rename
+    detection can't be relied on for these (multi-MB files), so we read each path's id."""
+    with GIT_LOCK:
+        r = _git(["log", "--format=%x00%H", "--name-only", "--no-renames", "--diff-filter=A", "--", "*.json"])
+    paths = []
+    for chunk in r.stdout.split("\0"):
+        lines = [l.strip() for l in chunk.strip().split("\n") if l.strip()]
+        if len(lines) < 2:
+            continue
+        sha = lines[0]
+        for name in lines[1:]:
+            if name.startswith(".") or "/" in name:
+                continue
+            key = (name, sha)
+            if key not in _PATH_IDS:
+                with GIT_LOCK:
+                    head = subprocess.run(["git", "cat-file", "-p", sha + ":" + name], cwd=DRAFTS_DIR, env=GIT_ENV,
+                                          capture_output=True, timeout=20).stdout[:400].decode("utf-8", "replace")
+                m = re.search(r'"id"\s*:\s*"([^"]+)"', head)
+                _PATH_IDS[key] = m.group(1) if m else ""
+            if _PATH_IDS[key] == draft_id and name not in paths:
+                paths.append(name)
+    return paths
+
+
+def draft_versions(draft_id):
+    """Every commit (push) that changed this draft, newest first, across the paths it has
+    lived at. → [{sha, ts, kind, path}]  kind: "manual" | "auto" | other."""
+    if not os.path.isdir(os.path.join(DRAFTS_DIR, ".git")):
+        return []
+    paths = _draft_json_paths(draft_id)
+    if not paths:
+        return []
+    with GIT_LOCK:
+        r = _git(["log", "--format=%x00%H%x09%ct%x09%s", "--name-status", "--no-renames", "--", *paths])
+    out = []
+    for chunk in r.stdout.split("\0"):
+        lines = [l for l in chunk.strip().split("\n") if l.strip()]
+        if not lines:
+            continue
+        head = lines[0].split("\t")
+        if len(head) < 3:
+            continue
+        sha, ts, subj = head[0], int(head[1]), head[2]
+        # the path the draft is at after this commit (a commit that only deletes it isn't a version)
+        kept = [l.split("\t", 1)[1] for l in lines[1:] if "\t" in l and l[0] in "AM" and l.split("\t", 1)[1] in paths]
+        if not kept:
+            continue
+        m = re.match(r"drafts: (\w+)", subj)
+        out.append({"sha": sha, "ts": ts, "kind": m.group(1) if m else "other", "path": kept[0]})
+    return out
+
+
+def draft_version(draft_id, sha, full=False):
+    """The draft as it was at commit `sha` (images' inline data stripped — it's for reading
+    and diffing; restoring keeps the media files, which are content-addressed)."""
+    if not SHA_RE.match(sha or ""):
+        return 400, {"error": "bad sha"}
+    v = next((x for x in draft_versions(draft_id) if x["sha"].startswith(sha)), None)
+    if not v:
+        return 404, {"error": "no such version of this draft"}
+    with GIT_LOCK:
+        r = _git(["show", v["sha"] + ":" + v["path"]])
+    if r.returncode != 0:
+        return 404, {"error": "couldn't read that version"}
+    try:
+        d = json.loads(r.stdout)
+    except ValueError:
+        return 500, {"error": "that version isn't valid JSON"}
+    if d.get("id") != draft_id:
+        return 404, {"error": "that file belonged to another draft"}
+    for k in ("body", "footnotes") if not full else ():
+        if isinstance(d.get(k), str):
+            d[k] = INLINE_SRC_RE.sub(r'\1=\2\2 data-was-inline="1"', d[k])
+    d["version"] = {"sha": v["sha"], "ts": v["ts"], "kind": v["kind"]}
+    return 200, d
+
+
 def auto_push_loop():
     while True:
         time.sleep(AUTO_PUSH_SECONDS)
@@ -852,6 +939,102 @@ def check_link(url):
     return 200, {"ok": True, "status": status, "title": title, "url": final, "type": ctype}
 
 
+SOURCE_MAX_BYTES = 12 * 1024 * 1024
+SOURCE_MAX_CHARS = 60000
+ARXIV_ID_RE = re.compile(r"arxiv\.org/(?:abs|pdf|html)/([^\s?#]+?)(?:\.pdf)?/?$", re.I)
+_DROP_TAGS_RE = re.compile(r"<(script|style|noscript|svg|nav|header|footer|form|button|math|figure)\b.*?</\1\s*>", re.S | re.I)
+_BLOCK_TAGS_RE = re.compile(r"</?(p|div|section|article|h[1-6]|li|ul|ol|br|tr|table|blockquote|pre|dd|dt)\b[^>]*>", re.I)
+
+
+def _html_text(text):
+    """A web page → its readable text (rough: scripts, styles, nav and markup removed)."""
+    m = re.search(r"<(article|main)\b.*?</\1\s*>", text, re.S | re.I)
+    body = m.group(0) if m and len(m.group(0)) > 2000 else text
+    body = _DROP_TAGS_RE.sub(" ", body)
+    body = _BLOCK_TAGS_RE.sub("\n", body)
+    body = htmlmod.unescape(re.sub(r"<[^>]+>", " ", body))
+    body = re.sub(r"[ \t\r\f\v]+", " ", body)
+    body = re.sub(r"\n\s*\n+", "\n\n", body)
+    return body.strip()
+
+
+def _crossref_abstract(doi):
+    import urllib.request
+    from urllib.parse import quote
+    req = urllib.request.Request("https://api.crossref.org/works/" + quote(doi, safe="/"),
+                                 headers={"User-Agent": "editor-server/1.0 (source reader)"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            msg = json.loads(resp.read(1024 * 1024).decode("utf-8", "replace")).get("message") or {}
+        title = re.sub(r"<[^>]+>", "", (msg.get("title") or [""])[0])
+        abstract = re.sub(r"<[^>]+>", " ", msg.get("abstract") or "")
+        return htmlmod.unescape(title).strip(), re.sub(r"\s+", " ", htmlmod.unescape(abstract)).strip()
+    except Exception:
+        return "", ""
+
+
+def fetch_source(url):
+    """What a link in the draft (or the notes) points at, as text — so the AI reads the
+    sources the writer cites. arXiv links read the paper's HTML full text (else its abstract
+    page); PDFs go through pdftotext when it's installed; a DOI falls back to Crossref's
+    abstract when the publisher blocks scripts. → (status, {ok, title, text, url} | {ok: False, error})"""
+    import urllib.request
+    import urllib.error
+    url = (url or "").strip()
+    p = urlparse(url)
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return 400, {"ok": False, "error": "not an http(s) URL"}
+    if not _public_host(p.hostname):
+        return 400, {"ok": False, "error": "not a public host"}
+    tries = [url]
+    ax = ARXIV_ID_RE.search(url)
+    if ax:
+        tries = ["https://arxiv.org/html/" + ax.group(1), "https://arxiv.org/abs/" + ax.group(1)]
+    opener = _public_opener()
+    last = "no response"
+    for u in tries:
+        req = urllib.request.Request(u, headers={"User-Agent": LINKCHECK_UA, "Accept": "text/html,application/pdf;q=0.9,*/*;q=0.5", "Accept-Language": "en"})
+        try:
+            with opener.open(req, timeout=20) as resp:
+                ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                raw = resp.read(SOURCE_MAX_BYTES)
+                final = resp.geturl()
+        except urllib.error.HTTPError as e:
+            last = "HTTP %d" % e.code
+            continue
+        except Exception as e:
+            last = str(e)[:200]
+            continue
+        title, text = "", ""
+        if ctype == "application/pdf" or raw[:5] == b"%PDF-":
+            if shutil.which("pdftotext"):
+                try:
+                    out = subprocess.run(["pdftotext", "-q", "-", "-"], input=raw, capture_output=True, timeout=30)
+                    text = out.stdout.decode("utf-8", "replace")
+                except Exception as e:
+                    last = "pdftotext failed: %s" % str(e)[:100]
+            else:
+                last = "PDF (install poppler's pdftotext to read PDFs)"
+        elif not ctype or "html" in ctype or "text" in ctype:
+            page = raw.decode("utf-8", "replace")
+            title = _meta_content(page, "citation_title") or _meta_content(page, "og:title")
+            if not title:
+                m = HTML_TITLE_RE.search(page)
+                title = m.group(1) if m else ""
+            text = _html_text(page) if "html" in ctype or page.lstrip()[:1] == "<" else page
+        title = re.sub(r"\s+", " ", htmlmod.unescape(title or "")).strip()[:300]
+        text = re.sub(r"[ \t]+", " ", text).strip()
+        if len(text) > 400:
+            return 200, {"ok": True, "title": title, "text": text[:SOURCE_MAX_CHARS], "url": final, "truncated": len(text) > SOURCE_MAX_CHARS}
+        last = "no readable text (%s)" % (ctype or "unknown type")
+    doi = DOI_IN_URL_RE.search(p.path)
+    if doi:
+        title, abstract = _crossref_abstract(doi.group(1).rstrip("."))
+        if abstract:
+            return 200, {"ok": True, "title": title, "text": "Abstract: " + abstract, "url": url, "abstractOnly": True}
+    return 200, {"ok": False, "error": last}
+
+
 GIF_MAX_BYTES = 40 * 1024 * 1024
 GIPHY_PAGE_RE = re.compile(r"^https?://(?:www\.)?giphy\.com/(?:gifs|stickers|embed)/(?:[^/?#]*-)?([A-Za-z0-9]+)/?(?:[?#].*)?$")
 GIPHY_MEDIA_RE = re.compile(r"^https?://(?:media\d*|i)\.giphy\.com/(?:media/(?:v1\.[^/]+/)?)?([A-Za-z0-9]+)(?:/[^/?#]*|\.\w+)?(?:[?#].*)?$")
@@ -1015,6 +1198,21 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send_json(m)
         if path == "/api/gdoc":          # a Google Doc's HTML, for Review's context
             code, payload = fetch_gdoc((self._query().get("url") or [""])[0].strip())
+            return self._send_json(payload, code)
+        if path == "/api/versions":      # the pushes that changed a draft (History → Versions)
+            draft = (self._query().get("draft") or [""])[0]
+            if not SAFE_ID_RE.match(draft):
+                return self.send_error(400, "bad draft id")
+            return self._send_json({"versions": draft_versions(draft)})
+        if path == "/api/version":       # one past version of a draft, for diffing / restoring
+            q = self._query()
+            draft = (q.get("draft") or [""])[0]
+            if not SAFE_ID_RE.match(draft):
+                return self.send_error(400, "bad draft id")
+            code, payload = draft_version(draft, (q.get("sha") or [""])[0], full=(q.get("full") or [""])[0] == "1")
+            return self._send_json(payload, code)
+        if path == "/api/source":        # a linked source's text, for the AI to read (ai-suggest.js)
+            code, payload = fetch_source((self._query().get("url") or [""])[0].strip())
             return self._send_json(payload, code)
         if path == "/api/linkcheck":     # does an AI-suggested web link exist? (ai-suggest.js)
             code, payload = check_link((self._query().get("url") or [""])[0].strip())

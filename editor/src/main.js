@@ -15,6 +15,7 @@ import { setupLinks } from './links.js'
 import { cleanPastedHTML, setupPlainTextPaste } from './paste.js'
 import { setupSourceView } from './source-view.js'
 import { setupToc } from './toc.js'
+import { setupWordCount } from './wordcount.js'
 import { setupDrafts } from './drafts.js'
 import { setupPublish } from './publish.js'
 import { setupMobileViewport } from './mobile.js'
@@ -367,6 +368,7 @@ function applySnapshot(s) {
   // setContent above runs with emitUpdate:false, so the contents panel won't hear about
   // the swap through editor.on('update') — refresh it directly (toc is set up before load()).
   if (toc) toc.refresh()
+  if (wordCount) wordCount.refresh()
   // Re-create video sources for the draft just displayed (IndexedDB → disk backup).
   rehydrateVideos(editor, s.id || doc.id)
 }
@@ -437,6 +439,9 @@ setupSourceView(editor)
 
 // Contents panel: top-left §-numbered outline of the doc's headings (see toc.js).
 const toc = setupToc(editor)
+
+// Word count: bottom-left pill; hover for length details (see wordcount.js).
+const wordCount = setupWordCount(editor)
 
 // Publish: build a standalone article and write it to writings/ via File System Access.
 setupPublish({ editor, currentSnapshot })

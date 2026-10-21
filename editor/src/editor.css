@@ -878,3 +878,40 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .version-view del { background: rgba(192, 57, 43, 0.12); color: #a5352a; text-decoration: line-through; text-decoration-color: rgba(165, 53, 42, 0.6); }
 .version-view ins { background: rgba(62, 142, 83, 0.15); color: #2f7444; text-decoration: none; }
 @media (max-width: 640px) { .vd-legend { display: none; } .vd-ch::after { left: -10px; } }
+
+/* ----------------------------- WORD COUNT (wordcount.js) ----------------------------- */
+.wc { position: fixed; z-index: 45; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+.wc-pill {
+  border: 1px solid transparent; background: none; border-radius: 20px; padding: 0.3rem 0.7rem;
+  font: 500 0.78rem/1.2 "Inter", sans-serif; color: var(--faint); font-variant-numeric: tabular-nums;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.wc:hover .wc-pill, .wc.open .wc-pill, .wc-pill:focus-visible { color: var(--text); background: var(--bg-soft); border-color: var(--line); }
+.wc-card {
+  position: absolute; left: 0; bottom: calc(100% + 8px); width: 290px; max-width: calc(100vw - 36px);
+  max-height: calc(100vh - 140px); overflow-y: auto; scrollbar-width: none;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 0.9rem 1rem; font: 0.8rem/1.4 "Inter", sans-serif; color: var(--text); font-variant-numeric: tabular-nums;
+  opacity: 0; visibility: hidden; transform: translateY(4px);
+  transition: opacity 0.14s, transform 0.14s, visibility 0s linear 0.14s;
+}
+/* invisible bridge over the 8px gap so the pointer can travel from the pill into the card */
+.wc-card::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 10px; }
+.wc:hover .wc-card, .wc.open .wc-card, .wc:focus-within .wc-card {
+  opacity: 1; visibility: visible; transform: none; transition: opacity 0.14s, transform 0.14s;
+}
+.wc-head { display: flex; align-items: baseline; gap: 0.35rem; color: var(--muted); margin-bottom: 0.7rem; }
+.wc-big { font-family: "Newsreader", Georgia, serif; font-size: 1.6rem; font-weight: 500; color: var(--text); line-height: 1; }
+.wc-time { margin-left: auto; color: var(--muted); }
+.wc-grid { display: flex; flex-direction: column; gap: 0.28rem; }
+.wc-row { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); }
+.wc-row b, .wc-sec b { font-weight: 500; color: var(--text); white-space: nowrap; }
+.wc-label {
+  font: 700 0.66rem/1 "Inter", sans-serif; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text); margin: 0.95rem 0 0.55rem;
+}
+.wc-secs { display: flex; flex-direction: column; gap: 0.45rem; }
+.wc-sec { position: relative; display: flex; justify-content: space-between; gap: 0.8rem; padding-bottom: 5px; }
+.wc-sec-t { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wc-sec i { position: absolute; left: 0; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); opacity: 0.7; }
+.wc-sec::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: var(--line-soft); }

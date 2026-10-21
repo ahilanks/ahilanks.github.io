@@ -281,18 +281,8 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix) {
   let html = '\n      <hr class="fn-divider" />\n      <ol class="footnotes">\n'
   Array.from(wrap.children).forEach((bodyClone, idx) => {
     const n = idx + 1 // index order matches the re-numbered body refs above
-    // ↩ back to the marker, on the note's last line (inside a trailing <p>/<div>, else
-    // appended). U+FE0E keeps iOS from drawing it as an emoji.
-    const back = document.createElement('a')
-    back.className = 'fn-back'
-    back.href = '#fnref-' + n
-    back.setAttribute('aria-label', 'Back to text')
-    back.textContent = '↩︎'
-    const last = bodyClone.lastElementChild
-    const trailing = last && /^(P|DIV)$/.test(last.tagName) && !(last.nextSibling && last.nextSibling.textContent.trim())
-    const host = trailing ? last : bodyClone
-    host.append(' ', back)
-    html += '        <li id="fn-' + n + '">' + bodyClone.innerHTML + '</li>\n'
+    // The note's number is its link back to the marker (no trailing ↩ glyph).
+    html += '        <li id="fn-' + n + '"><a class="fn-back" href="#fnref-' + n + '" aria-label="Back to text">' + n + '.</a><div class="fn-text">' + bodyClone.innerHTML + '</div></li>\n'
   })
   html += '      </ol>\n'
   return { html, files }
@@ -302,7 +292,7 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix) {
 // Runs INSIDE the published article (embedded via fnTrip.toString(), same rules as
 // provWidget below). A footnote marker glides to its note and raises a floating
 // "Back to reading" pill that returns to the exact spot the reader left — the jump is a
-// history entry, so the browser's Back does the same. A note's ↩ makes the same trip home,
+// history entry, so the browser's Back does the same. A note's number makes the same trip home,
 // or, when the reader scrolled down to the notes on their own, centres its marker. The
 // pill drops away if the reader scrolls back up by hand.
 function fnTrip() {
@@ -794,13 +784,14 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }',
     '      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }',
     '      .fn-divider { width:100%; margin:3rem 0 1.2rem; }',
-    '      ol.footnotes { font-size:0.92rem; line-height:1.5; color:var(--text-color); padding-left:1.2rem; }',
-    '      ol.footnotes li { margin-bottom:0.7rem; }',
+    '      ol.footnotes { font-size:0.92rem; line-height:1.5; color:var(--text-color); list-style:none; padding-left:0; }',
+    '      ol.footnotes li { display:flex; gap:0.5rem; margin-bottom:0.7rem; }',
+    '      ol.footnotes .fn-text { flex:1; min-width:0; }',
     '      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }',
     '      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }',
     '      ol.footnotes img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.5rem 0; }',
     '      ol.footnotes li:focus { outline:none; }',
-    '      .fn-back { font-family:system-ui, -apple-system, sans-serif; color:var(--muted); text-decoration:none; padding:0 0.15em; }',
+    '      .fn-back { flex:none; min-width:1.4rem; color:var(--muted); font-weight:600; text-decoration:none; }',
     '      .fn-back:hover { color:var(--text-color); }',
     // the brief highlight on a note (going out) or its marker (coming back), as in the editor
     '      @keyframes fn-flash { from { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); } to { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); } }',

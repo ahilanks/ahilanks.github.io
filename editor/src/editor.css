@@ -182,6 +182,8 @@ figure.resizing img { cursor: ew-resize; }
 figure.img-block img { cursor: grab; }
 figure.drag-source { opacity: 0.35; }
 .prosemirror-dropcursor-block { border-radius: 2px; }
+/* files (images, GIFs, videos) hovering over the page: outline the text column they'll land in */
+body.file-drag .ProseMirror { outline: 2px dashed rgba(15, 122, 229, 0.45); outline-offset: 10px; border-radius: 4px; }
 figure.img-block figcaption, figure.video-block figcaption { margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted); text-align: center; outline: none; }
 /* Caption placeholder. An "empty" caption isn't `:empty` — ProseMirror puts a
    <br class="ProseMirror-trailingBreak"> in it for the caret — so match that too. */

@@ -73,8 +73,12 @@ function wireSettings() {
 // The selected range as plain text, with math nodes written back as $tex$ / $$tex$$.
 function selectionAsMathText(editor) {
   const { from, to } = editor.state.selection
+  return rangeAsMathText(editor.state.doc, from, to)
+}
+
+function rangeAsMathText(doc, from, to) {
   if (from >= to) return ''
-  return editor.state.doc.textBetween(from, to, '\n', (leaf) => {
+  return doc.textBetween(from, to, '\n', (leaf) => {
     if (leaf.type.name === 'inlineMath') return '$' + leaf.attrs.tex + '$'
     if (leaf.type.name === 'blockMath') return '$$' + leaf.attrs.tex + '$$'
     return ''
@@ -373,13 +377,31 @@ async function runMathOnSelection(editor) {
   const selected = selectionAsMathText(editor)
   if (!selected.trim()) { toast('Nothing to format'); return }
   const ctx = selectionContext(editor)
+  // The reply takes a moment, and the writer may click or type elsewhere meanwhile: pin
+  // the highlighted range and carry it through every edit until the answer arrives, so
+  // the math replaces what was selected — not wherever the caret has moved to.
+  let { from, to } = editor.state.selection
+  const track = ({ transaction }) => {
+    if (!transaction.docChanged) return
+    from = transaction.mapping.map(from, 1)
+    to = transaction.mapping.map(to, -1)
+  }
+  editor.on('transaction', track)
   toast('Formatting math…')
   try {
     const out = await callOpenAIFormatMath(selected, ctx)
-    editor.chain().focus().deleteSelection().insertContent(htmlFromMathText(out)).run()
+    editor.off('transaction', track)
+    if (to <= from || rangeAsMathText(editor.state.doc, from, to) !== selected) {
+      toast('That text changed while formatting — select it and try again')
+      return
+    }
+    // leave the caret where the writer is now
+    editor.chain().insertContentAt({ from, to }, htmlFromMathText(out), { updateSelection: false }).run()
     toast('Math formatted ✓')
   } catch (err) {
     toast(err.message || "Couldn't format math")
+  } finally {
+    editor.off('transaction', track)
   }
 }
 

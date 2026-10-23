@@ -271,13 +271,50 @@ function centerOnScreen(el) {
   area.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
 }
 
-// The brief highlight on a note (going out) or its marker (coming back).
+// The highlight on a note (going out) or its marker (coming back). It lights up as the
+// glide comes in to land — once the target is near the middle of the screen, or the scroll
+// has stopped — rather than at the click, so it's lit when you actually arrive, then holds
+// a while after the scroll stops before fading out.
+const FLASH_HOLD = 1800 // ms lit after the scroll stops
 function flash(el) {
-  if (!el.animate) return
-  el.animate([
-    { backgroundColor: 'rgba(230, 178, 60, 0.32)', boxShadow: '0 0 0 0.3em rgba(230, 178, 60, 0.32)' },
-    { backgroundColor: 'rgba(230, 178, 60, 0)', boxShadow: '0 0 0 0.3em rgba(230, 178, 60, 0)' },
-  ], { duration: 1600, easing: 'ease-out' })
+  const area = $('scrollArea')
+  const token = (el._fnFlash = {})
+  el.classList.remove('fn-flash', 'fn-flash-fade')
+  let lit = false
+  const light = () => {
+    if (lit || el._fnFlash !== token) return
+    lit = true
+    void el.offsetWidth // restart, if it was already lit
+    el.classList.add('fn-flash')
+  }
+  const near = () => {
+    const r = el.getBoundingClientRect()
+    const v = area ? area.getBoundingClientRect() : { top: 0, height: window.innerHeight }
+    return Math.abs(r.top + r.height / 2 - (v.top + v.height / 2)) < v.height * 0.25
+  }
+  watchScroll(() => (area ? area.scrollTop : window.scrollY), () => { if (near()) light() }, () => {
+    light()
+    setTimeout(() => {
+      if (el._fnFlash !== token) return // flashed again meanwhile
+      el.classList.add('fn-flash-fade')
+      setTimeout(() => { if (el._fnFlash === token) el.classList.remove('fn-flash', 'fn-flash-fade') }, 1200)
+    }, FLASH_HOLD)
+  })
+}
+
+// Run `frame` on every animation frame while the scroll moves, then `done` once the position
+// has held still for a few frames (a smooth scroll has landed), or after 3s regardless.
+function watchScroll(pos, frame, done) {
+  let last = pos(); let still = 0; const t0 = performance.now()
+  const tick = () => {
+    frame()
+    const p = pos()
+    still = p === last ? still + 1 : 0
+    last = p
+    if (still >= 8 || performance.now() - t0 > 3000) done()
+    else requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
 }
 
 // Take the caret to footnote `id`'s body, centred on screen, with a brief highlight.

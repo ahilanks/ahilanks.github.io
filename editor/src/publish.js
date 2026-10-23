@@ -301,10 +301,39 @@ function fnTrip() {
   var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
   var trip = null // { y, ref, n, left } while the reader is away at note n
 
+  // Lights up as the glide comes in to land — once the target nears the middle of the
+  // screen, or the page stops — not at the click, so it's lit when the reader arrives; then
+  // holds a while after the page comes to rest before fading. Shows which note (or, on the
+  // way back, which marker) they landed on.
   function flash(el) {
-    el.classList.remove('fn-flash')
-    void el.offsetWidth // restart the animation
-    el.classList.add('fn-flash')
+    var token = el._fnFlash = {}
+    var lit = false
+    el.classList.remove('fn-flash', 'fn-flash-fade')
+    function light() {
+      if (lit || el._fnFlash !== token) return
+      lit = true
+      void el.offsetWidth // restart, if it was already lit
+      el.classList.add('fn-flash')
+    }
+    function near() {
+      var r = el.getBoundingClientRect()
+      return Math.abs(r.top + r.height / 2 - window.innerHeight / 2) < window.innerHeight * 0.25
+    }
+    var last = window.scrollY, still = 0, t0 = Date.now()
+    function tick() {
+      if (near()) light()
+      var y = window.scrollY
+      still = y === last ? still + 1 : 0
+      last = y
+      if (still < 8 && Date.now() - t0 < 3000) { requestAnimationFrame(tick); return }
+      light()
+      setTimeout(function () {
+        if (el._fnFlash !== token) return
+        el.classList.add('fn-flash-fade')
+        setTimeout(function () { if (el._fnFlash === token) el.classList.remove('fn-flash', 'fn-flash-fade') }, 1200)
+      }, 1800)
+    }
+    requestAnimationFrame(tick)
   }
   // focus without a second scroll, so Tab carries on from here
   function land(el) { el.focus({ preventScroll: true }) }
@@ -794,8 +823,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      .fn-back { flex:none; min-width:1.4rem; color:var(--muted); font-weight:600; text-decoration:none; }',
     '      .fn-back:hover { color:var(--text-color); }',
     // the brief highlight on a note (going out) or its marker (coming back), as in the editor
-    '      @keyframes fn-flash { from { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); } to { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); } }',
-    '      .fn-flash { animation:fn-flash 1.6s ease-out; border-radius:3px; }',
+    '      .fn-flash { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); border-radius:3px; }',
+    '      .fn-flash.fn-flash-fade { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); transition:background-color 1.2s ease-out, box-shadow 1.2s ease-out; }',
     footHtml ? '      .fn-return { position:fixed; left:50%; bottom:calc(1.4rem + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); z-index:20; display:inline-flex; align-items:center; gap:0.45rem; padding:0.6rem 1.05rem 0.6rem 0.9rem; border:none; border-radius:999px; background:var(--text-color); color:var(--bg-color); font:600 0.8rem/1 system-ui, -apple-system, sans-serif; letter-spacing:0.01em; white-space:nowrap; cursor:pointer; box-shadow:0 1px 3px rgba(39,50,63,0.14), 0 6px 18px rgba(39,50,63,0.2); animation:fn-return-in 0.2s ease-out; }' : '',
     footHtml ? '      .fn-return[hidden] { display:none; }' : '',
     footHtml ? '      .fn-return:hover { background:#1b2430; }' : '',

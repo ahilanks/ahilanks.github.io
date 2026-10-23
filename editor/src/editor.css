@@ -247,6 +247,10 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
 /* the number jumps back to its marker in the text (footnote.js) */
 .fn-num { color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 1.2rem; cursor: pointer; user-select: none; }
 /* "Back to reading" while you're away at a note (footnote.js) — same pill as the published page */
+/* a note (going out) or its marker (coming back): lights up as the scroll lands on it, then
+   fades a while later (flash() in nodes/footnote.js) */
+.fn-flash { background-color: rgba(230, 178, 60, 0.32); box-shadow: 0 0 0 0.3em rgba(230, 178, 60, 0.32); border-radius: 3px; }
+.fn-flash.fn-flash-fade { background-color: rgba(230, 178, 60, 0); box-shadow: 0 0 0 0.3em rgba(230, 178, 60, 0); transition: background-color 1.2s ease-out, box-shadow 1.2s ease-out; }
 .fn-return {
   position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60;
   display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1.05rem 0.6rem 0.9rem;

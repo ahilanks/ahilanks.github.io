@@ -181,6 +181,14 @@ figure.resizing img { cursor: ew-resize; }
    flight; the dropcursor line (StarterKit) marks where it will land. */
 figure.img-block img { cursor: grab; }
 figure.drag-source { opacity: 0.35; }
+/* video crop opens from a hover button (dbl-click on a video fullscreens in Chrome) */
+.fig-crop-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2; padding: 4px 10px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.6); color: #fff;
+  font: 500 12px/1.2 system-ui, sans-serif; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+}
+figure.video-block:hover .fig-crop-btn, .fig-crop-btn:focus-visible { opacity: 1; }
+@media (hover: none) { .fig-crop-btn { opacity: 0.85; } }
 .prosemirror-dropcursor-block { border-radius: 2px; }
 /* files (images, GIFs, videos) hovering over the page: outline the text column they'll land in */
 body.file-drag .ProseMirror { outline: 2px dashed rgba(15, 122, 229, 0.45); outline-offset: 10px; border-radius: 4px; }

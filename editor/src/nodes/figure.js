@@ -82,11 +82,42 @@ function figureNodeView() {
     caption.dataset.placeholder = 'Write a caption…'
     fig.append(media, caption)
     applyWidth()
+    applyCrop()
+
+    // Videos can't take the dbl-click (Chrome fullscreens on it), so crop opens from a hover button.
+    if (isVideo) {
+      const cropBtn = document.createElement('button')
+      cropBtn.type = 'button'; cropBtn.className = 'fig-crop-btn'; cropBtn.textContent = 'Crop'
+      cropBtn.setAttribute('contenteditable', 'false')
+      cropBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() })
+      cropBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openCrop() })
+      fig.insertBefore(cropBtn, caption)
+    }
 
     function applyWidth() {
       if (node.attrs.width) { fig.dataset.w = node.attrs.width; fig.style.width = node.attrs.width + '%' }
       else { delete fig.dataset.w; fig.style.width = '' }
     }
+    /* Video crop is non-destructive: `crop` holds the kept box as fractions "x y w h" and
+       object-view-box shows just that region (the element's intrinsic size becomes the box,
+       so the native controls sit on the cropped frame). */
+    function parseCrop(v) {
+      const n = String(v || '').split(/\s+/).map(Number)
+      return n.length === 4 && n.every((x) => Number.isFinite(x)) ? { x: n[0], y: n[1], w: n[2], h: n[3] } : null
+    }
+    function applyCrop() {
+      if (!isVideo) return
+      const c = parseCrop(node.attrs.crop)
+      const pct = (f) => +(f * 100).toFixed(3) + '%'
+      media.style.objectViewBox = c
+        ? `inset(${pct(c.y)} ${pct(1 - c.x - c.w)} ${pct(1 - c.y - c.h)} ${pct(c.x)})` : ''
+    }
+    function setCropAttr(v) {
+      const pos = getPos()
+      if (typeof pos !== 'number') return
+      editor.chain().command(({ tr }) => { tr.setNodeAttribute(pos, 'crop', v); return true }).run()
+    }
+
     function setWidthAttr(w) {
       const pos = getPos()
       if (typeof pos !== 'number') return
@@ -137,11 +168,12 @@ function figureNodeView() {
     }
 
     function openCrop() {
-      if (isVideo || !editor.isEditable) return
-      const currentSrc = node.attrs.src
-      if (!currentSrc) return
-      // cropping redraws through a canvas, which keeps only the first frame
-      if (/^data:image\/gif|\.gif(?:[?#]|$)/i.test(currentSrc)) { toast("GIFs can't be cropped — it would stop the animation"); return }
+      if (!editor.isEditable) return
+      const currentSrc = isVideo ? media.currentSrc : node.attrs.src
+      if (!currentSrc) { if (isVideo) toast('The video is still loading'); return }
+      if (isVideo && !(window.CSS && CSS.supports('object-view-box', 'inset(0%)'))) { toast('Video cropping needs Chrome or Edge'); return }
+      // image cropping redraws through a canvas, which keeps only the first frame
+      if (!isVideo && /^data:image\/gif|\.gif(?:[?#]|$)/i.test(currentSrc)) { toast("GIFs can't be cropped — it would stop the animation"); return }
 
       let box = { x: 0, y: 0, w: 0, h: 0 }, drag = null
 
@@ -152,9 +184,14 @@ function figureNodeView() {
       const stage = document.createElement('div')
       stage.style.cssText = 'position:relative;user-select:none;touch-action:none;line-height:0;'
 
-      const pic = document.createElement('img')
+      // a video previews uncropped at its current frame, with the box on the saved crop
+      const pic = document.createElement(isVideo ? 'video' : 'img')
       pic.draggable = false
       pic.style.cssText = 'display:block;max-width:84vw;max-height:70vh;'
+      if (isVideo) {
+        pic.muted = true; pic.playsInline = true; pic.preload = 'auto'
+        pic.addEventListener('loadedmetadata', () => { try { pic.currentTime = media.currentTime || 0 } catch (e) {} }, { once: true })
+      }
       pic.src = currentSrc
 
       const boxEl = document.createElement('div')
@@ -178,6 +215,11 @@ function figureNodeView() {
         return b
       }
       const cancelBtn = mkBtn('Cancel', false), applyBtn = mkBtn('Crop', true)
+      if (isVideo && node.attrs.crop) {
+        const resetBtn = mkBtn('Remove crop', false)
+        resetBtn.onclick = () => { setCropAttr(null); close() }
+        bar.append(resetBtn)
+      }
       bar.append(cancelBtn, applyBtn)
 
       stage.append(pic, boxEl)
@@ -188,8 +230,14 @@ function figureNodeView() {
         boxEl.style.left = box.x + 'px'; boxEl.style.top = box.y + 'px'
         boxEl.style.width = box.w + 'px'; boxEl.style.height = box.h + 'px'
       }
-      function init() { box = { x: 0, y: 0, w: pic.clientWidth, h: pic.clientHeight }; layout() }
-      pic.complete && pic.naturalWidth ? init() : (pic.onload = init)
+      function init() {
+        const W = pic.clientWidth, H = pic.clientHeight
+        const c = isVideo && parseCrop(node.attrs.crop)
+        box = c ? { x: c.x * W, y: c.y * H, w: c.w * W, h: c.h * H } : { x: 0, y: 0, w: W, h: H }
+        layout()
+      }
+      if (isVideo) pic.readyState >= 1 ? init() : pic.addEventListener('loadedmetadata', init, { once: true })
+      else pic.complete && pic.naturalWidth ? init() : (pic.onload = init)
 
       boxEl.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation()
@@ -216,6 +264,7 @@ function figureNodeView() {
 
       function close() {
         drag = null
+        if (isVideo) { pic.removeAttribute('src'); pic.load() }
         document.removeEventListener('keydown', onKey, true)
         ov.remove()
       }
@@ -228,6 +277,12 @@ function figureNodeView() {
       ov.addEventListener('mousedown', (e) => { if (e.target === ov) close() })
 
       applyBtn.onclick = () => {
+        if (isVideo) {
+          const W = pic.clientWidth, H = pic.clientHeight, r = (f) => +f.toFixed(4)
+          const full = box.x < 1 && box.y < 1 && box.w > W - 1 && box.h > H - 1
+          setCropAttr(full ? null : [box.x / W, box.y / H, box.w / W, box.h / H].map(r).join(' '))
+          close(); return
+        }
         try {
           const sx = pic.naturalWidth / pic.clientWidth, sy = pic.naturalHeight / pic.clientHeight
           const c = document.createElement('canvas')
@@ -264,11 +319,13 @@ function figureNodeView() {
         if (nextIsVideo && next.attrs.vid !== node.attrs.vid) return false
         node = next
         applyWidth()
+        applyCrop()
         if (!isVideo && media.src !== node.attrs.src && node.attrs.src) media.src = node.attrs.src
         return true
       },
       // PM manages only the caption; everything else (img load, resize style/data-w) is ours.
       ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
+      stopEvent(e) { return !!(e.target && e.target.closest && e.target.closest('.fig-crop-btn')) },
     }
   }
 }
@@ -286,6 +343,7 @@ export const Figure = Node.create({
       width: { default: null, parseHTML: (el) => { const w = el.getAttribute('data-w'); return w ? Number(w) : null } },
       mediaType: { default: 'image', parseHTML: (el) => (el.classList.contains('video-block') ? 'video' : 'image') },
       vid: { default: null, parseHTML: (el) => el.getAttribute('data-vid') || null },
+      crop: { default: null, parseHTML: (el) => el.getAttribute('data-crop') || null },
       alt: { default: '', parseHTML: (el) => (el.querySelector('img') && el.querySelector('img').getAttribute('alt')) || '' },
     }
   },
@@ -297,6 +355,7 @@ export const Figure = Node.create({
     const figAttrs = { class: isVideo ? 'video-block' : 'img-block' }
     if (node.attrs.width) figAttrs['data-w'] = node.attrs.width
     if (isVideo && node.attrs.vid) figAttrs['data-vid'] = node.attrs.vid
+    if (isVideo && node.attrs.crop) figAttrs['data-crop'] = node.attrs.crop
     const media = isVideo
       ? ['video', { controls: 'true', playsinline: 'true', preload: 'metadata' }]
       : ['img', { src: node.attrs.src, alt: node.attrs.alt || '' }]

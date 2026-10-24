@@ -37,8 +37,8 @@ const OWN = [
   ['span.math-inline', ['class', 'data-tex']],
   ['div.math-block', ['class', 'data-tex', 'data-align']],
   ['sup.fn-ref', ['class', 'data-fn']],
-  ['figure.img-block', ['class', 'data-w']],
-  ['figure.video-block', ['class', 'data-w', 'data-vid']],
+  ['figure.img-block', ['class', 'data-w', 'data-pair']],
+  ['figure.video-block', ['class', 'data-w', 'data-vid', 'data-crop', 'data-pair', 'data-muted']],
 ]
 const OWN_SEL = OWN.map(([sel]) => sel).join(',')
 

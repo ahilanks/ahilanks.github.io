@@ -22,6 +22,7 @@
 
 import { getMarkRange } from '../vendor/lib.bundle.js'
 import { $, toast } from './dom.js'
+import { docHeadings, anchorOf, anchorFor, headingForHref, jumpToSection } from './section-links.js'
 import {
   footnoteLinkContext, footnoteAnchorAtSelection, applyFootnoteLink, removeFootnoteLink, focusFootnoteLinkContext,
 } from './nodes/footnote.js'
@@ -94,7 +95,38 @@ export function setupLinks(editor) {
   const inFootnote = (a) => !!(a && a.closest && a.closest('.fn-body'))
 
   const hideBubble = () => $('bubble')?.classList.remove('show')
-  const closeLinkPop = () => { linkPop.classList.add('hidden'); fnCtx = null }
+  const closeLinkPop = () => { linkPop.classList.add('hidden'); fnCtx = null; renderSections(null) }
+
+  /* sections list: every heading in the article, filtered by what's typed (unless it's a
+     URL). Picking one links the selection to it — see section-links.js. Article only:
+     footnote bodies live outside the doc. */
+  const linkSections = $('linkSections'), linkSecList = $('linkSecList')
+  function renderSections(filter) {
+    linkSecList.textContent = ''
+    if (filter === null || fnCtx) { linkSections.hidden = true; return }
+    const q = /[/:.]/.test(filter) || filter.startsWith('#') ? '' : filter.trim().toLowerCase()
+    const current = anchorOf(editor.getAttributes('link').href)
+    const hs = docHeadings(editor).filter((h) => !q || h.text.toLowerCase().includes(q))
+    hs.forEach((h) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.className = 'link-sec lvl-' + h.level + (current && h.anchor === current ? ' on' : '')
+      b.textContent = h.text
+      b.title = h.text
+      b.addEventListener('mousedown', (e) => e.preventDefault()) // keep the input's focus
+      b.addEventListener('click', () => linkToSection(h))
+      linkSecList.appendChild(b)
+    })
+    linkSections.hidden = !hs.length
+  }
+  function linkToSection(h) {
+    const anchor = anchorFor(editor, h)
+    editor.chain().focus().extendMarkRange('link')
+      .command(({ tr }) => { if (!h.anchor) tr.setNodeAttribute(h.pos, 'anchor', anchor); return true })
+      .setLink({ href: '#' + anchor }).run()
+    closeLinkPop()
+  }
+  linkInput.addEventListener('input', () => { if (isPopOpen()) renderSections(linkInput.value) })
   const isPopOpen = () => !linkPop.classList.contains('hidden')
 
   function openFootnoteLinkPop(fn) {
@@ -116,8 +148,9 @@ export function setupLinks(editor) {
     if (empty && !editor.isActive('link')) { toast('Select some text to link'); return }
     hideBubble()
     hidePreviewNow()
-    positionPopover(linkPop, popAnchorRect())
     linkInput.value = editor.getAttributes('link').href || ''
+    renderSections('')
+    positionPopover(linkPop, popAnchorRect())
     linkInput.focus()
     linkInput.select()
   }
@@ -205,7 +238,9 @@ export function setupLinks(editor) {
     lpAnchor = a
     hoverShown = hover ? a : null
     const href = a.getAttribute('href') || ''
-    linkPreviewUrl.textContent = href.length > 60 ? href.slice(0, 57) + '…' : href
+    const sec = anchorOf(href) && !inFootnote(a) ? headingForHref(editor, href) : null
+    const label = anchorOf(href) && !inFootnote(a) ? (sec ? '§ ' + sec.text : 'Section not found') : href
+    linkPreviewUrl.textContent = label.length > 60 ? label.slice(0, 57) + '…' : label
     linkPreviewUrl.setAttribute('href', href)
     positionPreview(a)
     linkPreview.classList.add('show')
@@ -293,6 +328,14 @@ export function setupLinks(editor) {
   }
   document.addEventListener('mousedown', cancelDwell, true)
   document.addEventListener('keydown', cancelDwell, true)
+
+  // a section link's chip scrolls to it rather than opening a tab
+  linkPreviewUrl.addEventListener('click', (e) => {
+    const href = linkPreviewUrl.getAttribute('href') || ''
+    if (!anchorOf(href) || (lpAnchor && inFootnote(lpAnchor))) return
+    e.preventDefault()
+    jumpToSection(editor, href)
+  })
 
   // keep the chip alive while the pointer is on it (so Edit stays clickable)
   linkPreview.addEventListener('mouseenter', () => clearTimeout(lpHideTimer))

@@ -12,6 +12,7 @@ import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
+import { HeadingAnchor, anchorOf, jumpToSection } from './section-links.js'
 import { cleanPastedHTML, setupPlainTextPaste } from './paste.js'
 import { setupSourceView } from './source-view.js'
 import { setupToc } from './toc.js'
@@ -108,6 +109,7 @@ export const editor = new Editor({
     BlockMath,
     FootnoteRef,
     Figure,
+    HeadingAnchor,
     CommentMark,
     Suggestions,
   ],
@@ -141,6 +143,8 @@ export const editor = new Editor({
       const href = a.getAttribute('href')
       if (!href) return false
       event.preventDefault()
+      // a link to a section of this article scrolls there instead
+      if (anchorOf(href)) { jumpToSection(editor, href); return true }
       window.open(href, '_blank', 'noopener')
       return true
     },

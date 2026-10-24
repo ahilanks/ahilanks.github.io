@@ -30,6 +30,11 @@ function setDragGhost(e, img) {
   } catch (err) { /* default ghost */ }
 }
 
+/* vid → the src its <video> last loaded. A move (drag, cut/paste) rebuilds the node view
+   with a bare <video>, and rehydrateVideos() only runs on draft load — so a rebuilt view
+   picks its source back up from here. */
+const videoSrcs = new Map()
+
 function figureNodeView() {
   return ({ node, editor, getPos }) => {
     const isVideo = node.attrs.mediaType === 'video'
@@ -41,7 +46,9 @@ function figureNodeView() {
       media = document.createElement('video')
       media.setAttribute('controls', ''); media.setAttribute('playsinline', ''); media.setAttribute('preload', 'metadata')
       if (node.attrs.vid) fig.dataset.vid = node.attrs.vid
-      // src (a blob: URL) is rehydrated from IndexedDB after load
+      // src (a blob: URL) is rehydrated from IndexedDB after load; a moved video reuses its old one
+      media.addEventListener('loadstart', () => { if (node.attrs.vid && media.currentSrc) videoSrcs.set(node.attrs.vid, media.currentSrc) })
+      if (node.attrs.vid && videoSrcs.has(node.attrs.vid)) media.src = videoSrcs.get(node.attrs.vid)
     } else {
       media = document.createElement('img')
       media.src = node.attrs.src
@@ -60,10 +67,11 @@ function figureNodeView() {
        deleted, caption travels — it's the node's content). The node spec deliberately
        stays draggable:false: spec-draggable arms native dragging for any mousedown
        inside the figure (ProseMirror's mightDrag), which would turn drag-selecting
-       caption text into a figure drag. Wiring the <img> alone keeps captions editable. */
-    if (!isVideo) {
+       caption text into a figure drag. Wiring the <img> alone keeps captions editable.
+       A video can't be the drag source (its controls need drags), so it gets a grip handle. */
+    function wireDragMove(handle) {
       let draggingThis = false
-      media.addEventListener('dragstart', (e) => {
+      handle.addEventListener('dragstart', (e) => {
         const pos = getPos()
         if (!editor.isEditable || typeof pos !== 'number' || !e.dataTransfer ||
             fig.classList.contains('resizing')) { e.preventDefault(); return }
@@ -75,8 +83,9 @@ function figureNodeView() {
         draggingThis = true
         setTimeout(() => { if (draggingThis) fig.classList.add('drag-source') }, 0)
       })
-      media.addEventListener('dragend', () => { draggingThis = false; fig.classList.remove('drag-source') })
+      handle.addEventListener('dragend', () => { draggingThis = false; fig.classList.remove('drag-source') })
     }
+    if (!isVideo) wireDragMove(media)
 
     const caption = document.createElement('figcaption')
     caption.dataset.placeholder = 'Write a caption…'
@@ -84,14 +93,47 @@ function figureNodeView() {
     applyWidth()
     applyCrop()
 
+    function mkFigBtn(cls, label, onClick) {
+      const b = document.createElement('button')
+      b.type = 'button'; b.className = 'fig-btn ' + cls; b.textContent = label
+      b.setAttribute('contenteditable', 'false')
+      b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() })
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onClick() })
+      fig.insertBefore(b, caption)
+      return b
+    }
     // Videos can't take the dbl-click (Chrome fullscreens on it), so crop opens from a hover button.
+    if (isVideo) mkFigBtn('fig-crop-btn', 'Crop', () => openCrop())
+    // `muted`: the video plays silently (saved with the draft, so it starts muted every time)
+    const muteBtn = isVideo && mkFigBtn('fig-mute-btn', '', () => {
+      const pos = getPos()
+      if (typeof pos !== 'number') return
+      editor.chain().command(({ tr }) => { tr.setNodeAttribute(pos, 'muted', !node.attrs.muted); return true }).run()
+    })
+    applyMuted()
+    function applyMuted() {
+      if (!isVideo) return
+      media.muted = media.defaultMuted = !!node.attrs.muted
+      muteBtn.textContent = node.attrs.muted ? 'Unmute' : 'Mute'
+    }
     if (isVideo) {
-      const cropBtn = document.createElement('button')
-      cropBtn.type = 'button'; cropBtn.className = 'fig-crop-btn'; cropBtn.textContent = 'Crop'
-      cropBtn.setAttribute('contenteditable', 'false')
-      cropBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() })
-      cropBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openCrop() })
-      fig.insertBefore(cropBtn, caption)
+      const grip = document.createElement('div')
+      grip.className = 'fig-grip'; grip.title = 'Drag to move'; grip.textContent = '⠿'
+      grip.setAttribute('contenteditable', 'false'); grip.setAttribute('draggable', 'true')
+      fig.insertBefore(grip, caption)
+      wireDragMove(grip)
+    }
+    // `pair` on a figure puts it and the figure right after it side by side (CSS only shows
+    // the button when another figure follows, and not on the second figure of a pair).
+    const pairBtn = mkFigBtn('fig-pair-btn', '', () => {
+      const pos = getPos()
+      if (typeof pos !== 'number') return
+      editor.chain().command(({ tr }) => { tr.setNodeAttribute(pos, 'pair', !node.attrs.pair); return true }).run()
+    })
+    applyPair()
+    function applyPair() {
+      if (node.attrs.pair) fig.dataset.pair = ''; else delete fig.dataset.pair
+      pairBtn.textContent = node.attrs.pair ? 'Stack' : 'Side by side'
     }
 
     function applyWidth() {
@@ -129,6 +171,8 @@ function figureNodeView() {
        touch-action:pan-y hands horizontal touch drags to us while vertical scrolling
        stays native (a vertical pan mid-drag fires pointercancel, which just commits). */
     function onRightEdge(e) {
+      // paired figures are fixed at half width each
+      if (fig.matches('figure[data-pair]:has(+ figure), figure[data-pair] + figure')) return false
       const r = fig.getBoundingClientRect()
       const edge = e.pointerType === 'touch' ? 28 : 16 // fatter hit zone for fingers
       return e.clientX >= r.right - edge && e.clientX <= r.right + 8 &&
@@ -320,12 +364,14 @@ function figureNodeView() {
         node = next
         applyWidth()
         applyCrop()
+        applyPair()
+        applyMuted()
         if (!isVideo && media.src !== node.attrs.src && node.attrs.src) media.src = node.attrs.src
         return true
       },
       // PM manages only the caption; everything else (img load, resize style/data-w) is ours.
       ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
-      stopEvent(e) { return !!(e.target && e.target.closest && e.target.closest('.fig-crop-btn')) },
+      stopEvent(e) { return !!(e.target && e.target.closest && e.target.closest('.fig-btn')) },
     }
   }
 }
@@ -343,6 +389,8 @@ export const Figure = Node.create({
       width: { default: null, parseHTML: (el) => { const w = el.getAttribute('data-w'); return w ? Number(w) : null } },
       mediaType: { default: 'image', parseHTML: (el) => (el.classList.contains('video-block') ? 'video' : 'image') },
       vid: { default: null, parseHTML: (el) => el.getAttribute('data-vid') || null },
+      muted: { default: false, parseHTML: (el) => el.hasAttribute('data-muted') },
+      pair: { default: false, parseHTML: (el) => el.hasAttribute('data-pair') },
       crop: { default: null, parseHTML: (el) => el.getAttribute('data-crop') || null },
       alt: { default: '', parseHTML: (el) => (el.querySelector('img') && el.querySelector('img').getAttribute('alt')) || '' },
     }
@@ -356,8 +404,10 @@ export const Figure = Node.create({
     if (node.attrs.width) figAttrs['data-w'] = node.attrs.width
     if (isVideo && node.attrs.vid) figAttrs['data-vid'] = node.attrs.vid
     if (isVideo && node.attrs.crop) figAttrs['data-crop'] = node.attrs.crop
+    if (node.attrs.pair) figAttrs['data-pair'] = ''
+    if (isVideo && node.attrs.muted) figAttrs['data-muted'] = ''
     const media = isVideo
-      ? ['video', { controls: 'true', playsinline: 'true', preload: 'metadata' }]
+      ? ['video', { controls: 'true', playsinline: 'true', preload: 'metadata', ...(node.attrs.muted ? { muted: 'true' } : {}) }]
       : ['img', { src: node.attrs.src, alt: node.attrs.alt || '' }]
     return ['figure', figAttrs, media, ['figcaption', {}, 0]]
   },

@@ -168,6 +168,8 @@ figure.img-block, figure.video-block { margin: 1.8rem auto; text-align: center; 
 figure.img-block img, figure.video-block video { max-width: 100%; border-radius: 10px; display: block; margin: 0 auto; }
 figure[data-w].img-block img, figure[data-w].video-block video { width: 100%; }
 figure.video-block video { background: #000; }
+/* an unresized video's figure hugs the player, so its hover buttons sit on the video */
+figure.video-block:not([data-w]) { width: fit-content; }
 figure.img-block::after, figure.video-block::after {
   content: ""; position: absolute; top: 50%; right: -4px; transform: translateY(-50%);
   width: 8px; height: 52px; border-radius: 6px; background: var(--accent);
@@ -181,14 +183,39 @@ figure.resizing img { cursor: ew-resize; }
    flight; the dropcursor line (StarterKit) marks where it will land. */
 figure.img-block img { cursor: grab; }
 figure.drag-source { opacity: 0.35; }
-/* video crop opens from a hover button (dbl-click on a video fullscreens in Chrome) */
-.fig-crop-btn {
-  position: absolute; top: 8px; right: 8px; z-index: 2; padding: 4px 10px; border-radius: 6px;
+/* hover buttons on figures: Crop (videos — dbl-click on a video fullscreens in Chrome) and
+   Side by side (only when another figure follows, never on the second of a pair) */
+.fig-btn {
+  position: absolute; top: 8px; z-index: 2; padding: 4px 10px; border-radius: 6px;
   border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.6); color: #fff;
   font: 500 12px/1.2 system-ui, sans-serif; cursor: pointer; opacity: 0; transition: opacity 0.15s;
 }
-figure.video-block:hover .fig-crop-btn, .fig-crop-btn:focus-visible { opacity: 1; }
-@media (hover: none) { .fig-crop-btn { opacity: 0.85; } }
+.fig-crop-btn { right: 8px; }
+.fig-mute-btn { right: 64px; }
+.fig-pair-btn { left: 8px; display: none; }
+figure:has(+ figure) > .fig-pair-btn { display: block; }
+figure[data-pair] + figure > .fig-pair-btn { display: none; }
+figure:hover > .fig-btn, .fig-btn:focus-visible { opacity: 1; }
+/* videos move by this grip (their own drags belong to the native controls) */
+.fig-grip {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 2;
+  padding: 1px 14px 3px; border-radius: 6px; background: rgba(0,0,0,.6); color: #fff;
+  font: 22px/1 system-ui, sans-serif; cursor: grab; user-select: none;
+  opacity: 0; transition: opacity 0.15s;
+}
+.fig-grip:active { cursor: grabbing; }
+figure:hover > .fig-grip { opacity: 1; }
+@media (hover: none) { .fig-btn, .fig-grip { opacity: 0.85; } }
+/* a pair sits side by side, half width each (their own resize width is ignored) */
+figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure {
+  display: inline-block; vertical-align: top; width: calc(50% - 0.6rem) !important; margin: 1.8rem 0;
+}
+figure[data-pair]:has(+ figure) { margin-right: 1.2rem; }
+figure[data-pair]:has(+ figure) :is(img, video), figure[data-pair]:has(+ figure) + figure :is(img, video) { width: 100%; }
+figure[data-pair]:has(+ figure)::after, figure[data-pair]:has(+ figure) + figure::after { display: none; }
+@media (max-width: 560px) {
+  figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display: block; width: auto !important; margin: 1.8rem auto; }
+}
 .prosemirror-dropcursor-block { border-radius: 2px; }
 /* files (images, GIFs, videos) hovering over the page: outline the text column they'll land in */
 body.file-drag .ProseMirror { outline: 2px dashed rgba(15, 122, 229, 0.45); outline-offset: 10px; border-radius: 4px; }
@@ -629,6 +656,14 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .popover textarea { min-height: 60px; }
 .popover .row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
 .popover .row .grow { flex: 1; }
+/* link popover: jump-to-section list */
+.link-sections { margin-top: 0.7rem; }
+.link-sec-list { max-height: 11rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.link-sec { flex: none; line-height: 1.35; text-align: left; background: none; border: none; border-radius: 6px; padding: 0.3rem 0.5rem; font-size: 0.85rem; color: var(--text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-sec:hover { background: rgba(39,50,63,0.07); }
+.link-sec.on { font-weight: 600; }
+.link-sec.lvl-3 { padding-left: 1.2rem; }
+.link-sec.lvl-4 { padding-left: 1.9rem; font-size: 0.8rem; }
 .pop-btn { border: 1px solid var(--text); background: var(--text); color: #fff; border-radius: 8px; padding: 0.42rem 0.8rem; font-size: 0.85rem; font-weight: 500; }
 .pop-btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
 .pop-btn:disabled { opacity: 0.5; cursor: default; }

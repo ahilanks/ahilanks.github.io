@@ -92,7 +92,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], SUP: ['data-fn'], FIGURE: ['data-w'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -216,9 +216,16 @@ function bodyToPublishHtml(clone) {
   hs.forEach((e) => {
     const depth = lvls.indexOf(e.lvl)
     if (depth === 0) secN++
-    e.h.id = headingId(e.text, usedIds)
+    // a heading something links to keeps its stable anchor (section-links.js) as its id
+    const anchor = e.h.getAttribute('data-anchor')
+    e.h.removeAttribute('data-anchor')
+    if (anchor && /^[\w-]+$/.test(anchor) && !usedIds.has(anchor)) { usedIds.add(anchor); e.h.id = anchor }
+    else e.h.id = headingId(e.text, usedIds)
     toc.push({ id: e.h.id, text: e.text, level: depth + 2, n: depth === 0 ? secN : 0 })
   })
+  clone.querySelectorAll('h2[data-anchor], h3[data-anchor], h4[data-anchor]').forEach((h) => h.removeAttribute('data-anchor'))
+  // links to a section of this article stay in the tab
+  clone.querySelectorAll('a[href^="#"]').forEach((a) => { a.removeAttribute('target'); a.removeAttribute('rel') })
   return { html: clone.innerHTML, toc }
 }
 
@@ -809,6 +816,10 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      figure { margin:1.8rem auto; text-align:center; }',
     '      figure img, figure video { max-width:100%; border-radius:10px; }',
     '      figure[style] img, figure[style] video { width:100%; }',
+    '      figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:inline-block; vertical-align:top; width:calc(50% - 0.6rem) !important; margin:1.8rem 0; }',
+    '      figure[data-pair]:has(+ figure) { margin-right:1.2rem; }',
+    '      figure[data-pair]:has(+ figure) img, figure[data-pair]:has(+ figure) video, figure[data-pair]:has(+ figure) + figure img, figure[data-pair]:has(+ figure) + figure video { width:100%; }',
+    '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto; } }',
     '      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }',
     '      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }',
     '      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }',

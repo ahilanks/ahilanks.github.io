@@ -168,7 +168,11 @@
     <!-- ===================== FLOATING: link popover ===================== -->
     <div class="popover hidden" id="linkPop">
       <label>Link URL</label>
-      <input type="text" id="linkInput" placeholder="https://…" />
+      <input type="text" id="linkInput" placeholder="https://… or a section name" />
+      <div class="link-sections" id="linkSections" hidden>
+        <label>Or jump to a section</label>
+        <div class="link-sec-list" id="linkSecList"></div>
+      </div>
       <div class="row">
         <button class="pop-btn ghost grow" id="linkRemove">Remove</button>
         <button class="pop-btn grow" id="linkApply">Apply</button>

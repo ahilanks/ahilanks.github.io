@@ -12,6 +12,7 @@ import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
+import { setupNotes } from './notes.js'
 import { HeadingAnchor, anchorOf, jumpToSection } from './section-links.js'
 import { cleanPastedHTML, setupPlainTextPaste } from './paste.js'
 import { setupSourceView } from './source-view.js'
@@ -336,6 +337,7 @@ function currentSnapshot() {
     footnotes: footnotesHTML(),
     comments: comments.data(),
     closedComments: comments.closedData(),
+    notes: notes.get(), // private sticky note — publish.js must never read it
     font: CONFIG.font,
     updated: Date.now(),
   }
@@ -356,6 +358,7 @@ const _save = debounce(() => {
   localStorage.setItem(LS.current, doc.id)
   setStatus('saved', 'Saved')
 }, CONFIG.autosaveMs)
+const notes = setupNotes({ onChange: () => scheduleSave() })
 function scheduleSave() { setStatus('saving', 'Saving…'); _save() }
 
 // Load a draft's CONTENT only (title/subtitle/body/footnotes). Does not set doc.id —
@@ -366,6 +369,7 @@ function applySnapshot(s) {
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
+  notes.set(s.notes)
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')

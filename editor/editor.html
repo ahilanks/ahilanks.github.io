@@ -108,6 +108,15 @@
       <button class="btn-primary" id="publishBtn">Publish</button>
     </header>
 
+    <!-- ===================== STICKY NOTE (private; never published — notes.js) ===================== -->
+    <div class="notes" id="notes">
+      <button class="notes-toggle" id="notesToggle" type="button" title="Notes: to-dos and open questions">Notes</button>
+      <div class="notes-panel" id="notesPanel" hidden>
+        <div class="notes-head"><span>Notes</span><button class="notes-close" id="notesClose" type="button" aria-label="Close notes">×</button></div>
+        <textarea id="notesText" spellcheck="true" placeholder="To-dos, questions to answer…"></textarea>
+      </div>
+    </div>
+
     <!-- ===================== WRITE VIEW ===================== -->
     <div class="scroll" id="scrollArea">
       <main class="surface font-serif" id="surface">

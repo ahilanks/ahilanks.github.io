@@ -29,6 +29,9 @@
  */
 
 import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
+// PRIVATE: a draft snapshot also carries `notes` (the editor's sticky note) and comments.
+// Neither may ever reach a published page or draft link — build only from title,
+// subtitle, body and the footnote list.
 import { CONFIG } from './config.js'
 
 /* ------------------------------------------------------------ file sink (server) */
@@ -92,7 +95,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -199,6 +202,15 @@ function bodyToPublishHtml(clone) {
     f.removeAttribute('data-w')
     if (w < 100) f.setAttribute('style', 'width:' + w + '%;margin-left:auto;margin-right:auto;')
   })
+  // cropped videos: the kept box "x y w h" (fractions) → object-view-box on the player
+  clone.querySelectorAll('figure[data-crop]').forEach((f) => {
+    const n = f.getAttribute('data-crop').split(/\s+/).map(Number)
+    f.removeAttribute('data-crop')
+    const v = f.querySelector('video')
+    if (!v || n.length !== 4 || !n.every((x) => Number.isFinite(x) && x >= 0 && x <= 1)) return
+    const pct = (x) => +(x * 100).toFixed(3) + '%'
+    v.setAttribute('style', 'object-view-box:inset(' + pct(n[1]) + ' ' + pct(1 - n[0] - n[2]) + ' ' + pct(1 - n[1] - n[3]) + ' ' + pct(n[0]) + ');')
+  })
   // contents panel: anchor + collect every non-empty H2/H3/H4 (ids survive sanitizeNode
   // above). Depth comes from the distinct levels actually used (a doc written all in H3s
   // still gets §-numbered sections; H4s directly under H2s still nest one step): depth 0
@@ -252,18 +264,42 @@ async function extractDataImages(root, prefix, files, mediaPrefix) {
   }
 }
 
-// Split inline data-URI images out to media/ files and drop unresolvable videos, then
+// Uploaded videos carry only a vid in the saved HTML; their bytes sit behind the live
+// editor's <video> (a blob: URL from IndexedDB, or the drafts/media disk backup). Copy each
+// to <mediaPrefix><prefix>-<hash12>.<ext> like images. A video that can't be loaded, or is
+// over GitHub's file cap, is left out (a player with no file would just be a black box).
+const VIDEO_EXT = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv' }
+const VIDEO_MAX_BYTES = 95 * 1024 * 1024
+async function extractVideos(root, prefix, files, mediaPrefix) {
+  const skipped = []
+  for (const fig of Array.from(root.querySelectorAll('figure.video-block'))) {
+    const v = fig.querySelector('video')
+    const vid = fig.getAttribute('data-vid')
+    const live = vid && document.querySelector('.ProseMirror figure.video-block[data-vid="' + CSS.escape(vid) + '"] video')
+    const src = live && (live.currentSrc || live.getAttribute('src'))
+    let blob = null
+    try { if (src) { const r = await fetch(src); if (r.ok) blob = await r.blob() } } catch (e) { /* skipped below */ }
+    if (!v || !blob || !blob.size || blob.size > VIDEO_MAX_BYTES) {
+      skipped.push(blob && blob.size > VIDEO_MAX_BYTES ? 'a video over 95 MB' : 'a video that hasn\'t loaded')
+      fig.remove(); continue
+    }
+    const ext = VIDEO_EXT[blob.type] || (src.match(/\.(mp4|webm|mov|ogv)(?:[?#]|$)/i) || [, 'mp4'])[1].toLowerCase()
+    const hash = (await sha256Hex(await blob.arrayBuffer())).slice(0, 12)
+    const name = prefix + '-' + hash + '.' + ext
+    if (!files.some((f) => f.name === name)) files.push({ name, blob })
+    v.setAttribute('src', mediaPrefix + name)
+  }
+  if (skipped.length) toast('Left out ' + skipped.join(', '))
+}
+
+// Split inline data-URI images and uploaded videos out to media/ files, then
 // return { html, files, toc } ready for buildArticleHtml + writeFile.
 async function buildBody(bodyHtml, slug, mediaPrefix) {
   const clone = document.createElement('div')
   clone.innerHTML = bodyHtml || ''
   const files = []
   await extractDataImages(clone, slug, files, mediaPrefix)
-  // v2 doesn't yet resolve uploaded video bytes (no src in getHTML) — don't ship broken players.
-  clone.querySelectorAll('figure.video-block').forEach((f) => {
-    const v = f.querySelector('video')
-    if (!v || !v.getAttribute('src')) f.remove()
-  })
+  await extractVideos(clone, slug, files, mediaPrefix)
   const { html, toc } = bodyToPublishHtml(clone)
   return { html, files, toc }
 }

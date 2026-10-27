@@ -339,6 +339,7 @@ function currentSnapshot() {
     closedComments: comments.closedData(),
     notes: notes.get(), // private sticky note — publish.js must never read it
     font: CONFIG.font,
+    created: doc.created, // first-created time; never changes (drafts menu shows it)
     updated: Date.now(),
   }
 }
@@ -353,6 +354,7 @@ const setStatus = (state, text) => {
 const _save = debounce(() => {
   const s = currentSnapshot()
   const drafts = JSON.parse(localStorage.getItem(LS.drafts) || '{}')
+  if (!s.created && drafts[doc.id]) s.created = drafts[doc.id].created // keep a created a sync added
   drafts[doc.id] = s
   localStorage.setItem(LS.drafts, JSON.stringify(drafts))
   localStorage.setItem(LS.current, doc.id)
@@ -364,6 +366,7 @@ function scheduleSave() { setStatus('saving', 'Saving…'); _save() }
 // Load a draft's CONTENT only (title/subtitle/body/footnotes). Does not set doc.id —
 // the drafts module owns switching ids. emitUpdate:false so a switch never queues a save.
 function applySnapshot(s) {
+  doc.created = s.created
   docTitle.innerHTML = s.title || ''
   docSubtitle.innerHTML = s.subtitle || ''
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })

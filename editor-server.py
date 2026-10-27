@@ -126,7 +126,11 @@ def merge(store, incoming):
             continue
         cur = drafts.get(_id)
         if cur is None or up > (cur.get("updated") or 0):
+            if cur is not None and cur.get("created") and not d.get("created"):
+                d["created"] = cur["created"]          # `created` is sticky
             drafts[_id] = d
+        elif d.get("created") and not cur.get("created"):
+            cur["created"] = d["created"]
         if tomb and up > tomb:             # re-created by a newer edit elsewhere
             deleted.pop(_id, None)
 

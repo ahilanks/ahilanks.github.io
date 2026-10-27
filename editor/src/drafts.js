@@ -52,7 +52,10 @@ function reconcile(serverDrafts, serverDeleted) {
     const tomb = deleted[id] || 0
     if (tomb && up <= tomb) continue                                   // deleted at/after this version -> skip
     const cur = drafts[id]
-    if (!cur || up > (cur.updated || 0)) { drafts[id] = incoming; changed = true }
+    if (!cur || up > (cur.updated || 0)) {
+      if (cur && cur.created && !incoming.created) incoming.created = cur.created
+      drafts[id] = incoming; changed = true
+    } else if (incoming.created && !cur.created) { cur.created = incoming.created; changed = true } // `created` is sticky
     if (tomb && up > tomb) { delete deleted[id]; changed = true }      // re-created by a newer edit
   }
   // 3) apply tombstones to local drafts (a delete elsewhere removes it here too)
@@ -84,6 +87,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
   function saveDraft() {
     const s = currentSnapshot()
     const drafts = getDrafts()
+    if (!s.created && drafts[s.id]) s.created = drafts[s.id].created
     drafts[s.id] = s
     putDraftsLocal(drafts)
     localStorage.setItem(LS.current, s.id)
@@ -115,7 +119,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     saveDraft() // flush the outgoing draft
     const id = uid()
     setDocId(id)
-    applySnapshot({ id, title: '', subtitle: '', body: '<p></p>', footnotes: '', font: CONFIG.font, updated: Date.now() })
+    applySnapshot({ id, title: '', subtitle: '', body: '<p></p>', footnotes: '', font: CONFIG.font, created: Date.now(), updated: Date.now() })
     saveDraft() // persist the blank draft (also sets LS.current = id)
     restoreScrollPos(id)
     const t = $('docTitle'); if (t) t.focus()
@@ -177,10 +181,10 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
       const title = (tmp.textContent || '').trim() || 'Untitled'
       const row = document.createElement('div')
       row.className = 'draft-item' + (s.id === curId ? ' active' : '')
-      const d = new Date(s.updated || Date.now())
+      const d = new Date(s.created || s.updated || Date.now())
       row.innerHTML =
         '<span class="d-title"></span><span class="d-date">' +
-        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+        d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }) +
         '</span><button class="d-del" title="Delete">✕</button>'
       row.querySelector('.d-title').textContent = title
       row.addEventListener('click', (ev) => {
@@ -332,6 +336,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
                       cur.body !== s.body || cur.footnotes !== s.footnotes || cur.font !== s.font ||
                       JSON.stringify(cur.comments || {}) !== JSON.stringify(s.comments || {}) ||
                       JSON.stringify(cur.closedComments || []) !== JSON.stringify(s.closedComments || [])
+        if (!s.created && cur) s.created = cur.created
         if (dirty) { drafts[s.id] = s; putDraftsLocal(drafts); localStorage.setItem(LS.current, s.id) }
         await SYNC.push()
         const res = await (await fetch('/api/push', { method: 'POST' })).json()

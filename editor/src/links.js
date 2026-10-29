@@ -341,6 +341,14 @@ export function setupLinks(editor) {
   linkPreview.addEventListener('mouseenter', () => clearTimeout(lpHideTimer))
   linkPreview.addEventListener('mouseleave', () => hidePreview())
 
+  // Copy → the link's URL to the clipboard (a section link copies as-is, e.g. #intro)
+  $('linkPreviewCopy').addEventListener('mousedown', async (e) => {
+    e.preventDefault(); e.stopPropagation()
+    const href = lpAnchor && lpAnchor.getAttribute('href')
+    if (!href) return
+    try { await navigator.clipboard.writeText(href); toast('Link copied') } catch (err) { toast('Couldn’t copy link') }
+  })
+
   // Edit → select the link's whole range, then open the popover on it.
   $('linkPreviewEdit').addEventListener('mousedown', (e) => {
     e.preventDefault(); e.stopPropagation()

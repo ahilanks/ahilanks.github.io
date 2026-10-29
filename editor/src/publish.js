@@ -525,6 +525,103 @@ function fnPeek() {
   window.addEventListener('resize', function () { if (ref) place() })
 }
 
+/* ------------------------------------------------------ video autoplay (page) */
+// Runs INSIDE the published article (embedded via vidPlay.toString(), so keep it
+// self-contained). Each video plays by itself ONCE, the first time the reader scrolls it
+// into view; consecutive videos in view take turns (the next starts when the one before
+// ends) instead of playing over each other. A finished video rewinds to its first frame and
+// waits under a big centered play button. Once the reader plays, pauses or seeks a video
+// themselves it's theirs — never auto-played again. Sound: an unmuted video that the
+// browser refuses to autoplay with sound starts muted instead (the controls can unmute).
+function vidPlay() {
+  var vids = Array.prototype.slice.call(document.querySelectorAll('figure.video-block video'))
+  if (!vids.length) return
+  // per video: state 'pending' | 'auto' | 'done'; seen = mostly on screen; expect = the
+  // 'play'/'pause' event our own call will fire (anything else came from the reader)
+  var st = []
+  var current = -1 // the video auto-playing (or held paused off-screen mid-autoplay)
+
+  vids.forEach(function (v, i) {
+    st.push({ state: 'pending', seen: false, expect: null })
+    // wrap so the play button centers on the picture, not the figure + caption
+    var wrap = document.createElement('div')
+    wrap.className = 'vwrap'
+    v.parentNode.insertBefore(wrap, v)
+    wrap.appendChild(v)
+    var btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'vplay'
+    btn.setAttribute('aria-label', 'Play video')
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>'
+    wrap.appendChild(btn)
+    // a video autoplay had to start silent gets its sound back once the reader plays it (unless you muted it)
+    var authorMuted = v.muted || v.hasAttribute('muted')
+    btn.addEventListener('click', function () { if (!authorMuted) v.muted = false; v.play() })
+    function sync() { wrap.classList.toggle('playing', !v.paused) }
+    v.addEventListener('play', function () {
+      sync()
+      if (st[i].expect === 'play') { st[i].expect = null; return }
+      // the reader started this one: it's theirs, and it shouldn't play over an autoplay
+      st[i].state = 'done'
+      if (current >= 0 && current !== i) { st[current].state = 'done'; act(current, 'pause'); current = -1 }
+    })
+    v.addEventListener('pause', function () {
+      sync()
+      if (st[i].expect === 'pause') { st[i].expect = null; return }
+      if (!v.ended) st[i].state = 'done' // the reader paused it: no more autoplay
+    })
+    v.addEventListener('ended', function () {
+      var wasAuto = st[i].state === 'auto'
+      st[i].state = 'done'
+      v.currentTime = 0 // back to the first frame, ready to be played again
+      sync()
+      if (current === i) current = -1
+      if (wasAuto) pump()
+    })
+  })
+
+  function act(i, what) {
+    var v = vids[i]
+    if (what === 'pause') { if (!v.paused) { st[i].expect = 'pause'; v.pause() } return }
+    if (!v.paused) return
+    st[i].expect = 'play'
+    var p = v.play()
+    if (p && p.catch) p.catch(function () {
+      // no autoplay with sound before a click: start it silent instead (controls can unmute)
+      if (v.muted) return giveUp()
+      v.muted = true
+      var q = v.play()
+      if (q && q.catch) q.catch(giveUp)
+    })
+    function giveUp() { st[i].expect = null; st[i].state = 'done'; if (current === i) current = -1 }
+  }
+
+  // keep the current autoplay running while it's on screen; if it's scrolled away, pause it
+  // (it resumes when it's back) and play the earliest video in view still owed its autoplay
+  function pump() {
+    if (current >= 0 && (st[current].state !== 'auto' || !st[current].seen)) {
+      if (st[current].state === 'auto') act(current, 'pause') // scrolled away mid-play: resumes if they come back
+      current = -1
+    }
+    if (current >= 0) { act(current, 'play'); return }
+    for (var i = 0; i < vids.length; i++) {
+      if (st[i].seen && st[i].state !== 'done') { current = i; st[i].state = 'auto'; act(i, 'play'); return }
+    }
+  }
+
+  if (!('IntersectionObserver' in window)) return
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      // "come across" = most of the video on screen; "gone" = mostly scrolled away
+      var i = vids.indexOf(e.target)
+      if (e.intersectionRatio >= 0.6) st[i].seen = true
+      else if (e.intersectionRatio < 0.25) st[i].seen = false
+    })
+    pump()
+  }, { threshold: [0, 0.25, 0.6, 1] })
+  vids.forEach(function (v) { io.observe(v) })
+}
+
 /* ------------------------------------------------------ provenance widget (page) */
 // Runs INSIDE the published article (embedded via provWidget.toString(), so keep it
 // self-contained: no imports, no closures over this module, no "</script>" literals).
@@ -731,6 +828,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
   const title = escapeHtml(titleText)
   const subtitle = escapeHtml(subtitleText)
   const hasToc = !!(toc && toc.length)
+  const hasVideo = /<video\b/.test(bodyHtml)
   const up = draft ? '../../' : '../'
 
   // Contents panel: fixed top-left, §-numbered H2s + indented H3s/H4s (sub-entries only
@@ -844,19 +942,28 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     '      ul { list-style-type:disc; }',
     '      ul ul { list-style-type:circle; }',
     '      ul ul ul { list-style-type:square; }',
-    '      h2 { font-size:1.7rem; margin:2rem 0 0.8rem; letter-spacing:-0.01em; }',
-    '      h3 { font-size:1.32rem; margin:1.7rem 0 0.6rem; }',
+    '      h2 { font-size:1.7rem; line-height:1.25; margin:2.6rem 0 0.45rem; letter-spacing:-0.01em; }',
+    '      h2 ~ h2 { margin-top:3rem; padding-top:2.2rem; border-top:1px solid rgba(39,50,63,0.15); }',
+    '      h3 { font-size:1.32rem; line-height:1.3; margin:2.2rem 0 0.35rem; }',
+    '      h4 { font-size:1.12rem; line-height:1.35; margin:1.8rem 0 0.3rem; }',
     '      blockquote { margin:1.5rem 0; padding:0.2rem 0 0.2rem 1.2rem; position:relative; }',
     '      blockquote::before { content:""; position:absolute; left:0; top:0.4rem; bottom:0.4rem; width:3px; border-radius:2px; background:var(--accent); }',
     '      a { color:var(--text-color); text-decoration:underline; text-decoration-skip-ink:none; }',
     '      figure { margin:1.8rem auto; text-align:center; }',
     '      figure img, figure video { max-width:100%; border-radius:10px; }',
     '      figure[style] img, figure[style] video { width:100%; }',
-    '      figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:inline-block; vertical-align:top; width:calc(50% - 0.6rem) !important; margin:1.8rem 0; }',
-    '      figure[data-pair]:has(+ figure) { margin-right:1.2rem; }',
+    '      figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:inline-block; vertical-align:top; width:calc(50% - 0.6rem) !important; margin:1.8rem 0 !important; }',
+    '      figure[data-pair]:has(+ figure) { margin-right:1.2rem !important; }',
     '      figure[data-pair]:has(+ figure) img, figure[data-pair]:has(+ figure) video, figure[data-pair]:has(+ figure) + figure img, figure[data-pair]:has(+ figure) + figure video { width:100%; }',
-    '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto; } }',
+    '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto !important; } }',
     '      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }',
+    hasVideo ? '      .vwrap { position:relative; display:block; width:fit-content; max-width:100%; margin:0 auto; line-height:0; }' : '',
+    hasVideo ? '      figure[style] .vwrap, figure[data-pair] .vwrap, figure[data-pair] + figure .vwrap { width:100%; }' : '',
+    hasVideo ? '      .vplay { position:absolute; left:50%; top:50%; width:76px; height:76px; margin:-38px 0 0 -38px; padding:0; border:none; border-radius:50%; background:rgba(20,24,30,0.58); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); box-shadow:0 4px 18px rgba(0,0,0,0.25); transition:opacity 0.18s, transform 0.18s, background 0.18s; }' : '',
+    hasVideo ? '      .vplay svg { width:36px; height:36px; margin-left:4px; }' : '',
+    hasVideo ? '      .vplay:hover { background:rgba(20,24,30,0.72); transform:scale(1.06); }' : '',
+    hasVideo ? '      .vwrap.playing .vplay { opacity:0; pointer-events:none; transform:scale(0.9); }' : '',
+    hasVideo ? '      @media (max-width:560px) { .vplay { width:60px; height:60px; margin:-30px 0 0 -30px; } .vplay svg { width:28px; height:28px; } }' : '',
     '      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }',
     '      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }',
     '      .fn-divider { width:100%; margin:3rem 0 1.2rem; }',
@@ -923,6 +1030,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     provScript,
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
+    hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
     '',

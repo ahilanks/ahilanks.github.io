@@ -50,9 +50,25 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-bottom: 1px solid var(--line-soft);
 }
+/* Never wraps or clips: when the window is too narrow (split screen, phone) the bar
+   scrolls sideways, with Drafts pinned left and backup/save/Publish pinned right. */
+.topbar { overflow-x: auto; scrollbar-width: none; }
+.topbar::-webkit-scrollbar { display: none; }
+.topbar > * { flex-shrink: 0; }
+#draftsBtn { position: sticky; left: 0; z-index: 2; background: var(--bg); box-shadow: -1rem 0 0 var(--bg); /* covers the padding sliver */ }
+#draftsBtn:hover { background: linear-gradient(rgba(39, 50, 63, 0.08), rgba(39, 50, 63, 0.08)), var(--bg); }
+.tb-end {
+  position: sticky; right: 0; z-index: 2; display: flex; align-items: center; gap: 0.4rem;
+  background: var(--bg); box-shadow: 1rem 0 0 var(--bg);
+}
+/* soft fade where scrolled tools slide under the pinned group */
+.tb-end::before {
+  content: ""; position: absolute; right: 100%; top: 0; bottom: 0; width: 18px; pointer-events: none;
+  background: linear-gradient(to right, rgba(241, 235, 223, 0), var(--bg));
+}
 .tb-group { display: flex; align-items: center; gap: 0.15rem; }
 .tb-sep { width: 1px; height: 22px; background: var(--line); margin: 0 0.4rem; }
-.tb-spacer { flex: 1; }
+.tb-spacer { flex: 1 0 12px; }
 .tb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
   min-width: 32px; height: 32px; padding: 0 0.45rem;
@@ -137,9 +153,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 /* "Small" paragraph style (toolbar): notes/asides a step below body size. em-based so it
    tracks the writing font's own size; a tighter gap so consecutive small lines read as one block. */
 .doc-body p.small { font-size: 0.85em; margin-bottom: 1rem; }
-.doc-body h2 { font-size: 1.7rem; font-weight: 700; margin: 2rem 0 0.8rem; letter-spacing: -0.01em; }
-.doc-body h3 { font-size: 1.32rem; font-weight: 600; margin: 1.7rem 0 0.6rem; }
-.doc-body h4 { font-size: 1.12rem; font-weight: 700; margin: 1.4rem 0 0.5rem; }
+/* headings sit close to the text they introduce: tight line-height (no extra leading under
+   them) and a top margin several times the bottom one */
+.doc-body h2 { font-size: 1.7rem; font-weight: 700; line-height: 1.25; margin: 2.6rem 0 0.45rem; letter-spacing: -0.01em; }
+/* every main section after the first opens with a rule, so readers see where one ends */
+.doc-body h2 ~ h2 { margin-top: 3rem; padding-top: 2.2rem; border-top: 1px solid rgba(39, 50, 63, 0.15); }
+.doc-body h3 { font-size: 1.32rem; font-weight: 600; line-height: 1.3; margin: 2.2rem 0 0.35rem; }
+.doc-body h4 { font-size: 1.12rem; font-weight: 700; line-height: 1.35; margin: 1.8rem 0 0.3rem; }
 /* Not force-italic: quotes are set off by the border/size/color, and italic stays a
    real mark you control (so italicizing text inside a quote actually shows and the
    toolbar button reads correctly). */
@@ -208,13 +228,13 @@ figure:hover > .fig-grip { opacity: 1; }
 @media (hover: none) { .fig-btn, .fig-grip { opacity: 0.85; } }
 /* a pair sits side by side, half width each (their own resize width is ignored) */
 figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure {
-  display: inline-block; vertical-align: top; width: calc(50% - 0.6rem) !important; margin: 1.8rem 0;
+  display: inline-block; vertical-align: top; width: calc(50% - 0.6rem) !important; margin: 1.8rem 0 !important;
 }
-figure[data-pair]:has(+ figure) { margin-right: 1.2rem; }
+figure[data-pair]:has(+ figure) { margin-right: 1.2rem !important; }
 figure[data-pair]:has(+ figure) :is(img, video), figure[data-pair]:has(+ figure) + figure :is(img, video) { width: 100%; }
 figure[data-pair]:has(+ figure)::after, figure[data-pair]:has(+ figure) + figure::after { display: none; }
 @media (max-width: 560px) {
-  figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display: block; width: auto !important; margin: 1.8rem auto; }
+  figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display: block; width: auto !important; margin: 1.8rem auto !important; }
 }
 .prosemirror-dropcursor-block { border-radius: 2px; }
 /* files (images, GIFs, videos) hovering over the page: outline the text column they'll land in */
@@ -757,7 +777,7 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .modal-msg.err { color: #c0392b; }
 .modal-msg.ok { color: #4a7a3a; }
 
-.drafts-menu { position: absolute; z-index: 95; top: 46px; left: 8px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); width: 280px; max-height: 60vh; overflow-y: auto; padding: 0.4rem; }
+.drafts-menu { position: absolute; z-index: 95; top: 46px; left: 8px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); width: 380px; max-height: 60vh; overflow-y: auto; padding: 0.4rem; }
 .drafts-menu.hidden { display: none; }
 .draft-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.6rem; border-radius: 8px; cursor: pointer; gap: 0.5rem; }
 .draft-item:hover { background: rgba(39,50,63,0.07); }
@@ -795,17 +815,10 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 
 /* ----------------------------- SMALL SCREENS (PHONE) ----------------------------- */
 @media (max-width: 720px) {
-  /* One-row toolbar that scrolls sideways; Drafts pins left, Publish pins right so
-     the two commands you always need never scroll away. */
-  .topbar { overflow-x: auto; scrollbar-width: none; padding: 0.5rem 0.6rem; gap: 0.3rem; }
-  .topbar::-webkit-scrollbar { display: none; }
-  .topbar > * { flex-shrink: 0; }
+  .topbar { padding: 0.5rem 0.6rem; gap: 0.3rem; }
   .tb-spacer { flex: 1 0 12px; }
-  #draftsBtn {
-    position: sticky; left: 0; z-index: 2;
-    background: var(--bg); box-shadow: -12px 0 0 var(--bg); /* covers the padding sliver */
-  }
-  #publishBtn { position: sticky; right: 0; z-index: 2; box-shadow: 12px 0 0 var(--bg); }
+  #draftsBtn { box-shadow: -0.6rem 0 0 var(--bg); }
+  .tb-end { box-shadow: 0.6rem 0 0 var(--bg); }
 
   .surface { margin: 1.4rem auto; padding: 0 1.1rem 40vh; }
   .doc-title { font-size: 1.45rem; }
@@ -819,7 +832,7 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
   /* floating UI must fit the phone viewport */
   .popover { width: min(340px, calc(100vw - 20px)); }
   .link-preview { max-width: calc(100vw - 24px); }
-  .drafts-menu { width: min(300px, calc(100vw - 16px)); max-height: 70vh; max-height: 70dvh; }
+  .drafts-menu { width: min(380px, calc(100vw - 16px)); max-height: 70vh; max-height: 70dvh; }
 
   /* 16px inputs: anything smaller makes iOS Safari zoom the page on focus */
   .popover input[type="text"], .popover textarea,

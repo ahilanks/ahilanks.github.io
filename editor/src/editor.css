@@ -363,10 +363,11 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 
 /* ----------------------------- COMMENTS ----------------------------- */
 /* the commented stretch of text: a soft marker tint; stronger while its card is active
-   (.cmt-on is a ProseMirror decoration — see comments.js for why not a class) */
-.doc-body span.cmt { background: rgba(230, 178, 60, 0.2); box-shadow: inset 0 -2px 0 rgba(230, 178, 60, 0.55); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
-.doc-body span.cmt:hover { background: rgba(230, 178, 60, 0.32); }
-.doc-body .cmt-on { background: rgba(230, 178, 60, 0.45); }
+   (.cmt-on is a ProseMirror decoration — see comments.js for why not a class; in a footnote,
+   which ProseMirror doesn't own, it is a plain class) */
+.doc-body span.cmt, .fn-list span.cmt { background: rgba(230, 178, 60, 0.2); box-shadow: inset 0 -2px 0 rgba(230, 178, 60, 0.55); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
+.doc-body span.cmt:hover, .fn-list span.cmt:hover { background: rgba(230, 178, 60, 0.32); }
+.doc-body .cmt-on, .fn-list span.cmt.cmt-on { background: rgba(230, 178, 60, 0.45); }
 /* cards sit in the right margin, level with their anchor (positioned by comments.js) */
 .cmt-layer { position: absolute; top: 0; left: calc(100% + 18px); width: 224px; height: 100%; pointer-events: none; }
 .cmt-card {
@@ -788,6 +789,30 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .draft-item:hover .d-del { opacity: 1; }
 .draft-item .d-del:hover { color: #c0392b; background: rgba(192,57,43,0.1); }
 .draft-item .d-del.confirm { opacity: 1; color: #fff; background: #c0392b; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; }
+.draft-item.selected { background: rgba(15,122,229,0.07); box-shadow: inset 0 0 0 1px rgba(15,122,229,0.35); }
+.draft-item.active.selected { background: rgba(15,122,229,0.12); }
+.draft-item.dragging, .d-folder.dragging { opacity: 0.4; }
+/* folders in the drafts menu (drafts.js): a heading that collapses, its drafts below */
+.d-folder { border-radius: 8px; }
+.d-folder + .d-folder { margin-top: 0.25rem; }
+.d-fhead { display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.5rem 0.3rem; cursor: pointer; user-select: none; border-radius: 8px;
+  font: 600 0.7rem/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.d-fhead:hover { color: var(--text); }
+.d-folder.unsorted .d-fhead { color: var(--faint); }
+.d-caret { width: 11px; height: 11px; flex-shrink: 0; transform: rotate(90deg); transition: transform 0.12s; }
+.d-folder.collapsed .d-caret { transform: none; }
+.d-folder.collapsed .d-frows { display: none; }
+.d-count { font-weight: 500; color: var(--faint); letter-spacing: 0; }
+.d-empty { padding: 0.45rem 0.6rem; font-size: 0.8rem; color: var(--faint); font-style: italic; }
+.draft-item { position: relative; }
+.draft-item.drop-before::before, .draft-item.drop-after::after, .d-folder.drop-before::before, .d-folder.drop-after::after {
+  content: ""; position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 1px; background: #0f7ae5; pointer-events: none; }
+.draft-item.drop-before::before { top: -1px; }
+.draft-item.drop-after::after { bottom: -1px; }
+.d-folder { position: relative; }
+.d-folder.drop-before::before { top: -2px; }
+.d-folder.drop-after::after { bottom: -2px; }
+.d-folder.drop-into { background: rgba(15,122,229,0.08); box-shadow: inset 0 0 0 1px rgba(15,122,229,0.3); }
 .drafts-new { width: 100%; text-align: left; padding: 0.55rem 0.6rem; border: none; background: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; color: var(--text); border-bottom: 1px solid var(--line-soft); margin-bottom: 0.3rem; }
 .drafts-new:hover { background: rgba(39,50,63,0.07); }
 
@@ -939,6 +964,8 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .vd-same { font-family: Inter, system-ui, sans-serif; font-size: 0.9rem; color: var(--muted); }
 .version-view del { background: rgba(192, 57, 43, 0.12); color: #a5352a; text-decoration: line-through; text-decoration-color: rgba(165, 53, 42, 0.6); }
 .version-view ins { background: rgba(62, 142, 83, 0.15); color: #2f7444; text-decoration: none; }
+.vd-link { color: inherit; text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
+.vd-link:hover { text-decoration-color: currentColor; }
 @media (max-width: 640px) { .vd-legend { display: none; } .vd-ch::after { left: -10px; } }
 
 /* ----------------------------- WORD COUNT (wordcount.js) ----------------------------- */
@@ -999,6 +1026,7 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 #notesText {
   width: 100%; min-height: 4.5rem; resize: none; overflow-y: auto; border: none; outline: none; background: transparent;
   font: 0.9rem/1.45 system-ui, sans-serif; color: #3d3210; padding: 0; flex: 0 1 auto; max-height: calc(100vh - 175px);
+  tab-size: 3;
 }
 #notesText::placeholder { color: rgba(92, 75, 18, 0.45); }
 @media (max-width: 700px) { .notes { top: auto; bottom: 64px; right: 12px; width: min(250px, calc(100vw - 24px)); } }

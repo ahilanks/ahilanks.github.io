@@ -41,6 +41,7 @@ import { freshContext, setupContextUI } from './ai-context.js'
 const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
   visual: 'Visual idea', interactive: 'Interactive idea', link: 'Link', format: 'Format', math: 'Math',
+  comment: 'From your comment',
 }
 const MAX_ITEMS = { proofread: 80, review: 90, links: 40, ask: 30 } // safety caps per run; the prompt asks for fewer
 const LINK_LIMIT = { review: 8, links: 25, ask: 10 }
@@ -55,6 +56,9 @@ const TIMEOUT_MS = 300000
 // up to a paragraph (struck words + new ones, accepted or dismissed as one), never more.
 const EDIT_LIMITS = {
   proofread: { hunks: 4, chars: 320, sentences: false },
+  // Proofread acting on the writer's own comment ("cut this", "add 'in practice'"): a small
+  // addition or deletion, which may be a whole sentence of the paragraph
+  comment: { hunks: 4, chars: 600, sentences: true },
   review: { hunks: 14, chars: 1600, sentences: true },
   ask: { hunks: 14, chars: 1600, sentences: true },
   links: { hunks: 0, chars: 0, sentences: false },
@@ -413,9 +417,12 @@ function toItem(sg, blocks, mode, doc, allowed) {
     if (!hit.unique || touchesAtoms || spansSentences(text) || text.length > 120) return note
     return { ...base, kind: 'math', tex, from, to, text }
   }
+  // Proofread does a comment's small edit or nothing — a note would only repeat the comment
+  const fromComment = mode === 'proofread' && category === 'comment'
+  if (fromComment && (kind !== 'edit' || !hit.unique)) return null
   if (kind !== 'edit' || !hit.unique) return note
 
-  const lim = EDIT_LIMITS[mode] || EDIT_LIMITS.proofread
+  const lim = EDIT_LIMITS[fromComment ? 'comment' : mode] || EDIT_LIMITS.proofread
   const orig = b.str.slice(hit.start, hit.end)
   const changes = wordHunks(orig, String(sg.replacement || ''))
   if (!changes.length) return mode === 'proofread' ? null : note // an "edit" that changes nothing
@@ -425,13 +432,13 @@ function toItem(sg, blocks, mode, doc, allowed) {
     const s1 = hit.start + h.end
     const del = b.str.slice(s0, s1)
     // each change stays small and keeps its hands off math, footnote refs and line breaks
-    if (b.at.slice(s0, s1).some((c) => c.atom) || /[$\n]|\[\^/.test(h.ins)) return note
+    if (b.at.slice(s0, s1).some((c) => c.atom) || /[$\n]|\[\^/.test(h.ins)) return fromComment ? null : note
     if (!lim.sentences && (spansSentences(del) || spansSentences(h.ins))) return note
     const delFrom = s1 > s0 ? b.at[s0].pos : s0 < b.at.length ? b.at[s0].pos : b.at[s0 - 1].end
     hunks.push({ delFrom, delTo: s1 > s0 ? b.at[s1 - 1].end : delFrom, del, ins: typeset(h.ins, b.str) })
   }
   const changed = hunks.reduce((n, h) => n + h.del.length + h.ins.length, 0)
-  if (hunks.length > lim.hunks || changed > lim.chars) return note // that's a rewrite, not an edit
+  if (hunks.length > lim.hunks || changed > lim.chars) return fromComment ? null : note // that's a rewrite, not an edit
   return { ...base, kind: 'edit', from, to, text, hunks }
 }
 
@@ -616,7 +623,7 @@ const ITEM_SCHEMA = {
     paragraph: { type: 'integer', description: 'The [P#] number the quote is in.' },
     quote: { type: 'string', description: 'Text copied exactly from that paragraph.' },
     kind: { type: 'string', enum: ['edit', 'note', 'link', 'format', 'math', 'equation'] },
-    category: { type: 'string', enum: ['grammar', 'style', 'flow', 'clarity', 'visual', 'interactive', 'link', 'format', 'math'] },
+    category: { type: 'string', enum: ['grammar', 'style', 'flow', 'clarity', 'visual', 'interactive', 'link', 'format', 'math', 'comment'] },
     comment: { type: 'string' },
     replacement: { type: 'string', description: 'For an edit: what the quote becomes. Otherwise "".' },
     url: { type: 'string', description: 'For a link: the URL. Otherwise "".' },
@@ -730,7 +737,17 @@ const PROMPTS = {
     '- "replacement": the same text with ONLY that error fixed.\n' +
     '- "comment": names the error in a few words (e.g. "Subject–verb agreement.").\n' +
     ANCHOR_RULES +
-    '- Return at most {N}, in passage order. If there are no errors, return an empty list.',
+    '- Return at most {N}, in passage order. If there are no errors, return an empty list.\n\n' +
+    'The author’s own margin comments on the PASSAGE may also be given (<author_comments>). Where one asks for a ' +
+    'SMALL, SPECIFIC change to the words it is on or right beside them — add a word, phrase or short clause; cut a ' +
+    'word, phrase or sentence; swap one word for another — make that change as an edit too, with category ' +
+    '"comment" (these don’t count toward {N}):\n' +
+    '- "quote": the words to change, from the commented text or its sentence, plus a word or two around them.\n' +
+    '- "replacement": the quote with ONLY the requested addition or deletion made, in the author’s voice.\n' +
+    '- "comment": says which comment it does, in a few words (e.g. "Adds the example you asked for.").\n' +
+    'Skip every other comment: broad or open-ended ones (rewrite, expand, rethink, tighten this section), questions, ' +
+    'notes to self, vague reactions ("hmm", "weak"), and anything needing facts, figures, citations or new ideas only ' +
+    'the author can supply. When unsure whether a comment is small and specific, skip it.',
   review:
     'You are an experienced, generous and demanding editor working through a draft essay with its author, ' +
     'line by line. The author writes technical essays about AI and machine learning for curious readers; they are ' +
@@ -839,6 +856,12 @@ const commentsBlock = (list) => list && list.length
     list.map((c) => '- on “' + c.quote.replace(/\s+/g, ' ').slice(0, 160) + '”: ' + c.text.replace(/\s+/g, ' ').slice(0, 400)).join('\n') +
     '\n</author_comments>\n'
   : ''
+// Proofread reads the same comments as possible requests for a small edit
+const requestsBlock = (list) => list && list.length
+  ? '\n<author_comments>\nThe author’s margin comments on the passage (each on the quoted words):\n' +
+    list.map((c) => '- on “' + c.quote.replace(/\s+/g, ' ').slice(0, 300) + '”: ' + c.text.replace(/\s+/g, ' ').slice(0, 400)).join('\n') +
+    '\n</author_comments>\n'
+  : ''
 const readText = (r) => !r ? '' :
   '\n<editors_read>\nWhat the piece is: ' + r.summary + '\nStage: ' + r.stage + '\nWhat’s working: ' + r.working +
   (r.unfinished.length ? '\nStill being written (the author knows; don’t flag): ' + r.unfinished.join('; ') : '') +
@@ -879,7 +902,8 @@ async function requestSuggestions(mode, input, signal) {
     'Title: ' + (input.title || '(untitled)') + '\n' +
     (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
     (input.docText ? '\n<document>\n' + input.docText + '\n</document>\n' : '') +
-    (mode !== 'proofread' ? commentsBlock(input.authorComments) + readText(input.read) : '') +
+    (mode !== 'proofread' ? commentsBlock(input.authorComments) + readText(input.read)
+      : requestsBlock(input.authorComments)) +
     '\nPASSAGE (' + input.where + '). ' + (mode === 'ask' ? 'Attach suggestions only within it.' : 'Suggest only within it.') +
     ' Paragraphs are labelled [P#]:\n' +
     '<passage>\n' + (input.passage || '(empty)') + '\n</passage>' +
@@ -896,7 +920,9 @@ async function requestSuggestions(mode, input, signal) {
   const system = (PROMPTS[mode] + (mode !== 'proofread' ? LINKS : '') + (mode !== 'proofread' && notes ? NOTES : '') + (sources ? SOURCES : ''))
     .replaceAll('{N}', String(input.limit)).replaceAll('{L}', String(LINK_LIMIT[mode] || 0))
     .replaceAll('{STAGE}', STAGE_GUIDE[stage] || STAGE_GUIDE.revising)
-  const effort = mode === 'proofread' ? 'low' : mode === 'links' ? 'medium' : 'high'
+  // judging which comments are small requests takes a little more thought than typos
+  const effort = mode === 'proofread' ? (input.authorComments && input.authorComments.length ? 'medium' : 'low')
+    : mode === 'links' ? 'medium' : 'high'
   const parsed = await chatJSON(system, user, schemaFor(mode), effort, signal)
   return { answer: typeof parsed.answer === 'string' ? parsed.answer : '', suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [] }
 }
@@ -1226,6 +1252,10 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   const setStage = (v) => { try { localStorage.setItem(stageKey(), v) } catch (e) {} }
   const reads = new Map() // draft id -> { words, stage, read }: reused while the draft hasn't moved much
   const authorComments = () => (comments.openList ? comments.openList() : [])
+  const commentsIn = (part) => {
+    const lo = part[0].pos, hi = part[part.length - 1].pos + part[part.length - 1].size
+    return authorComments().filter((c) => c.from >= lo && c.from < hi)
+  }
   async function editorsRead(docText, footnotes, notes, sources, signal) {
     const stage = getStage() === 'auto' ? '' : getStage()
     const words = countWords(docText)
@@ -1335,7 +1365,8 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         read,
         sources,
         linked: linkedWords(state.doc, part),
-        authorComments: authorComments(),
+        // Proofread only gets the comments on its own part (it may act on them)
+        authorComments: mode === 'proofread' ? commentsIn(part) : authorComments(),
       }, controller.signal))
       if (thisRun.docId !== getDocId()) return // switched drafts while it was thinking
       const failed = results.filter((r) => r.status === 'rejected')

@@ -17,6 +17,11 @@
  *
  * Comments never reach a published page: publish.js unwraps the anchor spans.
  *
+ * Footnote bodies live outside ProseMirror (nodes/footnote.js), so a comment there is the
+ * same <span class="cmt" data-comment> written straight into the body's DOM (saved with
+ * the draft's `footnotes` HTML), highlighted with a plain class, and resolved by
+ * unwrapping it — not undoable with ⌘Z.
+ *
  * Other margin cards (AI suggestions — ai-suggest.js) join the same layout through
  * addSource(), so the two kinds stack around each other instead of overlapping.
  */
@@ -98,6 +103,88 @@ function docTextMap(doc) {
   return { str, at }
 }
 
+/* ---------------------------------------------------------- in the footnotes */
+const fnList = () => document.getElementById('fnList')
+const fnSpans = (id) => {
+  const l = fnList()
+  return l ? Array.from(l.querySelectorAll(id ? 'span.cmt[data-comment="' + id + '"]' : 'span.cmt[data-comment]')) : []
+}
+// the footnote body the DOM selection is in, or null
+function fnBodyAtSelection() {
+  const sel = window.getSelection()
+  let n = sel && sel.rangeCount ? sel.anchorNode : null
+  if (n && n.nodeType === 3) n = n.parentNode
+  const body = n && n.closest ? n.closest('.fn-body') : null
+  return body && fnList() && fnList().contains(body) ? body : null
+}
+// the footnote comment the caret is in
+function fnIdAtCaret() {
+  if (!fnBodyAtSelection()) return null
+  let n = window.getSelection().anchorNode
+  if (n && n.nodeType === 3) n = n.parentNode
+  const span = n && n.closest ? n.closest('span.cmt[data-comment]') : null
+  return span ? span.dataset.comment : null
+}
+// Wrap every piece of text inside `range` in its own anchor span (a range may cross a
+// link or italics, the way a mark is split across nodes) → the spans.
+function wrapRange(range, id) {
+  const root = range.commonAncestorContainer
+  const texts = []
+  if (root.nodeType === 3) texts.push(root)
+  else {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    for (let t = w.nextNode(); t; t = w.nextNode()) if (range.intersectsNode(t)) texts.push(t)
+  }
+  const spans = []
+  for (let t of texts) {
+    const a = t === range.startContainer ? range.startOffset : 0
+    const b = t === range.endContainer ? range.endOffset : t.length
+    if (b <= a || !t.data.slice(a, b).trim()) continue
+    if (b < t.length) t.splitText(b)
+    if (a > 0) t = t.splitText(a)
+    const span = document.createElement('span')
+    span.className = 'cmt'
+    span.dataset.comment = id
+    t.replaceWith(span)
+    span.appendChild(t)
+    spans.push(span)
+  }
+  return spans
+}
+// the word around a collapsed caret in a footnote body, as a Range
+function fnWordRange(sel) {
+  const t = sel.anchorNode
+  if (!t || t.nodeType !== 3) return null
+  let a = sel.anchorOffset, b = a
+  while (a > 0 && /\S/.test(t.data[a - 1])) a--
+  while (b < t.length && /\S/.test(t.data[b])) b++
+  if (a === b) return null
+  const r = document.createRange(); r.setStart(t, a); r.setEnd(t, b)
+  return r
+}
+// `quote` in the footnotes (the note `fnId` first) → a Range, or null
+function findInFootnotes(quote, fnId) {
+  const l = fnList()
+  if (!l || !quote) return null
+  const bodies = Array.from(l.querySelectorAll('li'))
+    .sort((x, y) => (y.dataset.fn === fnId) - (x.dataset.fn === fnId))
+    .map((li) => li.querySelector('.fn-body')).filter(Boolean)
+  for (const body of bodies) {
+    const nodes = []
+    let str = ''
+    const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+    for (let t = w.nextNode(); t; t = w.nextNode()) { nodes.push({ t, at: str.length }); str += t.data }
+    const i = str.indexOf(quote)
+    if (i < 0) continue
+    const end = i + quote.length
+    const s = nodes.findLast((n) => n.at <= i), e = nodes.findLast((n) => n.at < end)
+    const r = document.createRange()
+    r.setStart(s.t, i - s.at); r.setEnd(e.t, end - e.at)
+    return r
+  }
+  return null
+}
+const fnQuote = (spans) => spans.map((s) => s.textContent).join('')
 function fmtTime(t) {
   const d = new Date(t || Date.now())
   if (d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -138,9 +225,11 @@ export function setupComments(editor, scheduleSave) {
         if (m.type.name === 'comment' && m.attrs.id && !seen.has(m.attrs.id)) { seen.add(m.attrs.id); ids.push(m.attrs.id) }
       })
     })
+    for (const s of fnSpans()) { const id = s.dataset.comment; if (id && !seen.has(id)) { seen.add(id); ids.push(id) } }
     return ids
   }
-  const anchorEl = (id) => editor.view.dom.querySelector('span.cmt[data-comment="' + id + '"]')
+  const anchorEl = (id) => editor.view.dom.querySelector('span.cmt[data-comment="' + id + '"]') || fnSpans(id)[0] || null
+  const inFootnote = (id) => !editor.view.dom.querySelector('span.cmt[data-comment="' + id + '"]') && fnSpans(id).length > 0
 
   // the comment the caret sits in (preferring the text just after the caret)
   function idAtCaret() {
@@ -171,6 +260,7 @@ export function setupComments(editor, scheduleSave) {
     activeId = id
     if (id) sources.forEach((s) => s.deactivate()) // one active card in the margin at a time
     editor.view.dispatch(editor.state.tr.setMeta(activeKey, id)) // meta-only: no history, no save
+    fnSpans().forEach((s) => s.classList.toggle('cmt-on', s.dataset.comment === id))
     layoutSoon()
   }
 
@@ -197,7 +287,7 @@ export function setupComments(editor, scheduleSave) {
       if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Escape') {
         e.preventDefault()
         text.blur()
-        editor.commands.focus()
+        backToText(id)
       }
     })
     text.addEventListener('focus', () => setActive(id))
@@ -206,7 +296,7 @@ export function setupComments(editor, scheduleSave) {
       if (!text.innerText.trim()) { resolve(id); return } // nothing written → no comment
       // a click away from both the card and its text drops the highlight
       setTimeout(() => {
-        if (!cardFocused() && !(editor.isFocused && idAtCaret() === id)) setActive(null)
+        if (!cardFocused() && !(editor.isFocused && idAtCaret() === id) && fnIdAtCaret() !== id) setActive(null)
       }, 0)
     })
     card.querySelector('.cmt-resolve').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); resolve(id) })
@@ -219,6 +309,17 @@ export function setupComments(editor, scheduleSave) {
     })
     card.style.transition = 'none' // land at the right spot, then animate later moves
     return card
+  }
+
+  // leaving a card: the caret goes back to the end of its words (a footnote comment's
+  // into the footnote; the editor's wherever it was)
+  function backToText(id) {
+    const spans = inFootnote(id) ? fnSpans(id) : []
+    if (!spans.length) { editor.commands.focus(); return }
+    const last = spans[spans.length - 1]
+    last.closest('.fn-body').focus({ preventScroll: true })
+    const sel = window.getSelection()
+    if (sel) { const r = document.createRange(); r.selectNodeContents(last); r.collapse(false); sel.removeAllRanges(); sel.addRange(r) }
   }
 
   function entryFor(id) {
@@ -304,6 +405,7 @@ export function setupComments(editor, scheduleSave) {
   /* ---- commands ---- */
   function add() {
     if (cardFocused()) return
+    if (fnBodyAtSelection()) { addInFootnote(); return }
     const { state } = editor
     let { from, to, empty } = state.selection
     if (empty) { const w = wordAt(); if (!w) return; from = w.from; to = w.to }
@@ -314,6 +416,30 @@ export function setupComments(editor, scheduleSave) {
     layout()
     const card = cards.get(id)
     if (card) card.querySelector('.cmt-text').focus()
+  }
+
+  function addInFootnote() {
+    const sel = window.getSelection()
+    const range = sel.isCollapsed ? fnWordRange(sel) : sel.getRangeAt(0)
+    if (!range) return
+    const id = uid()
+    if (!wrapRange(range, id).length) return
+    store[id] = { text: '', created: Date.now() }
+    sel.removeAllRanges()
+    scheduleSave()
+    setActive(id)
+    layout()
+    const card = cards.get(id)
+    if (card) card.querySelector('.cmt-text').focus()
+  }
+  // unwrap a footnote comment's spans → the words it was on (false if it had none)
+  function unwrapFootnote(id) {
+    const spans = fnSpans(id)
+    if (!spans.length) return false
+    const li = spans[0].closest('li')
+    const quote = fnQuote(spans)
+    spans.forEach((s) => { const p = s.parentNode; s.replaceWith(...s.childNodes); p.normalize() })
+    return { quote, fnId: li ? li.dataset.fn : '' }
   }
 
   // A comment with its text already written (an AI note kept as a comment).
@@ -330,6 +456,19 @@ export function setupComments(editor, scheduleSave) {
     const card = cards.get(id)
     cards.delete(id)
     if (card) card.remove()
+    if (inFootnote(id)) {
+      const body = store[id]
+      const was = unwrapFootnote(id)
+      if (body && body.text.trim()) {
+        closed = [{ id, text: body.text, created: body.created, closedAt: Date.now(), quote: was.quote, pos: 0, fnId: was.fnId || '' },
+          ...closed.filter((c) => c.id !== id)].slice(0, MAX_CLOSED)
+      }
+      delete store[id]
+      if (id === activeId) setActive(null)
+      scheduleSave()
+      layout()
+      return
+    }
     const { state } = editor
     const type = commentType()
     const tr = state.tr
@@ -360,6 +499,7 @@ export function setupComments(editor, scheduleSave) {
   function reopen(id) {
     const c = closed.find((x) => x.id === id)
     if (!c) return false
+    if (c.fnId !== undefined) return reopenInFootnote(c)
     const { state } = editor
     let from = -1, to = -1
     const { str, at } = docTextMap(state.doc)
@@ -377,6 +517,19 @@ export function setupComments(editor, scheduleSave) {
     editor.chain().focus().setTextSelection(from).scrollIntoView().run() // caret in it → its card opens
     setActive(id)
     layout()
+    return true
+  }
+  // a footnote comment: its words in its note (or any note), else a selection in a footnote
+  function reopenInFootnote(c) {
+    let range = findInFootnotes(c.quote, c.fnId)
+    if (!range && fnBodyAtSelection() && !window.getSelection().isCollapsed) range = window.getSelection().getRangeAt(0)
+    if (!range) return false
+    if (!wrapRange(range, c.id).length) return false
+    closed = closed.filter((x) => x.id !== c.id)
+    trash.delete(c.id)
+    store[c.id] = { text: c.text, created: c.created }
+    scheduleSave()
+    show(c.id)
     return true
   }
   const closedSource = {
@@ -404,12 +557,30 @@ export function setupComments(editor, scheduleSave) {
       if (!body || !body.text.trim()) continue
       out.push({ id, text: body.text, created: body.created, from, quote: editor.state.doc.textBetween(from, to, '\n', ATOM).replaceAll(ATOM, '…') })
     }
+    // footnote comments come after the text's (from -1: no place in the doc)
+    const fnIds = []
+    fnSpans().forEach((s) => { if (!spans.has(s.dataset.comment) && !fnIds.includes(s.dataset.comment)) fnIds.push(s.dataset.comment) })
+    for (const id of fnIds) {
+      const body = store[id]
+      if (!body || !body.text.trim()) continue
+      out.push({ id, text: body.text, created: body.created, from: -1, footnote: true, quote: fnQuote(fnSpans(id)) })
+    }
     return out
   }
   // jump to an open comment and open its card
   function show(id) {
     const c = openList().find((x) => x.id === id)
     if (!c) return false
+    if (c.footnote) {
+      const span = fnSpans(id)[0]
+      span.scrollIntoView({ block: 'center' })
+      span.closest('.fn-body').focus({ preventScroll: true })
+      const sel = window.getSelection()
+      if (sel) { const r = document.createRange(); r.setStart(span.firstChild || span, 0); r.collapse(true); sel.removeAllRanges(); sel.addRange(r) }
+      setActive(id)
+      layout()
+      return true
+    }
     editor.chain().focus().setTextSelection(c.from + 1).scrollIntoView().run()
     setActive(id)
     layout()
@@ -418,7 +589,8 @@ export function setupComments(editor, scheduleSave) {
 
   // the draft's `closedComments` field
   function closedData() {
-    return closed.map((c) => ({ id: c.id, text: c.text, created: c.created, closedAt: c.closedAt, quote: c.quote, pos: c.pos }))
+    return closed.map((c) => Object.assign({ id: c.id, text: c.text, created: c.created, closedAt: c.closedAt, quote: c.quote, pos: c.pos },
+      c.fnId !== undefined ? { fnId: c.fnId } : {}))
   }
 
   // the draft's `comments` field
@@ -430,7 +602,8 @@ export function setupComments(editor, scheduleSave) {
   function load(c, closedList) {
     closed = (Array.isArray(closedList) ? closedList : [])
       .filter((x) => x && typeof x === 'object' && x.id && typeof x.text === 'string')
-      .map((x) => ({ id: String(x.id), text: x.text, created: +x.created || 0, closedAt: +x.closedAt || 0, quote: String(x.quote || ''), pos: +x.pos || 0 }))
+      .map((x) => Object.assign({ id: String(x.id), text: x.text, created: +x.created || 0, closedAt: +x.closedAt || 0, quote: String(x.quote || ''), pos: +x.pos || 0 },
+        x.fnId !== undefined ? { fnId: String(x.fnId) } : {}))
       .slice(0, MAX_CLOSED)
     store = {}
     for (const id in (c || {})) {
@@ -457,6 +630,14 @@ export function setupComments(editor, scheduleSave) {
   layer.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() !== 's') e.stopPropagation()
   })
+  // the footnotes: caret in a comment there → its card; typing, renumbering → re-place
+  document.addEventListener('selectionchange', () => {
+    if (!fnBodyAtSelection()) return
+    const id = fnIdAtCaret()
+    if (id) setActive(id)
+    else if (!cardFocused() && activeId && inFootnote(activeId)) setActive(null)
+  })
+  if (fnList()) new MutationObserver(layoutSoon).observe(fnList(), { childList: true, subtree: true, characterData: true })
   new ResizeObserver(layoutSoon).observe(editor.view.dom) // images/fonts landing, reflow
   window.addEventListener('resize', layoutSoon)
   wide.addEventListener('change', layoutSoon)

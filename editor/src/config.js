@@ -73,6 +73,7 @@ export const LS = {
   settings: 'ahilan.editor.settings', // settings (API key) can be shared safely
   scroll: PREFIX + 'scroll',
   deleted: PREFIX + 'deleted',
+  layout: PREFIX + 'layout', // the drafts menu's folders + order (synced, like drafts)
 }
 
 // Path (relative to editor-next.html) where MathLive should load its fonts/sounds.

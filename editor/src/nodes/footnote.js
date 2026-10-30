@@ -58,9 +58,16 @@ export const FootnoteRef = Node.create({
 const FN_ALLOW = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'SUP', 'SUB', 'IMG'])
 const FN_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'] }
 const FN_IMG_SRC = /^(https?:|data:image\/|media\/|\.\.?\/|\/)/i
+// A comment's anchor in a footnote (comments.js) is kept too: <span class="cmt" data-comment>.
+const isCommentSpan = (el) => el.tagName === 'SPAN' && el.hasAttribute('data-comment')
 function normalizeFnBody(root) {
   root.querySelectorAll('*').forEach((el) => {
     if (!root.contains(el)) return
+    if (isCommentSpan(el)) {
+      Array.from(el.attributes).forEach((a) => { if (a.name !== 'class' && a.name !== 'data-comment') el.removeAttribute(a.name) })
+      el.className = el.classList.contains('cmt-on') ? 'cmt cmt-on' : 'cmt'
+      return
+    }
     if (!FN_ALLOW.has(el.tagName)) { el.replaceWith(...el.childNodes); return }
     const keep = FN_ATTRS[el.tagName] || []
     Array.from(el.attributes).forEach((a) => { if (!keep.includes(a.name.toLowerCase())) el.removeAttribute(a.name) })
@@ -672,7 +679,8 @@ function setupPeek(editor) {
 }
 
 // storage helpers
-export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML : '' }
+// (the active comment's highlight is editor state, not content)
+export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML.replaceAll('class="cmt cmt-on"', 'class="cmt"') : '' }
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''

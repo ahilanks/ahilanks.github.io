@@ -11,11 +11,28 @@
 import { $, toast, escapeHtml } from './dom.js'
 
 /* ------------------------------------------------------------------ text model */
+// A link travels through the text model as one token, LS text LM href LE (private-use
+// sentinels), so adding, removing or re-pointing a link counts as a change, and linkify()
+// turns it back into a link once the diff is rendered.
+const LS = '\uE000', LM = '\uE001', LE = '\uE002'
+const linksToText = (root) => root.querySelectorAll('a[href]').forEach((a) => {
+  a.replaceWith(LS + a.textContent.replace(/[\uE000-\uE002]/g, '') + LM + a.getAttribute('href').replace(/[\uE000-\uE002]/g, '') + LE)
+})
+// rendered (already escaped) diff HTML → real links: web links open in a new tab, others
+// (in-page #section links) just show where they point on hover
+const linkify = (html) => html.replace(/\uE000([^\uE001]*)\uE001([^\uE002]*)\uE002/g, (_, text, href) => {
+  const h = href.replace(/"/g, '&quot;')
+  return /^(https?:|mailto:)/i.test(href)
+    ? '<a class="vd-link" href="' + h + '" target="_blank" rel="noopener" title="' + h + '">' + text + '</a>'
+    : '<span class="vd-link" title="' + h + '">' + text + '</span>'
+})
+
 // A draft's HTML → its blocks as { kind, text }: paragraphs, headings, list items, quotes,
-// equations and figures, with inline math as $tex$ and footnote markers as [n].
+// equations and figures, with inline math as $tex$, footnote markers as [n] and links as tokens.
 function blocksOf(html, footnotes) {
   const d = new DOMParser().parseFromString('<body>' + (html || '') + '</body>', 'text/html')
   d.querySelectorAll('span.math-inline').forEach((el) => { el.textContent = '$' + (el.getAttribute('data-tex') || '') + '$' })
+  linksToText(d.body)
   let n = 0
   d.querySelectorAll('sup.fn-ref').forEach((el) => { el.textContent = '[' + (++n) + ']' })
   const out = []
@@ -44,6 +61,7 @@ function blocksOf(html, footnotes) {
     if (items.length) out.push({ kind: 'h3', text: 'Footnotes' })
     items.forEach((li, i) => {
       li.querySelectorAll('span.math-inline').forEach((el) => { el.textContent = '$' + (el.getAttribute('data-tex') || '') + '$' })
+      linksToText(li)
       const body = li.querySelector('.fn-body') || li
       out.push({ kind: 'fn', text: '[' + (i + 1) + '] ' + clean(body.textContent) })
     })
@@ -68,7 +86,7 @@ function align(A, B, eq) {
   }
   return ops
 }
-const TOKEN = /\$[^$]*\$|[\p{L}\p{N}'’]+|\s+|[^\s\p{L}\p{N}]/gu
+const TOKEN = /\uE000[^\uE002]*\uE002|\$[^$]*\$|[\p{L}\p{N}'’]+|\s+|[^\s\p{L}\p{N}]/gu
 const words = (t) => new Set((t.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []))
 function similar(a, b) {
   const A = words(a), B = words(b)
@@ -218,7 +236,7 @@ export function setupVersions({ getDocId, currentSnapshot, applySnapshot, schedu
         i = j
       }
     }
-    body.innerHTML = html
+    body.innerHTML = linkify(html)
     const added = rows.filter((r) => r.added).length, gone = rows.filter((r) => r.gone).length
     view.querySelector('.vd-stats').textContent = !nChanged ? 'No changes'
       : nChanged + ' ' + (nChanged === 1 ? 'paragraph' : 'paragraphs') + ' differ' +

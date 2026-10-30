@@ -33,9 +33,24 @@ function isTombstoned(s, deleted) {
   return ts && (s.updated || 0) <= ts
 }
 
+/* ------------------------------------------------------------ folders + order
+ * The menu's arrangement is ONE object, synced like a draft (newest `updated` wins):
+ *   { folders: [{ id, name }], order: { folderId: [draftId…] }, updated }
+ * A draft listed under a folder is in it (first listing wins); any other draft is
+ * "Unsorted", newest first. The server files each draft under drafts/<folder id>/. */
+const DEFAULT_FOLDERS = [{ id: 'technical', name: 'Technical' }, { id: 'non-technical', name: 'Non-technical' }]
+function getLayout() {
+  try {
+    const l = JSON.parse(localStorage.getItem(LS.layout) || 'null')
+    if (l && Array.isArray(l.folders)) return { folders: l.folders, order: l.order || {}, updated: +l.updated || 0 }
+  } catch (e) {}
+  return { folders: DEFAULT_FOLDERS.map((f) => ({ ...f })), order: {}, updated: 0 }
+}
+function putLayoutLocal(l) { localStorage.setItem(LS.layout, JSON.stringify(l)) }
+
 /* --------------------------------------------------------------- reconcile */
 // Fold server drafts/tombstones into local LS. Same policy as editor-server.py merge().
-function reconcile(serverDrafts, serverDeleted) {
+function reconcile(serverDrafts, serverDeleted, serverLayout) {
   const drafts = getDrafts()
   const deleted = getDeleted()
   let changed = false
@@ -63,6 +78,10 @@ function reconcile(serverDrafts, serverDeleted) {
     if (drafts[id] && (drafts[id].updated || 0) <= deleted[id]) { delete drafts[id]; changed = true }
   }
   if (changed) { putDraftsLocal(drafts); putDeletedLocal(deleted) }
+  // 4) the menu's folders + order: newest arrangement wins
+  if (serverLayout && Array.isArray(serverLayout.folders) && (+serverLayout.updated || 0) > getLayout().updated) {
+    putLayoutLocal(serverLayout); changed = true
+  }
   return changed
 }
 
@@ -160,52 +179,201 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     renderDraftsList()
   }
 
-  /* ---- menu UI ---- */
+  /* ---- menu UI: folders (collapsible), drag to file / reorder, ⌘/⇧-click to select several ---- */
+  const COLLAPSED_KEY = 'editor.draftFoldersCollapsed' // per browser
+  const getCollapsed = () => { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]')) } catch (e) { return new Set() } }
+  function setCollapsed(id, on) {
+    const c = getCollapsed(); on ? c.add(id) : c.delete(id)
+    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...c])) } catch (e) {}
+  }
+  const selected = new Set() // draft ids picked with ⌘/⇧-click, dragged together
+  let selAnchor = null       // the last plainly picked row, for ⇧-click ranges
+  let drag = null            // { kind: 'drafts', ids } | { kind: 'folder', id }
+
+  // the arrangement as shown: [{ id, name, ids }] — Unsorted (id '') first when it has drafts
+  function sections() {
+    const drafts = getDrafts(), deleted = getDeleted(), layout = getLayout()
+    const alive = new Set(Object.values(drafts).filter((s) => s && s.id && !isTombstoned(s, deleted)).map((s) => s.id))
+    const placed = new Set()
+    const folders = layout.folders.map((f) => {
+      const ids = (layout.order[f.id] || []).filter((id) => alive.has(id) && !placed.has(id))
+      ids.forEach((id) => placed.add(id))
+      return { id: f.id, name: f.name, ids }
+    })
+    const unsorted = [...alive].filter((id) => !placed.has(id)).sort((a, b) => (drafts[b].updated || 0) - (drafts[a].updated || 0))
+    return unsorted.length ? [{ id: '', name: 'Unsorted', ids: unsorted }, ...folders] : folders
+  }
+
+  // Move draft `ids` into folder `to` ('' = Unsorted) just before draft `before` (null = at the end).
+  function moveDrafts(ids, to, before) {
+    const layout = getLayout()
+    for (const f in layout.order) layout.order[f] = layout.order[f].filter((id) => !ids.includes(id))
+    if (to) {
+      const list = layout.order[to] || []
+      const at = before ? list.indexOf(before) : -1
+      list.splice(at < 0 ? list.length : at, 0, ...ids)
+      layout.order[to] = list
+    }
+    saveLayout(layout)
+  }
+  function moveFolder(id, before) {
+    const layout = getLayout()
+    const f = layout.folders.find((x) => x.id === id)
+    if (!f || id === before) return
+    layout.folders = layout.folders.filter((x) => x.id !== id)
+    const at = before ? layout.folders.findIndex((x) => x.id === before) : -1
+    layout.folders.splice(at < 0 ? layout.folders.length : at, 0, f)
+    saveLayout(layout)
+  }
+  function saveLayout(layout) {
+    layout.updated = Date.now()
+    putLayoutLocal(layout)
+    if (!SANDBOX) SYNC.schedulePush()
+    renderDraftsList()
+  }
+
+  function draftRow(s, curId, order) {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = s.title || ''
+    const title = (tmp.textContent || '').trim() || 'Untitled'
+    const row = document.createElement('div')
+    row.className = 'draft-item' + (s.id === curId ? ' active' : '') + (selected.has(s.id) ? ' selected' : '')
+    row.dataset.id = s.id
+    row.draggable = true
+    const d = new Date(s.created || s.updated || Date.now())
+    row.innerHTML =
+      '<span class="d-title"></span><span class="d-date">' +
+      d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }) +
+      '</span><button class="d-del" title="Delete">✕</button>'
+    row.querySelector('.d-title').textContent = title
+    row.addEventListener('click', (ev) => {
+      if (ev.target.classList.contains('d-del')) return
+      if (ev.metaKey || ev.ctrlKey) { // pick / unpick without opening
+        selected.has(s.id) ? selected.delete(s.id) : selected.add(s.id)
+        selAnchor = s.id
+        renderDraftsList(); return
+      }
+      if (ev.shiftKey && selAnchor && order.includes(selAnchor)) { // a range, in menu order
+        const [a, b] = [order.indexOf(selAnchor), order.indexOf(s.id)].sort((x, y) => x - y)
+        order.slice(a, b + 1).forEach((id) => selected.add(id))
+        renderDraftsList(); return
+      }
+      selected.clear(); selAnchor = s.id
+      openDraft(s.id)
+      $('draftsMenu').classList.add('hidden')
+    })
+    // delete needs a confirming second click ("✕" -> "Delete?"); auto-reverts after 3s
+    const del = row.querySelector('.d-del')
+    del.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      if (del.dataset.armed === '1') { deleteDraft(s.id); return }
+      $('draftsList').querySelectorAll('.d-del').forEach((b) => {
+        b.dataset.armed = ''; b.textContent = '✕'; b.classList.remove('confirm'); clearTimeout(b._t)
+      })
+      del.dataset.armed = '1'
+      del.textContent = 'Delete?'
+      del.classList.add('confirm')
+      del._t = setTimeout(() => { del.dataset.armed = ''; del.textContent = '✕'; del.classList.remove('confirm') }, 3000)
+    })
+    row.addEventListener('dragstart', (e) => {
+      // dragging a picked row takes every picked row along, in menu order
+      const ids = selected.has(s.id) ? order.filter((id) => selected.has(id)) : [s.id]
+      drag = { kind: 'drafts', ids }
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', title)
+      requestAnimationFrame(() => ids.forEach((id) => { const r = $('draftsList').querySelector('.draft-item[data-id="' + id + '"]'); if (r) r.classList.add('dragging') }))
+    })
+    return row
+  }
+
   function renderDraftsList() {
     const list = $('draftsList')
     if (!list) return
     const drafts = getDrafts()
-    const deleted = getDeleted()
+    const secs = sections()
     list.innerHTML = ''
-    const items = Object.values(drafts)
-      .filter((s) => s && s.id && !isTombstoned(s, deleted))
-      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
-    if (!items.length) {
-      list.innerHTML = '<div style="padding:0.6rem;color:var(--faint);font-size:0.85rem;">No drafts yet</div>'
-      return
-    }
+    for (const id of [...selected]) if (!drafts[id]) selected.delete(id)
     const curId = getDocId()
-    items.forEach((s) => {
-      const tmp = document.createElement('div')
-      tmp.innerHTML = s.title || ''
-      const title = (tmp.textContent || '').trim() || 'Untitled'
-      const row = document.createElement('div')
-      row.className = 'draft-item' + (s.id === curId ? ' active' : '')
-      const d = new Date(s.created || s.updated || Date.now())
-      row.innerHTML =
-        '<span class="d-title"></span><span class="d-date">' +
-        d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }) +
-        '</span><button class="d-del" title="Delete">✕</button>'
-      row.querySelector('.d-title').textContent = title
-      row.addEventListener('click', (ev) => {
-        if (ev.target.classList.contains('d-del')) return
-        openDraft(s.id)
-        $('draftsMenu').classList.add('hidden')
+    const collapsed = getCollapsed()
+    const order = secs.flatMap((sec) => sec.ids) // menu order, for ⇧-click ranges
+    secs.forEach((sec) => {
+      const box = document.createElement('div')
+      box.className = 'd-folder' + (sec.id ? '' : ' unsorted') + (collapsed.has(sec.id || '-') ? ' collapsed' : '')
+      box.dataset.folder = sec.id
+      const head = document.createElement('div')
+      head.className = 'd-fhead'
+      head.draggable = !!sec.id
+      head.innerHTML = '<svg class="d-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+        '<span class="d-fname"></span><span class="d-count">' + (sec.ids.length || '') + '</span>'
+      head.querySelector('.d-fname').textContent = sec.name
+      head.addEventListener('click', () => { setCollapsed(sec.id || '-', !box.classList.contains('collapsed')); box.classList.toggle('collapsed') })
+      head.addEventListener('dragstart', (e) => {
+        drag = { kind: 'folder', id: sec.id }
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', sec.name)
+        requestAnimationFrame(() => box.classList.add('dragging'))
       })
-      // delete needs a confirming second click ("✕" -> "Delete?"); auto-reverts after 3s
-      const del = row.querySelector('.d-del')
-      del.addEventListener('click', (ev) => {
-        ev.stopPropagation()
-        if (del.dataset.armed === '1') { deleteDraft(s.id); return }
-        list.querySelectorAll('.d-del').forEach((b) => {
-          b.dataset.armed = ''; b.textContent = '✕'; b.classList.remove('confirm'); clearTimeout(b._t)
-        })
-        del.dataset.armed = '1'
-        del.textContent = 'Delete?'
-        del.classList.add('confirm')
-        del._t = setTimeout(() => { del.dataset.armed = ''; del.textContent = '✕'; del.classList.remove('confirm') }, 3000)
-      })
-      list.appendChild(row)
+      box.appendChild(head)
+      const rows = document.createElement('div')
+      rows.className = 'd-frows'
+      sec.ids.forEach((id) => rows.appendChild(draftRow(drafts[id], curId, order)))
+      if (!sec.ids.length) rows.innerHTML = '<div class="d-empty">Drag drafts here</div>'
+      box.appendChild(rows)
+      list.appendChild(box)
+    })
+  }
+
+  /* drop targets: a row (before/after it), a folder's heading or empty space (into it), or
+     — while dragging a folder — another folder (before/after it) */
+  function dropTarget(e) {
+    const list = $('draftsList')
+    const box = e.target.closest && e.target.closest('.d-folder')
+    if (!drag || !box || !list.contains(box)) return null
+    if (drag.kind === 'folder') {
+      if (box.classList.contains('unsorted') || box.dataset.folder === drag.id) return null
+      const r = box.getBoundingClientRect()
+      const after = e.clientY > r.top + Math.min(r.height, 40) / 2
+      const next = after ? box.nextElementSibling : box
+      return { el: box, cls: after ? 'drop-after' : 'drop-before', apply: () => moveFolder(drag.id, next ? next.dataset.folder : null) }
+    }
+    const folder = box.dataset.folder
+    const row = e.target.closest('.draft-item')
+    if (row && !drag.ids.includes(row.dataset.id)) {
+      const r = row.getBoundingClientRect()
+      const after = e.clientY > r.top + r.height / 2
+      let next = after ? row.nextElementSibling : row
+      while (next && drag.ids.includes(next.dataset.id)) next = next.nextElementSibling
+      return { el: row, cls: after ? 'drop-after' : 'drop-before', apply: () => moveDrafts(drag.ids, folder, next && next.dataset.id ? next.dataset.id : null) }
+    }
+    if (row) return null
+    // the heading puts them first; anywhere else in the folder, last
+    const first = e.target.closest('.d-fhead') ? box.querySelector('.draft-item:not(.dragging)') : null
+    return { el: box, cls: 'drop-into', apply: () => { if (folder) setCollapsed(folder, false); moveDrafts(drag.ids, folder, first ? first.dataset.id : null) } }
+  }
+  let shown = null
+  const clearMark = () => { if (shown) shown.el.classList.remove(shown.cls); shown = null }
+  const draftsListEl = $('draftsList')
+  if (draftsListEl) {
+    draftsListEl.addEventListener('dragover', (e) => {
+      const t = dropTarget(e)
+      if (!t) { clearMark(); return }
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (shown && shown.el === t.el && shown.cls === t.cls) return
+      clearMark(); t.el.classList.add(t.cls); shown = t
+    })
+    draftsListEl.addEventListener('dragleave', (e) => { if (!draftsListEl.contains(e.relatedTarget)) clearMark() })
+    draftsListEl.addEventListener('drop', (e) => {
+      const t = dropTarget(e)
+      clearMark()
+      if (!t) return
+      e.preventDefault()
+      t.apply()
+      drag = null
+    })
+    draftsListEl.addEventListener('dragend', () => {
+      clearMark(); drag = null
+      draftsListEl.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'))
     })
   }
 
@@ -242,7 +410,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
         const r = await fetch(this.url, { cache: 'no-store' })
         if (!r.ok) return false
         const data = await r.json()
-        return reconcile(data.drafts || {}, data.deleted || {})
+        return reconcile(data.drafts || {}, data.deleted || {}, data.layout)
       } catch (e) { return false }
     },
     schedulePush() {
@@ -257,11 +425,11 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
         const r = await fetch(this.url, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ drafts: getDrafts(), deleted: getDeleted() }),
+          body: JSON.stringify({ drafts: getDrafts(), deleted: getDeleted(), layout: getLayout() }),
         })
         if (!r.ok) return
         const data = await r.json()
-        if (reconcile(data.drafts || {}, data.deleted || {})) renderDraftsList()
+        if (reconcile(data.drafts || {}, data.deleted || {}, data.layout)) renderDraftsList()
       } catch (e) {}
     },
     start() {

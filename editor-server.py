@@ -140,7 +140,29 @@ def merge(store, incoming):
         if d is not None and (d.get("updated") or 0) <= ts:
             drafts.pop(_id, None)
 
+    # 4) the drafts menu's folders + order (one object): newest arrangement wins
+    lay = incoming.get("layout")
+    if isinstance(lay, dict) and (lay.get("updated") or 0) > ((store.get("layout") or {}).get("updated") or 0):
+        store["layout"] = lay
+
     return store
+
+
+def folder_of(layout):
+    """draft id -> its folder's directory name in drafts/ ("" = the top level), from the
+    menu layout {folders: [{id, name}], order: {folder id: [draft ids]}}."""
+    out = {}
+    if not isinstance(layout, dict):
+        return out
+    order = layout.get("order") or {}
+    for f in layout.get("folders") or []:
+        fid = (f or {}).get("id") if isinstance(f, dict) else None
+        if not fid or not SAFE_ID_RE.match(fid) or fid == "media":
+            continue
+        for _id in order.get(fid) or []:
+            if isinstance(_id, str):
+                out.setdefault(_id, fid)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -356,18 +378,37 @@ def write_if_changed(path, content):
     return True
 
 
-def existing_id_files():
-    """Map draft id -> set of file stems (basename without .md/.json) already on disk,
-    read from each file's own id (json: the `id` key; md: the `id:` frontmatter line).
-    Lets us find a draft's current files after its title (and so its slug) changed."""
-    id_to_stems = {}
+def _draft_file_names():
+    """Draft files' paths relative to drafts/: the top level plus one level of folders
+    (technical/, non-technical/ …) — never media/ or dot-directories."""
+    out = []
     try:
         names = os.listdir(DRAFTS_DIR)
     except OSError:
-        return id_to_stems
+        return out
     for fn in names:
-        if fn.startswith("."):            # skip .editor-drafts.json, .DS_Store, etc.
+        if fn.startswith("."):            # skip .editor-drafts.json, .git, .DS_Store, etc.
             continue
+        full = os.path.join(DRAFTS_DIR, fn)
+        if os.path.isdir(full):
+            if fn == "media":
+                continue
+            try:
+                out += [fn + "/" + sub for sub in os.listdir(full) if not sub.startswith(".")]
+            except OSError:
+                pass
+        else:
+            out.append(fn)
+    return out
+
+
+def existing_id_files():
+    """Map draft id -> set of file stems (path relative to drafts/ without .md/.json, e.g.
+    "technical/my-draft") already on disk, read from each file's own id (json: the `id`
+    key; md: the `id:` frontmatter line). Lets us find a draft's current files after its
+    title (and so its slug) or its folder changed."""
+    id_to_stems = {}
+    for fn in _draft_file_names():
         stem, ext = os.path.splitext(fn)
         if ext not in (".md", ".json"):
             continue
@@ -408,15 +449,19 @@ def assign_slugs(drafts):
 
 
 def sync_draft_files(data):
-    """Mirror the store into ./drafts/. Writes/updates a <title-slug>.md/.json for
-    every present draft; removes files ONLY for (a) a still-present draft whose slug
-    changed — after its new files are written — or (b) an id with an explicit tombstone.
+    """Mirror the store into ./drafts/. Writes/updates a <folder>/<title-slug>.md/.json for
+    every present draft (folder from the menu layout; unsorted drafts at the top level);
+    removes files ONLY for (a) a still-present draft whose slug or folder changed — after
+    its new files are written — or (b) an id with an explicit tombstone.
     Never deletes a file merely because it's absent from `drafts` (anti-data-loss)."""
     os.makedirs(DRAFTS_DIR, exist_ok=True)
     drafts = data.get("drafts", {}) or {}
     deleted = data.get("deleted", {}) or {}
+    folders = folder_of(data.get("layout"))
 
-    id_to_slug = assign_slugs(drafts)
+    # stems are paths relative to drafts/: "slug" or "folder/slug"
+    id_to_slug = {_id: (folders[_id] + "/" + slug if folders.get(_id) else slug)
+                  for _id, slug in assign_slugs(drafts).items()}
     live_stems = set(id_to_slug.values())     # stems a present draft legitimately owns now
     on_disk = existing_id_files()
 
@@ -425,10 +470,14 @@ def sync_draft_files(data):
         if not isinstance(d, dict):
             continue
         slug = id_to_slug[_id]
+        if "/" in slug:
+            os.makedirs(os.path.join(DRAFTS_DIR, slug.split("/")[0]), exist_ok=True)
         write_if_changed(os.path.join(DRAFTS_DIR, f"{slug}.json"),
                          json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-        write_if_changed(os.path.join(DRAFTS_DIR, f"{slug}.md"),
-                         draft_to_markdown(_id, d))
+        md = draft_to_markdown(_id, d)
+        if "/" in slug:   # one folder down: its media links reach back up to drafts/media/
+            md = md.replace('src="media/', 'src="../media/').replace("](media/", "](../media/").replace("`media/", "`../media/")
+        write_if_changed(os.path.join(DRAFTS_DIR, f"{slug}.md"), md)
 
     def _remove_stem(stem):
         # never delete a stem another present draft currently owns
@@ -458,17 +507,30 @@ def sync_draft_files(data):
         if os.path.isdir(md):
             shutil.rmtree(md, ignore_errors=True)
 
-    # index
+    # index: grouped by folder, in the menu's order (unsorted drafts first, newest first)
+    def _line(_id):
+        d = drafts[_id]
+        title = strip_html(d.get("title") or "") or "(untitled)"
+        slug = id_to_slug[_id]
+        return (f"- **{title}** — {wordcount(d.get('body') or '')} words — "
+                f"updated {fmt_time(d.get('updated') or 0)} — "
+                f"[`.md`]({slug}.md) · [`.json`]({slug}.json)")
     lines = ["# Drafts index", ""]
     if not drafts:
         lines.append("_No drafts yet._")
     else:
-        for _id, d in sorted(drafts.items(), key=lambda kv: -((kv[1] or {}).get("updated") or 0)):
-            title = strip_html(d.get("title") or "") or "(untitled)"
-            slug = id_to_slug[_id]
-            lines.append(f"- **{title}** — {wordcount(d.get('body') or '')} words — "
-                         f"updated {fmt_time(d.get('updated') or 0)} — "
-                         f"[`.md`]({slug}.md) · [`.json`]({slug}.json)")
+        layout = data.get("layout") if isinstance(data.get("layout"), dict) else {}
+        order = layout.get("order") or {}
+        unsorted = sorted((i for i in drafts if not folders.get(i)), key=lambda i: -((drafts[i] or {}).get("updated") or 0))
+        if unsorted:
+            if folders:
+                lines += ["## Unsorted", ""]
+            lines += [_line(i) for i in unsorted]
+        for f in layout.get("folders") or []:
+            fid = f.get("id") if isinstance(f, dict) else None
+            ids = [i for i in (order.get(fid) or []) if i in drafts and folders.get(i) == fid]
+            if ids:
+                lines += ["", "## " + str(f.get("name") or fid), ""] + [_line(i) for i in ids]
     write_if_changed(os.path.join(DRAFTS_DIR, "index.md"), "\n".join(lines) + "\n")
 
 
@@ -591,7 +653,9 @@ def _draft_json_paths(draft_id):
             continue
         sha = lines[0]
         for name in lines[1:]:
-            if name.startswith(".") or "/" in name:
+            parts = name.split("/")
+            # top-level draft files, or one folder down (technical/…); never media/ or dot-paths
+            if len(parts) > 2 or parts[0] == "media" or any(p.startswith(".") for p in parts):
                 continue
             key = (name, sha)
             if key not in _PATH_IDS:

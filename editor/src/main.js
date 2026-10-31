@@ -1,7 +1,7 @@
 /* main.js — boots the editor. (Phase 1: core editing + toolbar + scroll + minimal
  * sandboxed persistence. Later phases add math, footnotes, figures, publish, sync.) */
 
-import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Selection } from '../vendor/lib.bundle.js'
+import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Selection, TextSelection } from '../vendor/lib.bundle.js'
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
@@ -37,6 +37,26 @@ setupMobileViewport() // phones: size the shell to the visual viewport (keyboard
 const NAV_BLOCKS = new Set(['figure', 'blockMath', 'horizontalRule'])
 function isNavigableBlock(node) {
   return !!node && !node.isText && NAV_BLOCKS.has(node.type.name)
+}
+
+// Which edge of an equation a pointer is on: -1 left, 1 right, 0 neither (the formula
+// itself opens it). Inline: a strip a few px wide — less on a tiny one like $x$. Block:
+// the box spans the column, so the blank space either side of the formula is the edge.
+function mathEdgeSide(dom, e) {
+  if (!dom || !dom.classList || dom.classList.contains('math-editing')) return 0
+  const r = dom.getBoundingClientRect()
+  if (dom.classList.contains('math-block')) {
+    // KaTeX's display wrappers are full-width blocks; a Range measures the formula itself
+    const f = dom.querySelector('.katex-html, .math-empty, .math-error')
+    let c = r
+    if (f) { const range = document.createRange(); range.selectNodeContents(f); c = range.getBoundingClientRect() }
+    if (!c.width) c = r
+    const left = Math.max(r.left + 7, c.left - 4), right = Math.min(r.right - 7, c.right + 4)
+    return e.clientX < left ? -1 : e.clientX > right ? 1 : 0
+  }
+  if (!dom.classList.contains('math-inline')) return 0
+  const edge = Math.min(7, r.width / 4)
+  return e.clientX < r.left + edge ? -1 : e.clientX > r.right - edge ? 1 : 0
 }
 
 // A caret-style selection near `pos` (preferring `bias`: +1 forward, -1 back) that is NOT a
@@ -130,6 +150,16 @@ export const editor = new Editor({
       if (!direct || !isMathNode(node)) return false
       const dom = view.nodeDOM(nodePos)
       if (dom && dom.classList && dom.classList.contains('math-editing')) return false
+      // a click on an equation's left or right edge puts the caret beside it instead (for a
+      // block: the end of the line above / the start of the line below)
+      const side = mathEdgeSide(dom, event)
+      if (side) {
+        const at = side < 0 ? nodePos : nodePos + node.nodeSize
+        const doc = view.state.doc
+        view.dispatch(view.state.tr.setSelection(node.isInline ? TextSelection.create(doc, at) : caretNear(doc, at, side)))
+        view.focus()
+        return true
+      }
       return selectAndEditMath(view, nodePos)
     },
     // A click on a link OPENS it (new tab) — that's the only thing that does; hovering one
@@ -200,6 +230,18 @@ export const editor = new Editor({
             view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(start), -1)).scrollIntoView())
             return true
           } catch (e) { /* fall through to default */ }
+        }
+      }
+      // Backspace / Delete with the caret right beside an inline equation highlights it
+      // first; a second press (deleting the selection) removes it — no accidental loss
+      if ((event.key === 'Backspace' || event.key === 'Delete') && selection.empty &&
+          !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const back = event.key === 'Backspace'
+        const side = back ? selection.$from.nodeBefore : selection.$from.nodeAfter
+        if (side && side.type.name === 'inlineMath') {
+          const pos = back ? selection.from - side.nodeSize : selection.from
+          view.dispatch(state.tr.setSelection(NodeSelection.create(doc, pos)).scrollIntoView())
+          return true
         }
       }
       if ((event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') ||
@@ -512,6 +554,16 @@ editor.on('blur', () => {
   if (sel instanceof NodeSelection && isMathNode(sel.node) && !document.querySelector('math-field.math-edit')) {
     editor.view.dispatch(editor.state.tr.setSelection(caretNear(editor.state.doc, sel.to, 1)))
   }
+})
+
+// an equation's edges show a text cursor: clicking there places the caret beside it
+editor.view.dom.addEventListener('mousemove', (e) => {
+  const m = e.target && e.target.closest && e.target.closest('.math-inline, .math-block')
+  if (m) m.classList.toggle('math-edge', !!mathEdgeSide(m, e))
+})
+editor.view.dom.addEventListener('mouseout', (e) => {
+  const m = e.target && e.target.closest && e.target.closest('.math-inline, .math-block')
+  if (m && !m.contains(e.relatedTarget)) m.classList.remove('math-edge')
 })
 
 /* ---------------------------------------------------------------- keyboard shortcuts */

@@ -250,6 +250,8 @@ figure.video-block figcaption:has(> br.ProseMirror-trailingBreak:only-child)::be
 .math-inline, .math-block { cursor: pointer; border-radius: 5px; transition: background 0.12s; }
 .math-inline { padding: 0 1px; display: inline-block; }
 .math-inline:hover, .math-block:hover { background: rgba(15, 122, 229, 0.1); }
+.math-inline.math-edge, .math-block.math-edge { cursor: text; }
+.math-inline.math-edge:hover, .math-block.math-edge:hover { background: none; }
 .math-block { display: block; text-align: center; margin: 0.5rem 0; padding: 0.15rem 0.2rem; overflow-x: auto; overflow-y: hidden; }
 .math-block .katex-display { margin: 0; }
 .math-block[data-align="left"], .math-block[data-align="left"] .katex-display { text-align: left; }

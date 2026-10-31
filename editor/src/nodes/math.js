@@ -84,6 +84,8 @@ function mathNodeView(isBlock) {
       configureMathfield(mf)
       mf.value = node.attrs.tex
       mf.addEventListener('keydown', onKey)
+      mf.addEventListener('keydown', noteKey, true)
+      mf.addEventListener('move-out', onMoveOut)
       mf.addEventListener('mount', focusField, { once: true })
       mf.addEventListener('focusout', onFocusOut)
       // Let MathLive own pointer events: stop them bubbling to ProseMirror, which would
@@ -109,6 +111,16 @@ function mathNodeView(isBlock) {
       else if (e.key === 'Enter' && !isBlock) { e.preventDefault(); exit() }
       // block math: Enter builds multi-line environments inside MathLive
     }
+    // ← at the very start / → at the very end of the formula: leave it, the caret landing
+    // just outside on that side (where → / ← highlights it again, and Enter re-opens it).
+    // MathLive reports this as `move-out` (mathlive-config.js stops it focusing the page).
+    let lastKey = ''
+    function noteKey(e) { lastKey = e.key }
+    function onMoveOut(e) {
+      const dir = e.detail && e.detail.direction
+      if (lastKey === 'ArrowRight' && dir === 'forward') exit(1)
+      else if (lastKey === 'ArrowLeft' && dir === 'backward') exit(-1)
+    }
     // Safety net: if focus leaves the field to something that is NOT the virtual keyboard
     // and NOT back into the node, commit. Deferred so keycap clicks (which briefly blur then
     // refocus) don't commit mid-formula. The in-editor click-away case is already handled by
@@ -132,17 +144,20 @@ function mathNodeView(isBlock) {
       }
     }
     // Leave edit mode by moving the outer selection off the node → deselectNode → commit.
-    function exit() {
+    // side 1: caret just after it (Enter, Escape, →); -1: just before it (←).
+    function exit(side = 1) {
       const pos = getPos()
-      if (typeof pos === 'number') editor.chain().focus().setTextSelection(pos + node.nodeSize).run()
-      else commit()
+      if (typeof pos !== 'number') { commit(); return }
+      const at = editor.state.doc.resolve(side > 0 ? pos + node.nodeSize : pos)
+      editor.view.focus()
+      editor.view.dispatch(editor.state.tr.setSelection(Selection.near(at, side)).scrollIntoView())
     }
     function commit() {
       if (!editing) return
       editing = false
       dom.classList.remove('math-editing')
       const tex = mf ? trimGaps(toKatexTex(mf.getValue('latex'))) : node.attrs.tex
-      if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('focusout', onFocusOut); mf = null }
+      if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('keydown', noteKey, true); mf.removeEventListener('move-out', onMoveOut); mf.removeEventListener('focusout', onFocusOut); mf = null }
       announce('close')
       const pos = getPos()
       idle() // KaTeX comes back immediately
@@ -188,7 +203,7 @@ function mathNodeView(isBlock) {
       stopEvent() { return editing },
       ignoreMutation() { return true },
       destroy() {
-        if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('focusout', onFocusOut); try { mf.remove() } catch (e) {} mf = null }
+        if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('keydown', noteKey, true); mf.removeEventListener('move-out', onMoveOut); mf.removeEventListener('focusout', onFocusOut); try { mf.remove() } catch (e) {} mf = null }
         if (editing) { editing = false; announce('close') }
       },
       // expose for the corner-keyboard "insert & edit" flow

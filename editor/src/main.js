@@ -522,6 +522,16 @@ $('scrollArea').addEventListener('mousedown', (e) => {
   editor.chain().focus().setTextSelection(hit.pos).run()
 })
 
+// While drag-selecting, drop the scroller's bottom scroll-padding (the typing buffer below
+// the caret): Chrome's selection autoscroll honours it, so the page raced away as soon as the
+// pointer came within 22vh of the bottom.
+$('scrollArea').addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return
+  const area = $('scrollArea')
+  area.classList.add('mouse-selecting')
+  window.addEventListener('mouseup', () => area.classList.remove('mouse-selecting'), { once: true })
+})
+
 // Arrow-selecting a math atom highlights it (blue ring) without opening a field. PM keeps
 // that ring on blur, so clicking out in the page — margins, title, chrome — leaves it stuck.
 // Drop it on any mousedown that lands outside the editor. Skip when an in-place field is open:

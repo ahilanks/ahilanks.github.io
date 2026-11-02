@@ -122,6 +122,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 /* ----------------------------- SURFACE ----------------------------- */
 .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scroll-padding-bottom: 22vh; }
+.scroll.mouse-selecting { scroll-padding-bottom: 0; } /* drag-select autoscroll: see main.js */
 .surface { max-width: var(--maxw); margin: 2.4rem auto; padding: 0 1.5rem 32vh; position: relative; }
 
 /* ProseMirror base (essential rules, inlined so we vendor no extra CSS) */

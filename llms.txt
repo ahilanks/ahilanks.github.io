@@ -1,0 +1,24 @@
+# Ahilan Karuppusami
+
+> Fourth year undergraduate at UC Berkeley, interested in dynamics models, intrinsic learning signals, and plastic online RL.
+
+## Pages
+
+- [Home](https://ahilanks.github.io/): bio, research, and projects
+- [Writings](https://ahilanks.github.io/writings.html): the full, current list of essays
+
+## Research
+
+- [Learning from Intrinsic Signals](https://github.com/ahilanks/curious-robot) (work in progress): Investigating a tabula rasa JEPA model that learns through exploratory signals like learning progress, RND, and empowerment.
+
+## Projects
+
+- [Orchestrator AI](https://orchestrator.live) (May 2025): Routes to the best and cheapest LLM based on each individual query. 50-90% cheaper than best model with 2-3% quality loss.
+- [Introspect](https://youtu.be/dMug-9h_eW4?si=3gTTC4Lvib2TjE5B) (June 2025): A way to visualize GPT/Claude conversations in interactive 3D space.
+- [Oski Eats](https://apps.apple.com/us/app/oski-eats/id6741076699) (November 2024): An iOS app for Berkeley students. 3k daily users. 1.5M+ total uses.
+
+## Elsewhere
+
+- [GitHub](https://github.com/ahilanks)
+- [X](https://x.com/ahilanks101)
+- [Substack](https://ahilanks.substack.com)

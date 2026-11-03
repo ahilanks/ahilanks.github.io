@@ -2,7 +2,6 @@
 # Don't add a separate group for a named bot: a bot that matches its own group
 # ignores this one, and would lose the draft rule below.
 User-agent: *
-Allow: /
 # Private draft previews are unlisted: keep them out of search engines and AI tools.
 Disallow: /writings/p/
 

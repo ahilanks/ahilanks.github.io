@@ -1,6 +1,6 @@
 # Ahilan Karuppusami
 
-> Fourth year undergraduate at UC Berkeley, interested in dynamics models, intrinsic learning signals, and plastic online RL.
+> Fourth year undergraduate at UC Berkeley, interested in continuous latent dynamics models, intrinsic learning signals, and plastic online RL.
 
 ## Pages
 

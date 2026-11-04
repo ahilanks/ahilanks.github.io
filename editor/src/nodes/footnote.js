@@ -324,13 +324,68 @@ function watchScroll(pos, frame, done) {
   requestAnimationFrame(tick)
 }
 
-// Take the caret to footnote `id`'s body, centred on screen, with a brief highlight.
+// Take the caret to footnote `id`'s body, centred on screen, with a brief highlight. A note
+// in the margin is already beside its marker, so the page only moves if it's out of view.
 function revealFootnote(id) {
   const li = document.querySelector(`#fnList li[data-fn="${id}"]`)
   if (!li) return
   li.querySelector('.fn-body').focus({ preventScroll: true })
-  centerOnScreen(li)
+  if (inMargin()) requestAnimationFrame(() => keepInView(li)) // after the layout places it
+  else centerOnScreen(li)
   flash(li)
+}
+
+/* ------------------------------------------------------------ notes in the margin
+ * Style → Footnotes → Right margin. The notes stay in #fnList, so editing and saving work as
+ * usual; CSS moves the list beside the column and each note joins the comment cards' margin
+ * layout (comments.js addSource), so notes and comments stack without covering each other.
+ * Needs the same room as comment cards: on a narrower window the notes stay at the bottom. */
+const MARGIN_ROOM = '(min-width: 1300px)'
+let marginWanted = false
+let marginRoom = null
+let relayout = () => {}
+
+function inMargin() {
+  const s = $('surface')
+  return !!s && s.classList.contains('fn-side')
+}
+function keepInView(el) {
+  const area = $('scrollArea')
+  if (!area) return
+  const a = area.getBoundingClientRect(); const r = el.getBoundingClientRect()
+  if (r.top < a.top || r.bottom > a.bottom) centerOnScreen(el)
+}
+function syncMargin() {
+  const s = $('surface'); const list = $('fnList')
+  if (!s || !list) return
+  const on = marginWanted && !!marginRoom && marginRoom.matches
+  s.classList.toggle('fn-side', on)
+  if (!on) Array.from(list.children).forEach((li) => { li.style.top = '' })
+  if (on) endTrip() // a way back is only for the trip down to the bottom of the page
+  relayout()
+}
+export function setFootnotePlacement(place) {
+  marginWanted = place === 'margin'
+  syncMargin()
+}
+export function setupFootnoteMargin(editor, comments) {
+  marginRoom = window.matchMedia(MARGIN_ROOM)
+  marginRoom.addEventListener('change', syncMargin)
+  relayout = comments.layout
+  comments.addSource({
+    deactivate() {},
+    entries(sRect) {
+      if (!inMargin()) return []
+      // orphans have no marker: they wait at the end of the text
+      const end = editor.view.dom.getBoundingClientRect().bottom - sRect.top
+      return Array.from($('fnList').children).map((li) => {
+        const ref = !li.classList.contains('fn-orphan') && editor.view.dom.querySelector(`.fn-ref[data-fn="${li.dataset.fn}"]`)
+        const r = ref ? ref.getBoundingClientRect() : null
+        return { card: li, active: false, top: r ? r.top - sRect.top : end, bottom: r ? r.bottom - sRect.top : end, left: 0 }
+      })
+    },
+  })
+  syncMargin()
 }
 
 // Caret just after footnote `id`'s marker in the text → the marker's element, or null.
@@ -352,7 +407,7 @@ function revealRef(editor, id) {
   if (trip && trip.id === id) { goHome(editor); return }
   endTrip()
   const ref = caretAfterRef(editor, id)
-  if (ref) { centerOnScreen(ref); flash(ref) }
+  if (ref) { if (inMargin()) keepInView(ref); else centerOnScreen(ref); flash(ref) }
 }
 
 /* ---------------------------------------------------------- the round trip
@@ -451,7 +506,7 @@ export function insertFootnote(editor) {
   // footnote body and scrolling back up to the marker.
   editor.chain().insertContent({ type: 'footnoteRef', attrs: { fnId: id } }).run()
   reconcileFootnotes(editor)
-  startTrip(id)
+  if (!inMargin()) startTrip(id)
   revealFootnote(id)
 }
 
@@ -473,6 +528,12 @@ export function setupFootnotes(editor, onFootnoteEdit) {
       if (e.key === 'Escape' && trip) {
         const li = e.target.closest && e.target.closest('li')
         if (li && li.dataset.fn === trip.id) { e.preventDefault(); goHome(editor) }
+        return
+      }
+      // a note in the margin has no trip to come back from: Escape returns to its marker
+      if (e.key === 'Escape' && inMargin()) {
+        const li = e.target.closest && e.target.closest('li')
+        if (li && !li.classList.contains('fn-orphan')) { e.preventDefault(); revealRef(editor, li.dataset.fn) }
         return
       }
       if (e.key !== 'Backspace' && e.key !== 'Delete') return
@@ -587,7 +648,7 @@ export function setupFootnotes(editor, onFootnoteEdit) {
     const ref = e.target.closest && e.target.closest('.fn-ref')
     if (!ref) return
     peek.hide()
-    startTrip(ref.dataset.fn)
+    if (!inMargin()) startTrip(ref.dataset.fn)
     revealFootnote(ref.dataset.fn)
   })
   $('footnoteBtn').addEventListener('click', () => insertFootnote(editor))
@@ -627,6 +688,7 @@ function setupPeek(editor) {
     card.classList.toggle('up', up)
   }
   function show(el) {
+    if (inMargin()) return // the note is already right there
     const li = document.querySelector(`#fnList li[data-fn="${el.dataset.fn}"]`)
     const body = li && li.querySelector('.fn-body')
     if (!body) return

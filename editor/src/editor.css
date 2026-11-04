@@ -363,6 +363,25 @@ ol.fn-list li.fn-orphan:hover .fn-num { color: transparent; }
 ol.fn-list li.fn-orphan:hover .fn-num::after { content: "×"; position: absolute; left: 0; top: 0; color: var(--muted); }
 ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 
+/* Style → Footnotes → Right margin: the list sits where comment cards do, each note placed
+   level with its marker by the shared margin layout (footnote.js, comments.js) */
+.surface.fn-side .doc-footnotes { position: absolute; top: 0; left: calc(100% + 18px); width: 224px; height: 0; margin: 0; padding: 0; }
+.surface.fn-side .doc-footnotes > hr, .surface.fn-side .doc-footnotes > .fn-label { display: none; }
+.surface.fn-side ol.fn-list li, .surface.fn-side ol.fn-list li.fn-orphan { position: absolute; left: 0; width: 100%; margin: 0; font-size: 0.88rem; line-height: 1.45; }
+.surface.fn-side ol.fn-list li.fn-orphan { flex-wrap: wrap; }
+.surface.fn-side ol.fn-list li.fn-orphan::before { position: static; flex: 0 0 100%; }
+
+/* ----------------------------- STYLE (style.js) ----------------------------- */
+.style-btn { font-family: "Newsreader", Georgia, serif; font-size: 1.02rem; font-weight: 500; }
+#stylePanel { width: min(270px, calc(100vw - 20px)); }
+.style-head { font-size: 0.78rem; font-weight: 600; color: var(--text); margin-bottom: 0.7rem; }
+.style-row + .style-row { margin-top: 0.8rem; }
+.style-name { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.35rem; }
+.style-row .seg { display: flex; }
+.style-row .seg button { flex: 1; white-space: nowrap; }
+.style-hint { font-size: 0.74rem; line-height: 1.35; color: var(--muted); margin-top: 0.4rem; }
+.style-hint[hidden] { display: none; }
+
 /* ----------------------------- COMMENTS ----------------------------- */
 /* the commented stretch of text: a soft marker tint; stronger while its card is active
    (.cmt-on is a ProseMirror decoration — see comments.js for why not a class; in a footnote,

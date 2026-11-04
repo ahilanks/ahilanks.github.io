@@ -33,6 +33,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 // Neither may ever reach a published page or draft link — build only from title,
 // subtitle, body and the footnote list.
 import { CONFIG } from './config.js'
+import { normalizeStyle, styleKey } from './style.js'
 
 /* ------------------------------------------------------------ file sink (server) */
 // Files are collected here during a publish and sent to the local server in one request.
@@ -408,6 +409,13 @@ function fnTrip() {
       var ref = a.closest('sup')
       if (!li || !ref) return
       e.preventDefault()
+      if (document.body.classList.contains('fn-side')) { // already beside its marker (fnSide)
+        li.setAttribute('tabindex', '-1')
+        li.scrollIntoView({ block: 'nearest', behavior: motion })
+        flash(li)
+        land(li)
+        return
+      }
       trip = { y: window.scrollY, ref: ref, n: out[1], left: false }
       // One entry per trip, however many markers are followed before coming back. The entry
       // left behind is 'manual': Chrome restores scroll AFTER popstate, so its remembered
@@ -426,7 +434,7 @@ function fnTrip() {
       end()
       var sup = document.getElementById('fnref-' + back[1])
       if (!sup) return
-      sup.scrollIntoView({ block: 'center', behavior: motion })
+      sup.scrollIntoView({ block: document.body.classList.contains('fn-side') ? 'nearest' : 'center', behavior: motion })
       flash(sup)
       land(sup.querySelector('a') || sup)
     }
@@ -479,6 +487,7 @@ function fnPeek() {
     card.classList.toggle('up', up)
   }
   function show(sup) {
+    if (document.body.classList.contains('fn-side')) return // the note is already beside it (fnSide)
     var n = /^fnref-(\d+)$/.exec(sup.id)
     var li = n && document.getElementById('fn-' + n[1])
     if (!li) return
@@ -523,6 +532,72 @@ function fnPeek() {
   document.addEventListener('click', function (e) { if (markerOf(e.target)) hide() }, true) // off on the trip to the note
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
   window.addEventListener('resize', function () { if (ref) place() })
+}
+
+/* ------------------------------------------------------ footnotes in the margin (page) */
+// Runs INSIDE the published article (embedded via fnSide.toString(), like fnTrip), only when
+// the article's style asks for it. With room beside the column, each note moves to the right
+// margin with its first line on the same baseline as its marker, pushed down when the note
+// above runs long. Without room, or without JavaScript, or in print, the notes simply stay
+// at the bottom — this only ever adds the fn-side class and the notes' positions.
+function fnSide(minWidth) {
+  var list = document.querySelector('ol.footnotes')
+  var main = list && list.closest('.container')
+  if (!list || !main) return
+  var room = window.matchMedia('(min-width:' + minWidth + 'px)')
+  var items = Array.prototype.slice.call(list.children)
+  var GAP = 14
+  var queued = false
+
+  // the baseline of the line at `node`, measured with a zero-size box dropped in beside it
+  function baseline(parent, before) {
+    var probe = document.createElement('span')
+    probe.style.cssText = 'display:inline-block;width:0;height:0'
+    parent.insertBefore(probe, before)
+    var y = probe.getBoundingClientRect().bottom
+    parent.removeChild(probe)
+    return y
+  }
+  function place() {
+    queued = false
+    var on = room.matches
+    document.body.classList.toggle('fn-side', on)
+    if (!on) {
+      main.style.minHeight = ''
+      items.forEach(function (li) { li.style.top = '' })
+      return
+    }
+    var top0 = main.getBoundingClientRect().top
+    var y = -Infinity
+    items.forEach(function (li) {
+      var sup = document.getElementById(li.id.replace('fn-', 'fnref-'))
+      var back = li.querySelector('.fn-back')
+      var at = y
+      if (sup && back) {
+        var own = baseline(back, back.firstChild) - li.getBoundingClientRect().top
+        at = Math.max(baseline(sup.parentNode, sup) - top0 - own, y)
+      }
+      li.style.top = at + 'px'
+      y = at + li.offsetHeight + GAP
+    })
+    // long notes can outrun the text: keep them inside the page
+    main.style.minHeight = y > 0 ? y + 'px' : ''
+  }
+  function soon() {
+    if (queued) return
+    queued = true
+    requestAnimationFrame(place)
+  }
+  place()
+  room.addEventListener('change', soon)
+  window.addEventListener('load', soon)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(soon)
+  // the text reflowing (fonts, math, images landing) or a note changing height
+  if (window.ResizeObserver) {
+    var watch = new ResizeObserver(soon)
+    watch.observe(main)
+    items.forEach(function (li) { watch.observe(li) })
+  }
 }
 
 /* ------------------------------------------------------ video autoplay (page) */
@@ -823,7 +898,7 @@ function longDateTime(iso) {
 // Build a full standalone article that matches the published site's aesthetic.
 // `version` ({ n, date }) adds the provenance widget; `draft` marks an unlisted preview
 // (noindex, no widget, relative paths one level deeper via `pathPrefix`).
-function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bodyHtml, footHtml, toc, slug, version, draft }) {
+function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, style, bodyHtml, footHtml, toc, slug, version, draft }) {
   const draftCreated = new Date().toISOString() // when this draft link was (re)generated
   const title = escapeHtml(titleText)
   const subtitle = escapeHtml(subtitleText)
@@ -908,6 +983,11 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
       ? '      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
+  const looks = normalizeStyle(style)
+  const fnMargin = !!footHtml && looks.footnotes === 'margin'
+  // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
+  // column sliding left of centre to make it. A contents panel on the left needs 240px more.
+  const fnMinWidth = hasToc ? 1400 : 1160
 
   return [
     '<!DOCTYPE html>',
@@ -997,6 +1077,14 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     footHtml ? '      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }' : '',
     footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }' : '',
     ...(version || draft ? PROV_CSS : []),
+    fnMargin ? '      @media screen {' : '',
+    fnMargin ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
+    fnMargin ? '        body.fn-side .fn-divider { display:none; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; color:rgba(39,50,63,0.82); }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
+    fnMargin ? '      }' : '',
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
     hasToc ? '      .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }' : '',
@@ -1013,7 +1101,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     hasToc ? '      @media (max-width:1250px) { .toc { display:none; } }' : '',
     '    </style>',
     '  </head>',
-    '  <body>',
+    // what publishing checks to tell whether the live page's style is out of date
+    styleKey(looks) ? '  <body data-style="' + escapeHtml(styleKey(looks)) + '">' : '  <body>',
     tocHtml,
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.
@@ -1030,6 +1119,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, bod
     provScript,
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
+    fnMargin ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ');</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
@@ -1239,7 +1329,7 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       const minutes = readingMinutes()
       const subtitleText = htmlToText(snap.subtitle)
-      const common = { titleText, subtitleText, dateStr, minutes, font: snap.font, bodyHtml, footHtml, toc, slug }
+      const common = { titleText, subtitleText, dateStr, minutes, font: snap.font, style: snap.style, bodyHtml, footHtml, toc, slug }
       const site = (CONFIG.siteUrl || '').replace(/\/$/, '')
 
       /* ---------------------------------------------------------- draft link */
@@ -1272,6 +1362,14 @@ export function setupPublish({ editor, currentSnapshot }) {
       let sha = null
       if (same && same.ots) {
         stampNote = 'Text unchanged since v' + n + '.'
+        // A new style with the same text is still v<N>: only the live page changes. The frozen
+        // copy stays as it was stamped, so its timestamp proof keeps checking out.
+        const live = await fetch('/writings/' + slug + '.html', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null)
+        const liveStyle = live === null ? null : ((/<body[^>]*\sdata-style="([^"]*)"/.exec(live) || [])[1] || '')
+        if (liveStyle !== null && liveStyle !== styleKey(snap.style)) {
+          await sink.add('writings/' + slug + '.html', buildArticleHtml(Object.assign({}, common, { version: { n, date: versionDate } })))
+          stampNote += ' Style updated.'
+        }
       } else {
         // 2) frozen copy + live page, byte-identical (the frozen file is what gets hashed)
         const html = buildArticleHtml(Object.assign({}, common, { version: { n, date: versionDate } }))

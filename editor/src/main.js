@@ -5,7 +5,8 @@ import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Select
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
-import { FootnoteRef, setupFootnotes, footnotesHTML, loadFootnotesHTML, activeFootnoteBody } from './nodes/footnote.js'
+import { FootnoteRef, setupFootnotes, setupFootnoteMargin, setFootnotePlacement, footnotesHTML, loadFootnotesHTML, activeFootnoteBody } from './nodes/footnote.js'
+import { setupStyle } from './style.js'
 import { Figure } from './nodes/figure.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
@@ -366,6 +367,7 @@ function currentSnapshot() {
     comments: comments.data(),
     closedComments: comments.closedData(),
     notes: notes.get(), // private sticky note — publish.js must never read it
+    style: style.get(), // per-article look (style.js); read by publish.js
     font: CONFIG.font,
     created: doc.created, // first-created time; never changes (drafts menu shows it)
     updated: Date.now(),
@@ -397,6 +399,7 @@ function applySnapshot(s) {
   doc.created = s.created
   docTitle.innerHTML = s.title || ''
   docSubtitle.innerHTML = s.subtitle || ''
+  style.set(s.style)
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
@@ -458,6 +461,13 @@ setupFootnotes(editor, scheduleSave)
 const comments = setupComments(editor, scheduleSave)
 window.__comments = comments // console debugging, like __editor
 
+// Style: the toolbar's per-article look. A pick saves and syncs at once, since no edit follows it.
+setupFootnoteMargin(editor, comments)
+const style = setupStyle({
+  apply: (s) => setFootnotePlacement(s.footnotes),
+  onChange: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },
+})
+
 // AI suggestions: toolbar pen → Proofread / Review the selection or whole draft → margin cards.
 window.__suggest = setupSuggestions(editor, comments, { getDocId })
 
@@ -496,7 +506,7 @@ document.addEventListener('drop', (e) => {
 // end (right margin) of the line at that height, like a word processor.
 $('scrollArea').addEventListener('mousedown', (e) => {
   if (e.button !== 0 || !editor.isEditable) return
-  if (e.target && e.target.closest && e.target.closest('.cmt-layer')) return // comment cards live in the margin
+  if (e.target && e.target.closest && e.target.closest('.cmt-layer, .doc-footnotes')) return // comment cards and margin footnotes live here
   const r = editor.view.dom.getBoundingClientRect()
   const left = e.clientX < r.left
   const right = e.clientX > r.right

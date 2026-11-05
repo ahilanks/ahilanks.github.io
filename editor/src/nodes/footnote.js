@@ -372,13 +372,22 @@ export function setupFootnoteMargin(editor, comments) {
   marginRoom = window.matchMedia(MARGIN_ROOM)
   marginRoom.addEventListener('change', syncMargin)
   relayout = comments.layout
+  // hovering a marker darkens its note. A style rule, since #fnList's HTML is what gets saved.
+  const hot = document.createElement('style')
+  document.head.appendChild(hot)
+  editor.view.dom.addEventListener('mouseover', (e) => {
+    const ref = e.target.closest && e.target.closest('.fn-ref')
+    hot.textContent = ref ? '.surface.fn-side #fnList li[data-fn="' + CSS.escape(ref.dataset.fn) + '"] { color: var(--text); }' : ''
+  })
+  editor.view.dom.addEventListener('mouseleave', () => { hot.textContent = '' })
   comments.addSource({
     deactivate() {},
     entries(sRect) {
       if (!inMargin()) return []
       // orphans have no marker: they wait at the end of the text
       const end = editor.view.dom.getBoundingClientRect().bottom - sRect.top
-      return Array.from($('fnList').children).map((li) => {
+      // (a note hidden by Focus on section has no box, and no place in the margin)
+      return Array.from($('fnList').children).filter((li) => li.getClientRects().length).map((li) => {
         const ref = !li.classList.contains('fn-orphan') && editor.view.dom.querySelector(`.fn-ref[data-fn="${li.dataset.fn}"]`)
         const r = ref ? ref.getBoundingClientRect() : null
         return { card: li, active: false, top: r ? r.top - sRect.top : end, bottom: r ? r.bottom - sRect.top : end, left: 0 }
@@ -742,7 +751,11 @@ function setupPeek(editor) {
 
 // storage helpers
 // (the active comment's highlight is editor state, not content)
-export function footnotesHTML() { const l = $('fnList'); return l ? l.innerHTML.replaceAll('class="cmt cmt-on"', 'class="cmt"') : '' }
+// (nor is a margin note's position, set by the layout)
+export function footnotesHTML() {
+  const l = $('fnList')
+  return l ? l.innerHTML.replaceAll('class="cmt cmt-on"', 'class="cmt"').replace(/(<li\b[^>]*?) style="top:[^"]*"/g, '$1') : ''
+}
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return
   l.innerHTML = html || ''

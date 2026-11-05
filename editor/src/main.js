@@ -7,6 +7,7 @@ import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
 import { FootnoteRef, setupFootnotes, setupFootnoteMargin, setFootnotePlacement, footnotesHTML, loadFootnotesHTML, activeFootnoteBody } from './nodes/footnote.js'
 import { setupStyle } from './style.js'
+import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
@@ -123,6 +124,7 @@ export const editor = new Editor({
     HeadingAnchor,
     CommentMark,
     Suggestions,
+    SectionFocus,
   ],
   editorProps: {
     scrollThreshold: CONFIG.scroll.threshold,
@@ -397,6 +399,7 @@ function scheduleSave() { setStatus('saving', 'Saving…'); _save() }
 // the drafts module owns switching ids. emitUpdate:false so a switch never queues a save.
 function applySnapshot(s) {
   doc.created = s.created
+  sectionFocus.suspend() // focus refuses edits outside its section, and this replaces everything
   docTitle.innerHTML = s.title || ''
   docSubtitle.innerHTML = s.subtitle || ''
   style.set(s.style)
@@ -404,6 +407,7 @@ function applySnapshot(s) {
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
   notes.set(s.notes)
+  sectionFocus.restore(s.id || doc.id)
   refreshPlaceholders()
   updateToolbar()
   setStatus('saved', 'Saved')
@@ -469,6 +473,9 @@ const style = setupStyle({
   onChange: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },
 })
 
+// Focus on section: only one section shows and can be edited, until you bring the rest back.
+const sectionFocus = setupSectionFocus(editor, { getDocId, comments, onChange: () => { if (wordCount) wordCount.refresh() } })
+
 // AI suggestions: toolbar pen → Proofread / Review the selection or whole draft → margin cards.
 window.__suggest = setupSuggestions(editor, comments, { getDocId })
 
@@ -488,7 +495,7 @@ setupLinks(editor)
 setupSourceView(editor)
 
 // Contents panel: top-left §-numbered outline of the doc's headings (see toc.js).
-const toc = setupToc(editor)
+const toc = setupToc(editor, { focusHeading: (el) => sectionFocus.enterHeading(el) })
 
 // Word count: bottom-left pill; hover for length details (see wordcount.js).
 const wordCount = setupWordCount(editor)

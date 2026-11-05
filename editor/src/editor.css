@@ -370,12 +370,44 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .surface.fn-side .doc-footnotes { position: absolute; top: 0; left: calc(100% + 18px); width: 224px; height: 0; margin: 0; padding: 0; }
 .surface.fn-side .doc-footnotes > hr, .surface.fn-side .doc-footnotes > .fn-label { display: none; }
 .surface.fn-side ol.fn-list li, .surface.fn-side ol.fn-list li.fn-orphan { position: absolute; left: 0; width: 100%; margin: 0; font-size: 0.88rem; line-height: 1.45; }
+/* quiet until you're on it, or on its marker (footnote.js) */
+.surface.fn-side ol.fn-list li:not(.fn-orphan) { color: rgba(39, 50, 63, 0.55); transition: color 0.15s; }
+.surface.fn-side ol.fn-list li:not(.fn-orphan):hover, .surface.fn-side ol.fn-list li:not(.fn-orphan):focus-within { color: var(--text); }
+.surface.fn-side ol.fn-list li:not(.fn-orphan) .fn-num, .surface.fn-side ol.fn-list li:not(.fn-orphan) .fn-body a { color: inherit; }
 .surface.fn-side ol.fn-list li.fn-orphan { flex-wrap: wrap; }
 /* a note or comment card running past the end of the text keeps the same gap below it */
 .surface.fn-side ol.fn-list li:last-child::after, .cmt-card::after {
   content: ""; position: absolute; top: 100%; left: 0; width: 1px; height: var(--end-gap); pointer-events: none;
 }
 .surface.fn-side ol.fn-list li.fn-orphan::before { position: static; flex: 0 0 100%; }
+
+/* ----------------------------- FOCUS ON SECTION (focus.js) ----------------------------- */
+.focus-hidden { display: none !important; }
+.focus-bar {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 0.75rem; padding: 0.4rem 1rem;
+  background: var(--bg-soft); border-bottom: 1px solid var(--line-soft); font-size: 0.8rem; color: var(--muted);
+}
+.focus-bar[hidden] { display: none; }
+.focus-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.focus-label b { color: var(--text); font-weight: 600; }
+.focus-bar button {
+  flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 0.2rem 0.6rem;
+  font-size: 0.78rem; font-weight: 500; color: var(--text);
+}
+.focus-bar button:hover { background: rgba(39, 50, 63, 0.06); }
+/* the section is the page: no title above it, no outline to wander off through */
+body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focus .toc-panel { display: none; }
+.doc-body .focus-first { margin-top: 0 !important; padding-top: 0 !important; border-top: none !important; }
+.doc-footnotes.focus-no-notes { display: none; }
+.toc-row { position: relative; }
+.toc-focus {
+  position: absolute; right: 0; top: 0.15rem; width: 24px; height: 24px; padding: 4px; border: none; border-radius: 6px;
+  background: var(--bg); color: var(--muted); opacity: 0; transition: opacity 0.12s, color 0.12s;
+}
+.toc-focus svg { display: block; width: 100%; height: 100%; }
+.toc-row:hover .toc-focus, .toc-focus:focus-visible { opacity: 1; }
+.toc-focus:hover { color: var(--text); background: linear-gradient(rgba(39, 50, 63, 0.08), rgba(39, 50, 63, 0.08)), var(--bg); }
+@media (hover: none) { .toc-focus { opacity: 0.7; } }
 
 /* ----------------------------- STYLE (style.js) ----------------------------- */
 .style-btn { font-family: "Newsreader", Georgia, serif; font-size: 1.02rem; font-weight: 500; }
@@ -624,7 +656,7 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .toc-item.lvl-4 { padding-left: 2.6rem; font-size: 0.78rem; }
 .toc-panel.font-serif .toc-item.lvl-4 { font-size: 0.84rem; }
 /* sub/sub-sub entries outside the section currently being read are disclosed on demand */
-.toc-item.toc-collapsed { display: none; }
+.toc-row.toc-collapsed { display: none; }
 .toc-item.active { color: var(--text); font-weight: 700; }
 /* the dark bar sits on top of the list's left rule, like the reference design */
 .toc-item.active::before {

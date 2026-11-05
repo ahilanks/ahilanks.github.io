@@ -14,7 +14,9 @@
 
 import { $, debounce } from './dom.js'
 
-export function setupToc(editor) {
+const FOCUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3"/></svg>'
+
+export function setupToc(editor, { focusHeading }) {
   const scroll = $('scrollArea')
   const surface = $('surface')
 
@@ -59,8 +61,19 @@ export function setupToc(editor) {
       b.textContent = depth === 0 ? '§' + secN + ' · ' + e.text : e.text
       b.addEventListener('mousedown', (ev) => ev.preventDefault()) // don't steal editor focus
       b.addEventListener('click', () => { pinnedIdx = e.i; scrollToHeading(e.i); updateActive() })
-      list.appendChild(b)
-      const it = { btn: b, index: e.i, depth, parentSec: null, parentSub: null }
+      const row = document.createElement('div')
+      row.className = 'toc-row'
+      const f = document.createElement('button')
+      f.type = 'button'
+      f.className = 'toc-focus'
+      f.title = 'Focus on this section'
+      f.setAttribute('aria-label', 'Focus on ' + e.text)
+      f.innerHTML = FOCUS_ICON
+      f.addEventListener('mousedown', (ev) => ev.preventDefault())
+      f.addEventListener('click', () => { const h = headings()[e.i]; if (h) focusHeading(h) })
+      row.append(b, f)
+      list.appendChild(row)
+      const it = { btn: b, row, index: e.i, depth, parentSec: null, parentSub: null }
       if (depth === 0) { curSec = it; curSub = null }
       else if (depth === 1) { it.parentSec = curSec; curSub = it }
       else { it.parentSec = curSec; it.parentSub = curSub }
@@ -131,7 +144,7 @@ export function setupToc(editor) {
       else if (it.depth === 2) {
         show = (!it.parentSec || secs.has(it.parentSec)) && (!it.parentSub || subs.has(it.parentSub))
       }
-      it.btn.classList.toggle('toc-collapsed', !show)
+      it.row.classList.toggle('toc-collapsed', !show)
     })
   }
 

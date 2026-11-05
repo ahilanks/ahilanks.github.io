@@ -589,6 +589,14 @@ function fnSide(minWidth) {
     requestAnimationFrame(place)
   }
   place()
+  // quiet until the reader is on the note (CSS) or on its marker (here)
+  function hot(e, on) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    var li = sup && document.getElementById(sup.id.replace('fnref-', 'fn-'))
+    if (li) li.classList.toggle('fn-hot', on)
+  }
+  document.addEventListener('mouseover', function (e) { hot(e, true) })
+  document.addEventListener('mouseout', function (e) { hot(e, false) })
   room.addEventListener('change', soon)
   window.addEventListener('load', soon)
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(soon)
@@ -1080,8 +1088,10 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     fnMargin ? '      @media screen {' : '',
     fnMargin ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
     fnMargin ? '        body.fn-side .fn-divider { display:none; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; color:rgba(39,50,63,0.82); }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.55); transition:color 0.15s; }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }' : '',
+    fnMargin ? '        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }' : '',
     fnMargin ? '        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }' : '',
     fnMargin ? '        body.fn-side ol.footnotes .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
     fnMargin ? '      }' : '',

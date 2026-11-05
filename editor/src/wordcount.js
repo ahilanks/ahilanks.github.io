@@ -10,6 +10,7 @@
  */
 
 import { $, debounce } from './dom.js'
+import { focusRange } from './focus.js'
 
 const WPM = 238 // average adult silent-reading speed
 const WORD_RE = /[\p{L}\p{N}]+(?:['’\-.][\p{L}\p{N}]+)*/gu
@@ -41,7 +42,9 @@ export function setupWordCount(editor) {
   let total = 0
 
   function stats() {
-    const doc = editor.state.doc
+    // while focused on a section, every number is about that section
+    const range = focusRange(editor.state)
+    const doc = range ? editor.state.doc.cut(range.from, range.to) : editor.state.doc
     const text = (node) => node.textBetween(0, node.content.size, ' ', ' ')
     const s = { words: 0, chars: 0, charsNoSpace: 0, paragraphs: 0, sentences: 0,
       inlineMath: 0, blockMath: 0, figures: 0, links: new Set(), sections: [] }
@@ -97,7 +100,8 @@ export function setupWordCount(editor) {
 
   function renderPill() {
     const sel = selectionWords()
-    pill.textContent = sel ? fmt(sel) + ' of ' + plural(total, 'word') : plural(total, 'word')
+    const where = focusRange(editor.state) ? ' in this section' : ''
+    pill.textContent = (sel ? fmt(sel) + ' of ' + plural(total, 'word') : plural(total, 'word')) + where
   }
 
   const row = (label, value) => `<div class="wc-row"><span>${label}</span><b>${value}</b></div>`

@@ -359,6 +359,11 @@ export function setupComments(editor, scheduleSave) {
     }
     // other sources' cards, interleaved by height (comments come first on a tie)
     sources.forEach((s) => entries.push(...s.entries(sRect)))
+    // an anchor with no box at all is hidden (focus on section): so is its card
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i]
+      if (e.top === -sRect.top && e.bottom === -sRect.top) { e.card.hidden = true; entries.splice(i, 1) }
+    }
     entries.sort((a, b) => a.top - b.top)
 
     layer.classList.toggle('narrow', !wide.matches)

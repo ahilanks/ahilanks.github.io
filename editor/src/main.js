@@ -445,6 +445,7 @@ mathKbdToggle.addEventListener('mousedown', (e) => {
 const vk0 = mathKeyboard()
 if (vk0) vk0.addEventListener('virtual-keyboard-toggle', () => {
   mathKbdToggle.classList.toggle('active', vk0.visible)
+  document.body.classList.toggle('vk-open', vk0.visible)
 })
 
 // ∑ math buttons (toolbar + bubble): AI-format a selection, else insert a blank equation.

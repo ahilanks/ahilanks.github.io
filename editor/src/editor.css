@@ -122,7 +122,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 /* ----------------------------- SURFACE ----------------------------- */
 .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scroll-padding-bottom: 22vh; }
-.surface { max-width: var(--maxw); margin: 2.4rem auto; padding: 0 1.5rem 32vh; position: relative; }
+/* the page ends just below the last text; room to scroll on only while the math keyboard is
+   up, since it would otherwise cover an equation at the end of the draft */
+.surface { --end-gap: 4.5rem; max-width: var(--maxw); margin: 2.4rem auto 0; padding: 0 1.5rem var(--end-gap); position: relative; }
+body.vk-open .surface { padding-bottom: 50vh; }
 
 /* ProseMirror base (essential rules, inlined so we vendor no extra CSS) */
 .ProseMirror { position: relative; word-wrap: break-word; white-space: pre-wrap; white-space: break-spaces; font-feature-settings: "liga" 0; outline: none; }
@@ -284,8 +287,7 @@ math-field.math-edit {
 .fn-ref { color: var(--text); font-weight: 600; font-size: 0.72em; vertical-align: super; line-height: 0; cursor: pointer; padding: 0 1px; user-select: none; }
 
 /* footnotes section */
-/* bottom room so even the last footnote can be scrolled to the middle of the screen */
-.doc-footnotes { margin-top: 0; padding-bottom: 20vh; }
+.doc-footnotes { margin-top: 0; }
 /* the editor surface + its last paragraph shouldn't pad the space before the footnotes */
 .doc-body-pm { margin-bottom: 0; }
 .doc-body-pm > p:last-child { margin-bottom: 0; }
@@ -369,6 +371,10 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .surface.fn-side .doc-footnotes > hr, .surface.fn-side .doc-footnotes > .fn-label { display: none; }
 .surface.fn-side ol.fn-list li, .surface.fn-side ol.fn-list li.fn-orphan { position: absolute; left: 0; width: 100%; margin: 0; font-size: 0.88rem; line-height: 1.45; }
 .surface.fn-side ol.fn-list li.fn-orphan { flex-wrap: wrap; }
+/* a note or comment card running past the end of the text keeps the same gap below it */
+.surface.fn-side ol.fn-list li:last-child::after, .cmt-card::after {
+  content: ""; position: absolute; top: 100%; left: 0; width: 1px; height: var(--end-gap); pointer-events: none;
+}
 .surface.fn-side ol.fn-list li.fn-orphan::before { position: static; flex: 0 0 100%; }
 
 /* ----------------------------- STYLE (style.js) ----------------------------- */
@@ -866,7 +872,7 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
   #draftsBtn { box-shadow: -0.6rem 0 0 var(--bg); }
   .tb-end { box-shadow: 0.6rem 0 0 var(--bg); }
 
-  .surface { margin: 1.4rem auto; padding: 0 1.1rem 40vh; }
+  .surface { margin: 1.4rem auto 0; padding: 0 1.1rem var(--end-gap); }
   .doc-title { font-size: 1.45rem; }
   .doc-subtitle { font-size: 1.15rem; margin-bottom: 1.3rem; }
   .doc-body { font-size: 1.05rem; }

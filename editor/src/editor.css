@@ -257,6 +257,15 @@ figure.video-block figcaption:has(> br.ProseMirror-trailingBreak:only-child)::be
 .math-inline.math-edge:hover { background: none; }
 .math-block { display: block; text-align: center; margin: 0.5rem 0; padding: 0.15rem 0.2rem; overflow-x: auto; overflow-y: hidden; }
 .math-block .katex-display { margin: 0; }
+/* an equation with a reader slider (nodes/math.js); hidden while the article's sliders are off */
+.math-block:has(> .eq-slider-tag) { position: relative; }
+.eq-slider-tag {
+  position: absolute; right: 2px; top: 2px; padding: 0.1rem 0.45rem; border: none; border-radius: 999px; background: rgba(39, 50, 63, 0.07);
+  font: 500 0.68rem/1.4 "Inter", sans-serif; color: var(--muted); opacity: 0; transition: opacity 0.12s;
+}
+.math-block:hover > .eq-slider-tag, .eq-slider-tag:focus-visible { opacity: 1; }
+.eq-slider-tag:hover { background: rgba(39, 50, 63, 0.14); color: var(--text); }
+body.eq-sliders-off .eq-slider-tag { display: none; }
 .math-block[data-align="left"], .math-block[data-align="left"] .katex-display { text-align: left; }
 .math-block[data-align="right"], .math-block[data-align="right"] .katex-display { text-align: right; }
 .math-error { color: #c0392b; font-family: "JetBrains Mono", monospace; font-size: 0.9em; }
@@ -618,6 +627,8 @@ body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focu
 .sg-diff .katex { font-size: 1.05em; }
 .sg-eq { overflow-x: auto; margin: 0.15rem 0 0.25rem; color: var(--sg); }
 .sg-eq .katex-display { margin: 0.3em 0; }
+.sg-eq-t { font: 500 0.68rem/1.3 "Inter", sans-serif; color: var(--faint); margin-top: 0.3rem; }
+.sg-levels .sg-eq { color: var(--text); font-size: 0.82rem; }
 .sg-ltitle { font-size: 0.78rem; color: var(--muted); font-style: italic; margin: 0.05rem 0 0.15rem; }
 
 /* Ask, at the top of the suggestions menu */

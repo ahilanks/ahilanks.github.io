@@ -466,7 +466,10 @@ window.__comments = comments // console debugging, like __editor
 // Style: the toolbar's per-article look. A pick saves and syncs at once, since no edit follows it.
 setupFootnoteMargin(editor, comments)
 const style = setupStyle({
-  apply: (s) => setFootnotePlacement(s.footnotes),
+  apply: (s) => {
+    setFootnotePlacement(s.footnotes)
+    document.body.classList.toggle('eq-sliders-off', s.eqSlider === 'off')
+  },
   onChange: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },
 })
 

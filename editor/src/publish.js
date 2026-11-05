@@ -34,6 +34,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 // subtitle, body and the footnote list.
 import { CONFIG } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
+import { levelsFor } from './equation-levels.js'
 
 /* ------------------------------------------------------------ file sink (server) */
 // Files are collected here during a publish and sent to the local server in one request.
@@ -96,7 +97,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -205,7 +206,7 @@ function holdBackSections(bodyHtml) {
 // math nodes -> $..$ / $$..$$ text for KaTeX auto-render, footnote refs -> numbered anchors.
 // Also gives every non-empty H2/H3 an id and returns the contents-panel entries
 // ({ id, text, level, n }, where n is the §-number counted over H2s only).
-function bodyToPublishHtml(clone) {
+function bodyToPublishHtml(clone, { sliders = true } = {}) {
   // review comments are editor-only: unwrap their anchor spans, keep the words
   clone.querySelectorAll('span[data-comment]').forEach((s) => s.replaceWith(...s.childNodes))
   // inline math -> literal $tex$ text
@@ -215,6 +216,8 @@ function bodyToPublishHtml(clone) {
     const p = document.createElement('p')
     p.className = 'math-block' + (m.dataset.align ? ' align-' + m.dataset.align : '')
     p.textContent = '$$' + (m.dataset.tex || '') + '$$'
+    const levels = sliders ? levelsFor(m.dataset.tex || '', m.getAttribute('data-levels')) : null
+    if (levels) p.setAttribute('data-levels', JSON.stringify({ labeled: levels.labeled, simplified: levels.simplified, full: levels.full, why: levels.why }))
     m.replaceWith(p)
   })
   // footnote refs -> superscript anchors, numbered in document order (getHTML stores only '•')
@@ -332,13 +335,13 @@ async function extractVideos(root, prefix, files, mediaPrefix) {
 
 // Split inline data-URI images and uploaded videos out to media/ files, then
 // return { html, files, toc } ready for buildArticleHtml + writeFile.
-async function buildBody(bodyHtml, slug, mediaPrefix) {
+async function buildBody(bodyHtml, slug, mediaPrefix, opts) {
   const clone = document.createElement('div')
   clone.innerHTML = bodyHtml || ''
   const files = []
   await extractDataImages(clone, slug, files, mediaPrefix)
   await extractVideos(clone, slug, files, mediaPrefix)
-  const { html, toc } = bodyToPublishHtml(clone)
+  const { html, toc } = bodyToPublishHtml(clone, opts)
   return { html, files, toc }
 }
 
@@ -576,12 +579,13 @@ function fnPeek() {
 }
 
 /* ------------------------------------------------------ footnotes in the margin (page) */
-// Runs INSIDE the published article (embedded via fnSide.toString(), like fnTrip), only when
-// the article's style asks for it. With room beside the column, each note moves to the right
+// Runs INSIDE the published article (embedded via fnSide.toString(), like fnTrip), on every page
+// with footnotes. `start` is the writer's choice ('side' or 'below'); a settings icon lets the
+// reader change it, remembered in their browser. With room beside the column, each note moves to the right
 // margin with its first line on the same baseline as its marker, pushed down when the note
 // above runs long. Without room, or without JavaScript, or in print, the notes simply stay
 // at the bottom — this only ever adds the fn-side class and the notes' positions.
-function fnSide(minWidth) {
+function fnSide(minWidth, start) {
   var list = document.querySelector('ol.footnotes')
   var main = list && list.closest('.container')
   if (!list || !main) return
@@ -601,7 +605,7 @@ function fnSide(minWidth) {
   }
   function place() {
     queued = false
-    var on = room.matches
+    var on = room.matches && want === 'side'
     document.body.classList.toggle('fn-side', on)
     if (!on) {
       main.style.minHeight = ''
@@ -629,7 +633,49 @@ function fnSide(minWidth) {
     queued = true
     requestAnimationFrame(place)
   }
+  var KEY = 'reader.footnotes', want = start
+  try { want = localStorage.getItem(KEY) || start } catch (e) {}
   place()
+  // the settings icon, shown only when there's a choice to make: room for the margin
+  var gear = document.createElement('button')
+  gear.type = 'button'
+  gear.className = 'rd-gear'
+  gear.setAttribute('aria-label', 'Reading settings')
+  gear.setAttribute('aria-expanded', 'false')
+  gear.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>'
+  var panel = document.createElement('div')
+  panel.className = 'rd-panel'
+  panel.hidden = true
+  panel.innerHTML = '<div class="rd-name">Footnotes</div><div class="rd-seg" role="group" aria-label="Footnotes"><button type="button" data-v="side">On the right</button><button type="button" data-v="below">Below</button></div>'
+  document.body.appendChild(gear)
+  document.body.appendChild(panel)
+  var closeT = 0
+  function show(open) { clearTimeout(closeT); panel.hidden = !open; gear.setAttribute('aria-expanded', String(open)) }
+  function paint() {
+    gear.hidden = !room.matches
+    if (!room.matches) show(false)
+    var bs = panel.querySelectorAll('button')
+    for (var b = 0; b < bs.length; b++) bs[b].setAttribute('aria-pressed', String(bs[b].getAttribute('data-v') === want))
+  }
+  panel.addEventListener('click', function (e) {
+    var b = e.target.closest('button')
+    if (!b) return
+    want = b.getAttribute('data-v')
+    try { localStorage.setItem(KEY, want) } catch (err) {}
+    paint()
+    place()
+  })
+  gear.addEventListener('click', function () { show(window.matchMedia('(hover: hover)').matches ? true : panel.hidden) })
+  if (window.matchMedia('(hover: hover)').matches) {
+    [gear, panel].forEach(function (el) {
+      el.addEventListener('mouseenter', function () { show(true) })
+      el.addEventListener('mouseleave', function () { clearTimeout(closeT); closeT = setTimeout(function () { show(false) }, 260) })
+    })
+  }
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && !gear.contains(e.target)) show(false) })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') show(false) })
+  room.addEventListener('change', paint)
+  paint()
   // quiet until the reader is on the note (CSS) or on its marker (here)
   function hot(e, on) {
     var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
@@ -647,6 +693,118 @@ function fnSide(minWidth) {
     watch.observe(main)
     items.forEach(function (li) { watch.observe(li) })
   }
+}
+
+/* ------------------------------------------------------ equation slider (page) */
+// Runs INSIDE the published article (embedded via eqSlider.toString(), like fnTrip). A long
+// equation with accepted versions (data-levels; see equation-levels.js) gets a small slider
+// beneath it, shown on hover, focus or tap, stepping Labeled → Simplified → Full math. The page
+// opens on the writer's equation; room for the slider and the tallest version is always kept,
+// so nothing moves. Without JavaScript or KaTeX it's simply the plain equation.
+function eqSlider() {
+  function start() {
+    if (!window.katex) return
+    var macros = { '\\differentialD': 'd', '\\exponentialE': 'e', '\\imaginaryI': 'i', '\\imaginaryJ': 'j' }
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    var hover = window.matchMedia('(hover: hover)').matches
+    var NAMES = ['Labeled', 'Simplified', 'Full math']
+    var ps = document.querySelectorAll('p.math-block[data-levels]')
+    Array.prototype.forEach.call(ps, function (p) {
+      var data
+      try { data = JSON.parse(p.getAttribute('data-levels')) } catch (e) { return }
+      var fig = document.createElement('div')
+      fig.className = 'eqs'
+      var stack = document.createElement('div')
+      stack.className = 'eqs-stack'
+      function stage(el) { el.className = 'eqs-stage'; stack.appendChild(el); return el }
+      function rendered(tex) {
+        var el = document.createElement('div')
+        window.katex.render(tex, el, { displayMode: true, throwOnError: false, strict: false, macros: macros })
+        return el
+      }
+      var stages = []
+      try {
+        stages.push(stage(rendered(data.labeled)))
+        var mid = rendered(data.simplified)
+        if (data.why) { var w = document.createElement('div'); w.className = 'eqs-why'; w.textContent = data.why; mid.appendChild(w) }
+        stages.push(stage(mid))
+        if (data.full) stages.push(stage(rendered(data.full)))
+        else { var own = document.createElement('div'); own.innerHTML = p.innerHTML; stages.push(stage(own)) }
+      } catch (e) { return }
+      var ctl = document.createElement('div')
+      ctl.className = 'eqs-ctl'
+      ctl.innerHTML = '<span aria-hidden="true">Simple</span><div class="eqs-track"><input type="range" min="0" max="2" step="0.01" aria-label="Equation detail"></div><span aria-hidden="true">Math</span>'
+      var track = ctl.querySelector('.eqs-track')
+      for (var t = 0; t < 3; t++) {
+        var tick = document.createElement('span')
+        tick.className = 'eqs-tick'
+        tick.style.left = 'calc(6px + (100% - 12px) * ' + (t / 2) + ')'
+        track.insertBefore(tick, track.firstChild)
+      }
+      var input = ctl.querySelector('input')
+      fig.appendChild(stack)
+      fig.appendChild(ctl)
+      p.parentNode.replaceChild(fig, p)
+
+      var v = 2, raf = 0, dragging = false, offT = 0
+      function set(x) {
+        v = x
+        stages.forEach(function (st, i) {
+          // one fades out completely before the next fades in, so they never overprint
+          var o = Math.max(0, Math.min(1, 1 - Math.abs(x - i) * 2))
+          st.style.opacity = o
+          st.style.visibility = o > 0 ? 'visible' : 'hidden'
+          st.setAttribute('aria-hidden', Math.round(x) === i ? 'false' : 'true')
+        })
+        input.value = x
+        input.setAttribute('aria-valuetext', NAMES[Math.round(x)])
+      }
+      function glide(to) {
+        cancelAnimationFrame(raf)
+        if (reduced) { set(to); return }
+        var from = v, t0 = performance.now()
+        ;(function step(now) {
+          var q = Math.min(1, (now - t0) / 170)
+          set(from + (to - from) * (1 - (1 - q) * (1 - q)))
+          if (q < 1) raf = requestAnimationFrame(step)
+        })(t0)
+      }
+      function on() { clearTimeout(offT); fig.classList.add('on') }
+      function later() {
+        clearTimeout(offT)
+        offT = setTimeout(function () { if (!dragging && !fig.contains(document.activeElement)) fig.classList.remove('on') }, 220)
+      }
+      if (hover) { fig.addEventListener('mouseenter', on); fig.addEventListener('mouseleave', later) }
+      else {
+        fig.addEventListener('click', on)
+        document.addEventListener('click', function (e) { if (!fig.contains(e.target)) fig.classList.remove('on') })
+      }
+      fig.addEventListener('focusin', on)
+      fig.addEventListener('focusout', later)
+      input.addEventListener('pointerdown', function () { dragging = true; cancelAnimationFrame(raf) })
+      input.addEventListener('input', function () { if (dragging) set(+input.value) })
+      function settle() {
+        if (!dragging) return
+        dragging = false
+        glide(Math.round(v))
+        if (!fig.matches(':hover')) later()
+      }
+      input.addEventListener('pointerup', settle)
+      input.addEventListener('pointercancel', settle)
+      input.addEventListener('lostpointercapture', settle)
+      input.addEventListener('keydown', function (e) {
+        var k = e.key, cur = Math.round(v), to = null
+        if (k === 'ArrowLeft' || k === 'ArrowDown') to = Math.max(0, cur - 1)
+        else if (k === 'ArrowRight' || k === 'ArrowUp') to = Math.min(2, cur + 1)
+        else if (k === 'Home') to = 0
+        else if (k === 'End') to = 2
+        if (to !== null) { e.preventDefault(); glide(to) }
+      })
+      set(2)
+    })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start)
+  else start()
 }
 
 /* ------------------------------------------------------ contents fade (page) */
@@ -1077,6 +1235,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
   const looks = normalizeStyle(style)
   const fnMargin = !!footHtml && looks.footnotes === 'margin'
+  const hasSliders = bodyHtml.includes('data-levels=')
   // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
   // column sliding left of centre to make it. A contents panel on the left needs 240px more.
   const fnMinWidth = hasToc ? 1400 : 1160
@@ -1170,16 +1329,49 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }' : '',
     footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }' : '',
     ...(version || draft ? PROV_CSS : []),
-    fnMargin ? '      @media screen {' : '',
-    fnMargin ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
-    fnMargin ? '        body.fn-side .fn-divider { display:none; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.55); transition:color 0.15s; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }' : '',
-    fnMargin ? '        body.fn-side ol.footnotes .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
-    fnMargin ? '      }' : '',
+    footHtml ? '      @media screen {' : '',
+    footHtml ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
+    footHtml ? '        body.fn-side .fn-divider { display:none; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.55); transition:color 0.15s; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }' : '',
+    footHtml ? '        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
+    footHtml ? '      }' : '',
+    hasSliders ? '      .eqs { margin:1.6rem 0 0.5rem; }' : '',
+    hasSliders ? '      .eqs-stack { display:grid; align-items:center; justify-items:center; }' : '',
+    hasSliders ? '      .eqs-stage { grid-area:1 / 1; max-width:100%; text-align:center; overflow-x:auto; overflow-y:hidden; padding:0.2rem 0.1rem; }' : '',
+    hasSliders ? '      .eqs-stage .katex-display { margin:0; }' : '',
+    hasSliders ? '      .eqs-why { margin-top:0.35rem; font:400 0.74rem/1.4 system-ui, -apple-system, sans-serif; color:var(--muted); }' : '',
+    hasSliders ? '      .eqs:not(.on) .katex [style*="color"] { color:inherit !important; }' : '',
+    hasSliders ? '      .katex [style*="color"] { transition:color 0.18s; }' : '',
+    hasSliders ? '      .eqs-ctl { display:flex; align-items:center; justify-content:center; gap:0.65rem; height:2rem; margin-top:0.25rem; opacity:0; transition:opacity 0.16s; font:500 0.7rem/1 system-ui, -apple-system, sans-serif; color:var(--muted); user-select:none; }' : '',
+    hasSliders ? '      .eqs.on .eqs-ctl { opacity:1; }' : '',
+    hasSliders ? '      .eqs-track { position:relative; width:150px; height:18px; display:flex; align-items:center; }' : '',
+    hasSliders ? '      .eqs-track::before { content:""; position:absolute; left:0; right:0; top:50%; height:1.5px; margin-top:-0.75px; background:rgba(39,50,63,0.2); border-radius:2px; }' : '',
+    hasSliders ? '      .eqs-tick { position:absolute; top:50%; width:3px; height:3px; margin:-1.5px 0 0 -1.5px; border-radius:50%; background:rgba(39,50,63,0.38); pointer-events:none; }' : '',
+    hasSliders ? '      .eqs input[type=range] { position:relative; -webkit-appearance:none; appearance:none; width:100%; height:18px; margin:0; background:transparent; cursor:grab; touch-action:none; }' : '',
+    hasSliders ? '      .eqs input[type=range]:active { cursor:grabbing; }' : '',
+    hasSliders ? '      .eqs input[type=range]:focus { outline:none; }' : '',
+    hasSliders ? '      .eqs input[type=range]::-webkit-slider-runnable-track { height:18px; background:transparent; }' : '',
+    hasSliders ? '      .eqs input[type=range]::-moz-range-track { height:18px; background:transparent; }' : '',
+    hasSliders ? '      .eqs input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; margin-top:3px; border-radius:50%; background:var(--text-color); border:none; box-shadow:0 0 0 3px var(--bg-color); }' : '',
+    hasSliders ? '      .eqs input[type=range]::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:var(--text-color); border:none; box-shadow:0 0 0 3px var(--bg-color); }' : '',
+    hasSliders ? '      .eqs input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 3px var(--bg-color), 0 0 0 5px rgba(15,122,229,0.55); }' : '',
+    hasSliders ? '      .eqs input[type=range]:focus-visible::-moz-range-thumb { box-shadow:0 0 0 3px var(--bg-color), 0 0 0 5px rgba(15,122,229,0.55); }' : '',
+    hasSliders ? '      @media print { .eqs-ctl { display:none; } }' : '',
+    hasSliders ? '      @media (prefers-reduced-motion: reduce) { .eqs-ctl, .katex [style*="color"] { transition:none; } }' : '',
+    footHtml ? '      .rd-gear { position:fixed; top:1rem; right:1rem; z-index:30; width:34px; height:34px; padding:7px; border:none; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; transition:background 0.14s, color 0.14s; }' : '',
+    footHtml ? '      .rd-gear[hidden], .rd-panel[hidden] { display:none; }' : '',
+    footHtml ? '      .rd-gear:hover, .rd-gear[aria-expanded=true] { background:rgba(39,50,63,0.08); color:var(--text-color); }' : '',
+    footHtml ? '      .rd-gear svg { display:block; width:100%; height:100%; }' : '',
+    footHtml ? '      .rd-panel { position:fixed; top:3.4rem; right:1rem; z-index:30; width:236px; padding:0.8rem 0.85rem 0.85rem; background:#faf6ee; border:1px solid rgba(39,50,63,0.12); border-radius:12px; box-shadow:0 8px 30px rgba(39,50,63,0.13); font:400 0.75rem/1.3 system-ui, -apple-system, sans-serif; color:var(--muted); }' : '',
+    footHtml ? '      .rd-name { margin-bottom:0.35rem; }' : '',
+    footHtml ? '      .rd-seg { display:flex; padding:2px; background:rgba(39,50,63,0.06); border-radius:9px; }' : '',
+    footHtml ? '      .rd-seg button { flex:1; padding:0.32rem 0.5rem; border:none; border-radius:7px; background:transparent; font:500 0.76rem/1.2 system-ui, -apple-system, sans-serif; color:var(--muted); cursor:pointer; }' : '',
+    footHtml ? '      .rd-seg button[aria-pressed=true] { background:var(--bg-color); color:var(--text-color); box-shadow:0 1px 3px rgba(39,50,63,0.14); }' : '',
+    footHtml ? '      @media print { .rd-gear, .rd-panel { display:none; } }' : '',
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
     hasToc ? '      .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }' : '',
@@ -1218,7 +1410,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     provScript,
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
-    fnMargin ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ');</script>' : '',
+    footHtml ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ',' + JSON.stringify(fnMargin ? 'side' : 'below') + ');</script>' : '',
+    hasSliders ? '    <script>(' + eqSlider.toString() + ')();</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
@@ -1440,7 +1633,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       // 1) split inline data-URI images out to writings/media/<slug>-<hash>.<ext>
       //    (footnote images likewise, as <slug>-fn-<hash>.<ext>)
       const held = holdBackSections(snap.body).html
-      const { html: bodyHtml, files, toc } = await buildBody(held, slug, mediaPrefix)
+      const { html: bodyHtml, files, toc } = await buildBody(held, slug, mediaPrefix, { sliders: normalizeStyle(snap.style).eqSlider !== 'off' })
       const { html: footHtml, files: fnFiles } = await buildFootnotesHtml($('fnList'), slug, mediaPrefix, held)
       files.push(...fnFiles)
       for (const f of files) await sink.add('writings/media/' + f.name, f.blob)

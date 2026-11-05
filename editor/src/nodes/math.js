@@ -16,6 +16,7 @@ const mlog = (m) => { try { window.__MATHLOG.push(m) } catch (e) {} }
 import { CONFIG } from '../config.js'
 import { configureMathfield, mathKeyboard, toKatexTex, trimGaps } from '../mathlive-config.js'
 import { escapeHtml } from '../dom.js'
+import { levelsFor } from '../equation-levels.js'
 
 function renderKatex(el, tex, displayMode) {
   el.textContent = ''
@@ -65,6 +66,22 @@ function mathNodeView(isBlock) {
     }
     function idle() {
       renderKatex(dom, node.attrs.tex, isBlock)
+      if (isBlock && levelsFor(node.attrs.tex, node.attrs.levels)) dom.appendChild(sliderTag())
+    }
+    // this equation has a reader slider; the tag is also the way to take it off
+    function sliderTag() {
+      const tag = document.createElement('button')
+      tag.type = 'button'
+      tag.className = 'eq-slider-tag'
+      tag.textContent = 'Slider ×'
+      tag.title = 'Readers get a slider on this equation. Click to remove it.'
+      tag.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() })
+      tag.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const pos = getPos()
+        if (typeof pos === 'number') editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, 'levels', null))
+      })
+      return tag
     }
     // Focus the field. MathLive upgrades synchronously on connect, so a sync focus after
     // append usually takes; the `mount` event and a timer are belt-and-suspenders for the
@@ -251,6 +268,8 @@ export const BlockMath = Node.create({
     return {
       tex: { default: '', parseHTML: (el) => el.getAttribute('data-tex') || '' },
       align: { default: 'center', parseHTML: (el) => el.getAttribute('data-align') || 'center' },
+      // simpler versions behind the reader slider (equation-levels.js)
+      levels: { default: null, parseHTML: (el) => el.getAttribute('data-levels') || null },
     }
   },
   parseHTML() {
@@ -259,6 +278,7 @@ export const BlockMath = Node.create({
   renderHTML({ node }) {
     const attrs = { class: 'math-block', 'data-tex': node.attrs.tex }
     if (node.attrs.align && node.attrs.align !== 'center') attrs['data-align'] = node.attrs.align
+    if (node.attrs.levels) attrs['data-levels'] = node.attrs.levels
     return ['div', attrs, '$$' + node.attrs.tex + '$$']
   },
   addNodeView() { return mathNodeView(true) },

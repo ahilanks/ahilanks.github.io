@@ -17,6 +17,13 @@ export const STYLE_OPTIONS = [
     choices: [{ value: 'bottom', label: 'Bottom' }, { value: 'margin', label: 'Right margin' }],
     hint: { margin: 'Narrow screens show them at the bottom.' },
   },
+  {
+    key: 'eqSlider',
+    label: 'Equation sliders',
+    def: 'on',
+    choices: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+    hint: { on: 'Only on equations you accepted versions for.' },
+  },
 ]
 
 // Only known keys with non-default values, in STYLE_OPTIONS order.

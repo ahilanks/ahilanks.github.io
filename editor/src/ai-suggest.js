@@ -37,6 +37,7 @@ import { CONFIG } from './config.js'
 import { $, uid, toast, escapeHtml } from './dom.js'
 import { aiSettings, openSettings } from './ai-math.js'
 import { freshContext, setupContextUI } from './ai-context.js'
+import { LEVEL_COLORS, levelsFor, sameEquation, colorsAllowed } from './equation-levels.js'
 
 const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
@@ -497,6 +498,10 @@ function mapItem(it, mapping, doc) {
   const to = mapping.map(it.to, -1)
   if (to <= from) return null // its text is gone
   if (it.kind === 'note') return { ...it, from, to }
+  if (it.kind === 'levels') { // only while the equation it was written for is still there
+    const node = doc.nodeAt(from)
+    return node && node.type.name === 'blockMath' && node.attrs.tex === it.tex ? { ...it, from, to } : null
+  }
   if (it.kind === 'equation') return { ...it, from, to, at: mapping.map(it.at, -1) }
   if (textOf(doc, from, to) !== it.text) return null
   if (it.kind !== 'edit') return { ...it, from, to }
@@ -877,6 +882,30 @@ const STAGE_GUIDE = {
 }
 
 // The editor's read of the whole piece (summary, stage, what's unfinished, priorities, voice).
+const LEVELS_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['equations'],
+  properties: { equations: { type: 'array', items: {
+    type: 'object', additionalProperties: false,
+    required: ['index', 'skip', 'labeled', 'simplified', 'full_colored', 'why'],
+    properties: {
+      index: { type: 'integer' }, skip: { type: 'boolean' }, labeled: { type: 'string' },
+      simplified: { type: 'string' }, full_colored: { type: 'string' }, why: { type: 'string' },
+    },
+  } } },
+}
+const LEVELS_PROMPT =
+  'A writer publishes technical essays. Each long equation gets a slider that lets a reader step from an easier version ' +
+  'up to the real equation. For each equation given, with the sentences around it for meaning, write:\n' +
+  '- labeled: KaTeX LaTeX with the SAME STRUCTURE (same operations, fractions, sums), each symbol or term replaced by a few ' +
+  'plain words in \\text{}. Example: L=\\Vert\\hat{z}-z\\Vert^2 becomes \\text{Loss} = (\\text{predicted state} - \\text{actual state})^2.\n' +
+  '- simplified: KaTeX LaTeX, real math but shorter, by dropping subscripts that aren’t needed to follow it or naming a repeated ' +
+  'term. It must remain TRUE: equal to the equation, not merely similar. Keep the author’s symbols.\n' +
+  '- full_colored: the ORIGINAL LaTeX, copied exactly, with \\textcolor{HEX}{...} wrapped around its main terms. Change nothing else.\n' +
+  '- why: only if simplified introduces a symbol or hides something, at most 14 plain words saying what; otherwise an empty string.\n' +
+  'Color: use 1 to 3 of ' + LEVEL_COLORS.join(', ') + ', and wrap the SAME concept in the SAME color in labeled, simplified and full_colored.\n' +
+  'Faithfulness comes first: describe only what the equation and its surrounding text say. Never add a claim, interpretation or ' +
+  'term that isn’t there. If the equation is already easy to read, or you can’t simplify it truthfully, set skip to true and leave the rest empty.'
+
 async function requestRead(input, signal) {
   const user = notesBlock(input.notes) + sourcesBlock(input.sources) +
     'Title: ' + (input.title || '(untitled)') + '\n' + (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
@@ -959,6 +988,7 @@ function summary(it, text) {
     case 'format': return fmt[it.format] + ': “' + text + '”'
     case 'math': return '“' + text + '” → $' + it.tex + '$'
     case 'equation': return 'Equation: $' + it.tex + '$'
+    case 'levels': return 'Slider versions for $' + it.tex + '$'
     default: return it.comment
   }
 }
@@ -1018,7 +1048,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   // what a suggestion says, whichever run it came from (an Ask doesn't repeat what's shown)
   const says = (it) => {
     const what = it.kind === 'edit' ? it.hunks.map((h) => h.del + '→' + h.ins).join('|') : it.kind === 'link' ? it.url
-      : it.kind === 'format' ? it.format : it.kind === 'math' || it.kind === 'equation' ? it.tex : it.category
+      : it.kind === 'format' ? it.format : it.kind === 'math' || it.kind === 'equation' || it.kind === 'levels' ? it.tex : it.category
     return [it.kind, loosen(textOf(editor.state.doc, it.from, it.to)).s, what].join('|')
   }
   const fingerprint = (it) => it.mode + '|' + says(it)
@@ -1034,7 +1064,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     const it = find(id)
     if (!it || it.kind === 'note') return
     const { state } = editor
-    if (it.kind !== 'equation' && textOf(state.doc, it.from, it.to) !== it.text) { dispatchMeta({ remove: id }); return }
+    if (it.kind !== 'equation' && it.kind !== 'levels' && textOf(state.doc, it.from, it.to) !== it.text) { dispatchMeta({ remove: id }); return }
     const tr = state.tr
     if (it.kind === 'link') {
       tr.addMark(it.from, it.to, state.schema.marks.link.create({ href: it.url }))
@@ -1042,6 +1072,10 @@ export function setupSuggestions(editor, comments, { getDocId }) {
       tr.addMark(it.from, it.to, state.schema.marks[it.format].create())
     } else if (it.kind === 'math') {
       tr.replaceWith(it.from, it.to, state.schema.nodes.inlineMath.create({ tex: it.tex }))
+    } else if (it.kind === 'levels') {
+      const node = state.doc.nodeAt(it.from)
+      if (!node || node.type.name !== 'blockMath' || node.attrs.tex !== it.tex) { dispatchMeta({ remove: id }); return }
+      tr.setNodeAttribute(it.from, 'levels', JSON.stringify(it.levels))
     } else if (it.kind === 'equation') {
       try { tr.insert(it.at, state.schema.nodes.blockMath.create({ tex: it.tex })) } catch (e) { dispatchMeta({ remove: id }); return }
     } else {
@@ -1112,13 +1146,17 @@ export function setupSuggestions(editor, comments, { getDocId }) {
         '<span class="sg-i">' + texHTML(it.tex, false) + '</span></div>'
     } else if (it.kind === 'equation') {
       body = '<div class="sg-eq">' + texHTML(it.tex, true) + '</div>'
+    } else if (it.kind === 'levels') {
+      body = '<div class="sg-eq-t">Labeled</div><div class="sg-eq">' + texHTML(it.levels.labeled, true) + '</div>' +
+        '<div class="sg-eq-t">Simplified</div><div class="sg-eq">' + texHTML(it.levels.simplified, true) + '</div>'
     }
-    const acceptTitle = { link: 'Add link', format: it.format === 'bold' ? 'Make bold' : 'Make italic', math: 'Typeset as math', equation: 'Insert equation' }
+    const acceptTitle = { link: 'Add link', format: it.format === 'bold' ? 'Make bold' : 'Make italic', math: 'Typeset as math', equation: 'Insert equation', levels: 'Add the slider to this equation' }
     const btns = it.kind !== 'note'
       ? '<button class="sg-btn sg-accept" type="button" title="' + (acceptTitle[it.kind] || 'Accept') + '">' + ICONS.accept + '</button>'
       : it.block ? '' : '<button class="sg-btn sg-keep" type="button" title="Keep as a comment">' + ICONS.keep + '</button>'
     const label = it.kind === 'format' ? (it.format === 'bold' ? 'Bold' : 'Italic')
       : it.kind === 'equation' ? 'Equation'
+      : it.kind === 'levels' ? 'Equation slider'
       : it.kind === 'link' ? 'Link' + (it.source === 'web' ? ' · web' : ' · your notes')
       : CATEGORY_LABELS[it.category]
     card.innerHTML =
@@ -1138,6 +1176,14 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     on('.sg-keep', keepAsComment)
     card.addEventListener('mousedown', (e) => { e.preventDefault(); setActive(it.id) })
     card.style.transition = 'none' // land at the right spot, then animate later moves
+    // a long equation shrinks to fit the narrow card, so all of it can be checked
+    if (it.kind === 'levels') requestAnimationFrame(() => {
+      card.querySelectorAll('.sg-eq').forEach((eq) => {
+        const m = eq.firstElementChild
+        if (m && eq.scrollWidth > eq.clientWidth) m.style.zoom = Math.max(0.45, eq.clientWidth / eq.scrollWidth).toFixed(3)
+      })
+      comments.layout()
+    })
     return card
   }
 
@@ -1291,7 +1337,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
   function pendingCard(mode) {
     const card = document.createElement('div')
     card.className = 'cmt-card sg-card sg-pending'
-    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : mode === 'review' ? 'Reading the whole piece…' : 'Reading…') +
+    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : mode === 'equations' ? 'Drafting equation versions…' : mode === 'review' ? 'Reading the whole piece…' : 'Reading…') +
       '</span><button class="sg-stop" type="button">Stop</button>'
     card.querySelector('.sg-stop').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); stop() })
     card.addEventListener('mousedown', (e) => e.preventDefault())
@@ -1305,7 +1351,85 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     for (const r of [run, askRun]) if (r) r.maps.push(transaction.mapping)
   })
 
+  /* ---- Equation sliders: only when asked for from the menu. Drafts the easier versions of
+     each long equation in scope, as accept/dismiss cards. A draft's math is checked here:
+     every version must render, and the colored copy must still be the writer's equation. ---- */
+  const LONG_EQUATION = 40 // characters of LaTeX, spacing commands aside
+
+  function longEquations(doc, scope) {
+    const found = []
+    let before = ''
+    doc.descendants((node, pos) => {
+      if (node.isTextblock) before = node.textContent
+      if (node.type.name !== 'blockMath') return
+      if (pos < scope.from || pos + node.nodeSize > scope.to) return
+      const size = node.attrs.tex.replace(/\\(left|right|big|Big|bigg|Bigg)/g, '').replace(/\s+/g, '').length
+      if (size >= LONG_EQUATION && !levelsFor(node.attrs.tex, node.attrs.levels)) {
+        found.push({ tex: node.attrs.tex, pos, size: node.nodeSize, before: before.slice(-500) })
+      }
+    })
+    return found
+  }
+  function levelsItem(eq, draft) {
+    if (draft.skip) return null
+    const labeled = cleanTex(draft.labeled), simplified = cleanTex(draft.simplified)
+    if (!katexOK(labeled, true) || !katexOK(simplified, true) || !colorsAllowed(labeled) || !colorsAllowed(simplified)) return null
+    const levels = { for: eq.tex, labeled, simplified }
+    const full = cleanTex(draft.full_colored)
+    if (full && colorsAllowed(full) && sameEquation(full, eq.tex) && full.length < 4000) {
+      try { katex.renderToString(full, { ...CONFIG.katex, displayMode: true, throwOnError: true }); levels.full = full } catch (e) { /* the plain equation serves */ }
+    }
+    const why = String(draft.why || '').trim().slice(0, 140)
+    if (why) levels.why = why
+    return { id: uid(), mode: 'equations', category: 'math', kind: 'levels', block: true, comment: why, tex: eq.tex, levels, from: eq.pos, to: eq.pos + eq.size }
+  }
+  async function startEquations() {
+    closeMenu()
+    if (run) return
+    if (!aiSettings().apiKey) { toast('Add your OpenAI key in Settings first'); openSettings(); return }
+    const state = editor.state
+    const scope = scopeOf(state)
+    const eqs = longEquations(state.doc, scope)
+    if (!eqs.length) { toast('No long equations here that still need versions'); return }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    const maps = []
+    run = {
+      mode: 'equations', scope, maps, controller, docId: getDocId(), card: pendingCard('equations'),
+      mapPos: (p, assoc) => maps.reduce((q, m) => m.map(q, assoc), p),
+    }
+    const thisRun = run
+    layer.appendChild(run.card)
+    btn.classList.add('busy')
+    comments.layout()
+    toast('Drafting versions of ' + eqs.length + (eqs.length === 1 ? ' equation…' : ' equations…'))
+    try {
+      const user = eqs.map((e, i) => '<equation index="' + i + '">\n<before>' + e.before + '</before>\n<latex>' + e.tex + '</latex>\n</equation>').join('\n')
+      const res = await chatJSON(LEVELS_PROMPT, user, LEVELS_SCHEMA, 'medium', controller.signal)
+      if (thisRun.docId !== getDocId()) return
+      const mapping = { map: thisRun.mapPos }
+      const items = []
+      for (const draft of res.equations || []) {
+        const eq = eqs[draft.index]
+        let it = eq && levelsItem(eq, draft)
+        if (it) it = mapItem(it, mapping, editor.state.doc)
+        if (it && !dismissed.has(fingerprint(it))) items.push(it)
+      }
+      dispatchMeta({ replace: { mode: 'equations', from: thisRun.mapPos(scope.from, 1), to: thisRun.mapPos(scope.to, -1) }, add: items })
+      toast(items.length ? items.length + (items.length === 1 ? ' equation' : ' equations') + ' to review' : 'No versions to suggest')
+    } catch (err) {
+      toast(err.name === 'AbortError' ? 'Stopped' : (err.message || 'Couldn’t draft them'))
+    } finally {
+      clearTimeout(timer)
+      thisRun.card.remove()
+      if (run === thisRun) run = null
+      btn.classList.remove('busy')
+      comments.layout()
+    }
+  }
+
   async function start(mode) {
+    if (mode === 'equations') return startEquations()
     closeMenu()
     if (run) return
     if (!aiSettings().apiKey) { toast('Add your OpenAI key in Settings first'); openSettings(); return }

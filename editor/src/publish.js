@@ -649,6 +649,49 @@ function fnSide(minWidth) {
   }
 }
 
+/* ------------------------------------------------------ contents fade (page) */
+// Runs INSIDE the published article (embedded via tocFade.toString(), like fnTrip). While the
+// reader reads, the contents list fades away, leaving only the word "Contents". It comes back
+// quickly when they scroll fast, bring the mouse to the left side, tab into it, or tap the word,
+// and fades slowly once none of that is going on. Without JavaScript it simply stays.
+function tocFade() {
+  var toc = document.querySelector('.toc')
+  if (!toc) return
+  var IDLE = 1200        // ms of nothing before it starts to fade
+  var WINDOW = 300       // ms of scrolling measured for speed
+  var FAST = 0.4         // of a screen height within WINDOW counts as scrolling fast
+  var REACH = 48         // px beyond the panel that still counts as "the left side"
+  var timer = 0, inZone = false, focused = false, samples = []
+
+  function sleepSoon() {
+    clearTimeout(timer)
+    if (!inZone && !focused) timer = setTimeout(function () { toc.classList.add('quiet') }, IDLE)
+  }
+  function wake() {
+    toc.classList.remove('quiet')
+    sleepSoon()
+  }
+  document.addEventListener('mousemove', function (e) {
+    var near = e.clientX <= toc.getBoundingClientRect().right + REACH
+    if (near === inZone) return
+    inZone = near
+    wake()
+  }, { passive: true })
+  document.documentElement.addEventListener('mouseleave', function () {
+    if (inZone) { inZone = false; sleepSoon() }
+  })
+  window.addEventListener('scroll', function () {
+    var now = Date.now()
+    samples.push({ t: now, y: window.scrollY })
+    while (samples.length > 1 && now - samples[0].t > WINDOW) samples.shift()
+    if (Math.abs(window.scrollY - samples[0].y) > window.innerHeight * FAST) wake()
+  }, { passive: true })
+  toc.addEventListener('focusin', function () { focused = true; wake() })
+  toc.addEventListener('focusout', function () { focused = false; sleepSoon() })
+  toc.querySelector('.toc-label').addEventListener('click', wake) // touch: no mouse to bring over
+  sleepSoon()
+}
+
 /* ------------------------------------------------------ video autoplay (page) */
 // Runs INSIDE the published article (embedded via vidPlay.toString(), so keep it
 // self-contained). Each video plays by itself ONCE, the first time the reader scrolls it
@@ -1144,6 +1187,9 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     hasToc ? '      .toc-label { font-family:system-ui, sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-color); margin:0 0 0.9rem 2px; }' : '',
     hasToc ? '      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }' : '',
     hasToc ? '      .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }' : '',
+    hasToc ? '      .toc-list { transition:opacity 0.2s ease-out; }' : '',
+    hasToc ? '      .toc.quiet .toc-list { opacity:0; transition:opacity 1.6s ease-in; }' : '',
+    hasToc ? '      @media (prefers-reduced-motion: reduce) { .toc-list, .toc.quiet .toc-list { transition:none; } }' : '',
     hasToc ? '      .toc-item:hover { color:var(--text-color); }' : '',
     hasToc ? '      .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }' : '',
     hasToc ? '      .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }' : '',
@@ -1168,6 +1214,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '    </main>',
     footHtml ? '    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>' : '',
     tocScript,
+    hasToc ? '    <script>(' + tocFade.toString() + ')();</script>' : '',
     provScript,
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',

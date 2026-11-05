@@ -116,7 +116,6 @@ function sectionOf(doc, pos) {
  */
 export function setupSectionFocus(editor, { getDocId, comments, onChange }) {
   const scroll = $('scrollArea')
-  const btn = $('focusBtn')
 
   const bar = document.createElement('div')
   bar.className = 'focus-bar'
@@ -156,15 +155,13 @@ export function setupSectionFocus(editor, { getDocId, comments, onChange }) {
   }
   function titleOf(range) {
     const node = editor.state.doc.nodeAt(range.from)
-    const text = node && node.type.name === 'heading' ? node.textContent.trim() : ''
-    return text || (range.from === 0 ? 'the introduction' : 'this section')
+    return (node && node.type.name === 'heading' && node.textContent.trim()) || 'this section'
   }
   function sync() {
     const range = focusRange(editor.state)
     const on = !!range
     document.body.classList.toggle('section-focus', on)
     bar.hidden = !on
-    btn.classList.toggle('active', on)
     if (on) {
       label.textContent = ''
       label.append('Focusing on ', Object.assign(document.createElement('b'), { textContent: titleOf(range) }))
@@ -185,7 +182,7 @@ export function setupSectionFocus(editor, { getDocId, comments, onChange }) {
     const doc = editor.state.doc
     const heads = topHeadings(doc)
     const i = heads.findIndex((h) => h.pos === range.from)
-    writeStore(getDocId(), i < 0 ? { intro: true } : { i, text: heads[i].node.textContent, level: heads[i].node.attrs.level })
+    if (i >= 0) writeStore(getDocId(), { i, text: heads[i].node.textContent, level: heads[i].node.attrs.level })
   }
 
   function enter(range) {
@@ -212,25 +209,6 @@ export function setupSectionFocus(editor, { getDocId, comments, onChange }) {
     if (before !== null) scroll.scrollTop += el.getBoundingClientRect().top - before
   }
 
-  // the section holding the caret: its nearest heading, or the text before the first heading
-  function caretSection() {
-    const doc = editor.state.doc
-    const heads = topHeadings(doc)
-    if (!heads.length) return null
-    const at = editor.state.selection.from
-    let head = null
-    heads.forEach((h) => { if (h.pos < at) head = h })
-    if (head) return sectionOf(doc, head.pos)
-    return heads[0].pos > 0 ? { from: 0, to: heads[0].pos } : sectionOf(doc, heads[0].pos)
-  }
-
-  btn.addEventListener('mousedown', (e) => e.preventDefault())
-  btn.addEventListener('click', () => {
-    if (focusRange(editor.state)) { exit(); return }
-    const range = caretSection()
-    if (range) enter(range)
-    else toast('Add a heading first: focus works on sections')
-  })
   exitBtn.addEventListener('click', exit)
 
   return {
@@ -253,13 +231,9 @@ export function setupSectionFocus(editor, { getDocId, comments, onChange }) {
       const doc = editor.state.doc
       const heads = topHeadings(doc)
       let range = null
-      if (saved.intro) {
-        if (heads.length && heads[0].pos > 0) range = { from: 0, to: heads[0].pos }
-      } else {
-        const same = (h) => h && h.node.textContent === saved.text && h.node.attrs.level === saved.level
-        const head = same(heads[saved.i]) ? heads[saved.i] : heads.find(same)
-        if (head) range = sectionOf(doc, head.pos)
-      }
+      const same = (h) => h && h.node.textContent === saved.text && h.node.attrs.level === saved.level
+      const head = same(heads[saved.i]) ? heads[saved.i] : heads.find(same)
+      if (head) range = sectionOf(doc, head.pos)
       if (!range) { writeStore(id, null); return }
       const { tr, selection } = editor.state
       tr.setMeta(key, range)

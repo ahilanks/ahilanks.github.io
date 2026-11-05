@@ -16,6 +16,8 @@ import { $, debounce } from './dom.js'
 
 const FOCUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3"/></svg>'
 
+const PROGRESS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3v3.5c0 1.6.9 2.7 2.2 3.8L12 12l-1.8 1.7C8.9 14.8 8 15.9 8 17.5V21M16 3v3.5c0 1.6-.9 2.7-2.2 3.8L12 12l1.8 1.7c1.3 1.1 2.2 2.2 2.2 3.8V21"/></svg>'
+
 export function setupToc(editor, { focusHeading }) {
   const scroll = $('scrollArea')
   const surface = $('surface')
@@ -72,6 +74,32 @@ export function setupToc(editor, { focusHeading }) {
       f.addEventListener('mousedown', (ev) => ev.preventDefault())
       f.addEventListener('click', () => { const h = headings()[e.i]; if (h) focusHeading(h) })
       row.append(b, f)
+      const h0 = headings()[e.i]
+      if (h0 && h0.parentElement === editor.view.dom) { // top-level sections only: what publishing can cut
+        const pr = document.createElement('button')
+        pr.type = 'button'
+        pr.className = 'toc-progress'
+        pr.setAttribute('aria-label', 'In progress: ' + e.text)
+        const paint = (on) => {
+          pr.classList.toggle('on', on)
+          pr.setAttribute('aria-pressed', String(on))
+          pr.title = on ? 'In progress: readers see only the heading and a note. Click to publish it in full.' : 'Mark in progress: readers see only the heading and a note'
+        }
+        paint(h0.hasAttribute('data-in-progress'))
+        pr.innerHTML = PROGRESS_ICON
+        pr.addEventListener('mousedown', (ev) => ev.preventDefault())
+        pr.addEventListener('click', () => {
+          const h = headings()[e.i]
+          if (!h) return
+          const pos = editor.view.posAtDOM(h, 0) - 1
+          const node = editor.state.doc.nodeAt(pos)
+          if (!node || node.type.name !== 'heading') return
+          const on = !node.attrs.inProgress
+          editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, null, { ...node.attrs, inProgress: on }))
+          paint(on)
+        })
+        row.append(pr)
+      }
       list.appendChild(row)
       const it = { btn: b, row, index: e.i, depth, parentSec: null, parentSub: null }
       if (depth === 0) { curSec = it; curSub = null }

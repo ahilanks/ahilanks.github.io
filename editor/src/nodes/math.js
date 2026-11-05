@@ -206,7 +206,7 @@ function mathNodeView(isBlock) {
         if (mf) { mf.removeEventListener('keydown', onKey); mf.removeEventListener('keydown', noteKey, true); mf.removeEventListener('move-out', onMoveOut); mf.removeEventListener('focusout', onFocusOut); try { mf.remove() } catch (e) {} mf = null }
         if (editing) { editing = false; announce('close') }
       },
-      // expose for the corner-keyboard "insert & edit" flow
+      // expose for the keyboard button's "insert & edit" flow
       _startEdit: startEdit,
     }
   }
@@ -293,7 +293,7 @@ export function selectAndEditMath(view, pos) {
   return true
 }
 
-/* Insert a blank math node and immediately open it for editing (corner keyboard, ⌘M,
+/* Insert a blank math node and immediately open it for editing (keyboard button, ⌘M,
  * and the ∑ button with no selection). */
 export function insertAndEditMath(editor, { block = false } = {}) {
   const type = block ? 'blockMath' : 'inlineMath'

@@ -19,6 +19,13 @@ export const HeadingAnchor = Extension.create({
           parseHTML: (el) => el.getAttribute('data-anchor') || null,
           renderHTML: (attrs) => (attrs.anchor ? { 'data-anchor': attrs.anchor } : {}),
         },
+        // "In progress" (Contents panel): publish.js sends readers the heading and a short
+        // note instead of the section's text
+        inProgress: {
+          default: false,
+          parseHTML: (el) => el.hasAttribute('data-in-progress'),
+          renderHTML: (attrs) => (attrs.inProgress ? { 'data-in-progress': '' } : {}),
+        },
       },
     }]
   },

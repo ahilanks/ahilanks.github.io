@@ -409,6 +409,25 @@ body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focu
 .toc-focus:hover { color: var(--text); background: linear-gradient(rgba(39, 50, 63, 0.08), rgba(39, 50, 63, 0.08)), var(--bg); }
 @media (hover: none) { .toc-focus { opacity: 0.7; } }
 
+/* In progress (toc.js sets it; publish.js acts on it) */
+.doc-body [data-in-progress]::after {
+  content: "In progress"; display: inline-block; margin-left: 0.6rem; padding: 0.1rem 0.5rem; border-radius: 999px; vertical-align: middle;
+  background: rgba(230, 178, 60, 0.22); color: var(--muted); font: 500 0.72rem/1.4 "Inter", sans-serif; letter-spacing: 0; user-select: none; pointer-events: none;
+}
+.toc-progress {
+  position: absolute; right: 24px; top: 0.15rem; width: 24px; height: 24px; padding: 4px; border: none; border-radius: 6px;
+  background: var(--bg); color: var(--muted); opacity: 0; transition: opacity 0.12s, color 0.12s;
+}
+.toc-progress svg { display: block; width: 100%; height: 100%; }
+.toc-row:hover .toc-progress, .toc-progress:focus-visible, .toc-progress.on { opacity: 1; }
+.toc-progress.on { color: #a8761b; background: rgba(230, 178, 60, 0.22); right: 0; }
+.toc-row:hover .toc-progress.on { right: 24px; }
+.toc-progress:hover { color: var(--text); background: linear-gradient(rgba(39, 50, 63, 0.08), rgba(39, 50, 63, 0.08)), var(--bg); }
+@media (hover: none) { .toc-progress { opacity: 0.7; } }
+.pub-held { font-size: 0.8rem; line-height: 1.4; color: var(--muted); margin: 0 0 0.85rem; padding: 0.5rem 0.65rem; border-radius: 8px; background: rgba(230, 178, 60, 0.16); }
+.pub-held[hidden] { display: none; }
+.pub-held b { color: var(--text); font-weight: 600; }
+
 /* ----------------------------- STYLE (style.js) ----------------------------- */
 .style-btn { font-family: "Newsreader", Georgia, serif; font-size: 1.02rem; font-weight: 500; }
 #stylePanel { width: min(270px, calc(100vw - 20px)); }
@@ -788,17 +807,6 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .math-hint { font-size: 0.72rem; color: var(--faint); margin-top: 0.4rem; }
 
 /* corner math-keyboard toggle */
-.mathkbd-toggle {
-  position: fixed; bottom: 18px; z-index: 120; display: inline-flex; align-items: center; gap: 0.4rem;
-  height: 38px; padding: 0 0.8rem; border: 1px solid var(--line); border-radius: 20px;
-  background: var(--bg-soft); box-shadow: var(--shadow); font-size: 0.85rem; font-weight: 500; color: var(--text);
-  transition: transform 0.12s, opacity 0.15s;
-}
-.mathkbd-toggle:hover { transform: translateY(-1px); }
-.mathkbd-toggle.corner-right { right: 18px; }
-.mathkbd-toggle.corner-left { left: 18px; }
-.mathkbd-toggle.active { background: var(--text); color: #f1ebdf; border-color: var(--text); }
-.mathkbd-toggle svg { width: 18px; height: 18px; }
 
 /* ----------------------------- MODALS ----------------------------- */
 .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(39, 50, 63, 0.32); display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
@@ -926,10 +934,6 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
   .modal { padding: 1.25rem 1.1rem; max-height: calc(100dvh - 2rem); overflow-y: auto; }
 
   /* corner toggle: icon only, clear of the home-indicator */
-  .mathkbd-toggle { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 0 0.6rem; }
-  .mathkbd-toggle span { display: none; }
-  .mathkbd-toggle.corner-right { right: 10px; }
-  .mathkbd-toggle.corner-left { left: 10px; }
   .toast { bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
 
   .source-view { margin: 1.4rem auto 4rem; padding: 0 1rem; }

@@ -24,9 +24,8 @@ export const CONFIG = {
     macros: { '\\differentialD': 'd', '\\exponentialE': 'e', '\\imaginaryI': 'i', '\\imaginaryJ': 'j' },
   },
 
-  // MathLive virtual-keyboard: which layers show, and where the toggle sits.
+  // MathLive virtual-keyboard: which layers show.
   mathKeyboard: {
-    corner: 'right', // 'right' | 'left'  — bottom corner for the toggle button
     // Layers tuned for AI/ML writing. "numeric" and "greek" are built in; the
     // custom layers below add probability / linear-algebra / operators symbols.
     layers: ['ai-symbols', 'greek', 'numeric', 'functions'],

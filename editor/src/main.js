@@ -426,11 +426,8 @@ function load() {
   else { refreshPlaceholders(); updateToolbar(); setStatus('saved', 'Saved') }
 }
 
-/* ---------------------------------------------------------------- math: corner keyboard + insert */
+/* ---------------------------------------------------------------- math: keyboard button + insert */
 const mathKbdToggle = $('mathKbdToggle')
-mathKbdToggle.hidden = false
-mathKbdToggle.classList.remove('corner-left', 'corner-right')
-mathKbdToggle.classList.add('corner-' + CONFIG.mathKeyboard.corner)
 
 function mathFieldFocused() {
   const a = document.activeElement
@@ -530,7 +527,7 @@ $('scrollArea').addEventListener('mousedown', (e) => {
 // that ring on blur, so clicking out in the page — margins, title, chrome — leaves it stuck.
 // Drop it on any mousedown that lands outside the editor. Skip when an in-place field is open:
 // that case is owned by the field's own focus-out commit (nodes/math.js), which also respects
-// focus-preserving controls like the toolbar and corner keyboard toggle. Deferred so the click
+// focus-preserving controls like the toolbar and its keyboard button. Deferred so the click
 // lands (focus moves off the editor) before we collapse, avoiding a focus tug-of-war.
 document.addEventListener('mousedown', (e) => {
   // the align chip operates ON the selected equation — clicking it must not collapse

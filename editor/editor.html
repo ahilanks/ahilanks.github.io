@@ -75,6 +75,9 @@
         <button class="tb-btn ai" id="mathBtn" title="Math — describe it in words, or click the equation to type it (⌘M)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14l-7 8 7 8H5"/></svg>
         </button>
+        <button class="tb-btn" id="mathKbdToggle" type="button" title="Math keyboard" aria-label="Math keyboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+        </button>
       </div>
 
       <div class="tb-sep"></div>
@@ -379,6 +382,7 @@
             </div>
           </div>
         </div>
+        <div class="pub-held" id="pubHeld" hidden></div>
         <div class="modal-actions">
           <button class="pop-btn ghost" id="publishClose">Cancel</button>
           <button class="pop-btn" id="publishConfirm">Publish</button>
@@ -386,12 +390,6 @@
         <div class="modal-msg" id="publishMsg"></div>
       </div>
     </div>
-
-    <!-- corner math-keyboard toggle (positioned + wired in JS) -->
-    <button class="mathkbd-toggle corner-right" id="mathKbdToggle" title="Math keyboard" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
-      <span>Math keyboard</span>
-    </button>
 
     <input type="file" id="imageFileInput" accept="image/*" hidden />
     <input type="file" id="gifFileInput" accept="image/gif,image/webp,image/png" hidden />

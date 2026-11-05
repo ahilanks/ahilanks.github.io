@@ -164,6 +164,43 @@ function headingId(text, used) {
   return id
 }
 
+// Sections marked "In progress" reach readers as the heading and this note. Everything else in
+// them is cut here, before media and footnotes are worked out, so none of it (text, images,
+// videos, notes) ends up in the public files. A section ends at the next heading of the same
+// or a higher level, so a marked section takes its subsections with it.
+const IN_PROGRESS_NOTE = 'This section is in progress.'
+function holdBackSections(bodyHtml) {
+  const d = document.createElement('div')
+  d.innerHTML = bodyHtml || ''
+  const titles = []
+  const cutAnchors = new Set()
+  const isHeading = (el) => /^H[1-6]$/.test(el.tagName)
+  Array.from(d.querySelectorAll(':scope > [data-in-progress]')).forEach((h) => {
+    if (!d.contains(h)) return // inside a marked section above it, already gone
+    h.removeAttribute('data-in-progress')
+    titles.push((h.textContent || '').trim())
+    const level = +h.tagName[1]
+    let next = h.nextElementSibling
+    while (next && !(isHeading(next) && +next.tagName[1] <= level)) {
+      const el = next
+      next = next.nextElementSibling
+      el.querySelectorAll('[data-anchor]').forEach((a) => cutAnchors.add(a.getAttribute('data-anchor')))
+      if (el.hasAttribute('data-anchor')) cutAnchors.add(el.getAttribute('data-anchor'))
+      el.remove()
+    }
+    const note = document.createElement('p')
+    note.className = 'in-progress'
+    note.textContent = IN_PROGRESS_NOTE
+    h.after(note)
+  })
+  // a link to something cut would lead nowhere: keep its words, drop the link
+  let deadLinks = 0
+  d.querySelectorAll('a[href^="#"]').forEach((a) => {
+    if (cutAnchors.has(a.getAttribute('href').slice(1))) { a.replaceWith(...a.childNodes); deadLinks++ }
+  })
+  return { html: d.innerHTML, titles, deadLinks }
+}
+
 // Turn a detached clone of the serialised body into clean published HTML:
 // math nodes -> $..$ / $$..$$ text for KaTeX auto-render, footnote refs -> numbered anchors.
 // Also gives every non-empty H2/H3 an id and returns the contents-panel entries
@@ -309,8 +346,12 @@ async function buildBody(bodyHtml, slug, mediaPrefix) {
 // Orphaned bodies (ref deleted in the text) are editor-only and never published.
 // Images embedded in footnotes are split out to media/<slug>-fn-<hash>.<ext> like body images;
 // returns { html, files }.
-async function buildFootnotesHtml(fnListEl, slug, mediaPrefix) {
-  const items = fnListEl ? Array.from(fnListEl.children).filter((li) => !li.classList.contains('fn-orphan')) : []
+async function buildFootnotesHtml(fnListEl, slug, mediaPrefix, bodyHtml) {
+  // only notes whose marker made it into the published text: the numbering then matches
+  const probe = document.createElement('div')
+  probe.innerHTML = bodyHtml || ''
+  const kept = new Set(Array.from(probe.querySelectorAll('.fn-ref'), (r) => r.getAttribute('data-fn')))
+  const items = fnListEl ? Array.from(fnListEl.children).filter((li) => !li.classList.contains('fn-orphan') && kept.has(li.dataset.fn)) : []
   const files = []
   if (!items.length) return { html: '', files }
   const wrap = document.createElement('div')
@@ -1045,6 +1086,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      figure[data-pair]:has(+ figure) img, figure[data-pair]:has(+ figure) video, figure[data-pair]:has(+ figure) + figure img, figure[data-pair]:has(+ figure) + figure video { width:100%; }',
     '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto !important; } }',
     '      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }',
+    '      .in-progress { color:var(--muted); font-style:italic; }',
     hasVideo ? '      .vwrap { position:relative; display:block; width:fit-content; max-width:100%; margin:0 auto; line-height:0; }' : '',
     hasVideo ? '      figure[style] .vwrap, figure[data-pair] .vwrap, figure[data-pair] + figure .vwrap { width:100%; }' : '',
     hasVideo ? '      .vplay { position:absolute; left:50%; top:50%; width:76px; height:76px; margin:-38px 0 0 -38px; padding:0; border:none; border-radius:50%; background:rgba(20,24,30,0.58); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); box-shadow:0 4px 18px rgba(0,0,0,0.25); transition:opacity 0.18s, transform 0.18s, background 0.18s; }' : '',
@@ -1215,10 +1257,21 @@ export function setupPublish({ editor, currentSnapshot }) {
   let busy = false
 
   const readingMinutes = () => {
-    const words = ((editor.state.doc.textContent || '').trim().match(/\S+/g) || []).length
-    return Math.max(1, Math.round(words / 200))
+    return Math.max(1, Math.round(wordCount() / 200))
   }
-  const wordCount = () => ((editor.state.doc.textContent || '').trim().match(/\S+/g) || []).length
+  // words readers actually get: what an in-progress section holds back doesn't count
+  const wordCount = () => {
+    let text = ''
+    let cutLevel = 0
+    editor.state.doc.forEach((node) => {
+      const heading = node.type.name === 'heading'
+      if (cutLevel && heading && node.attrs.level <= cutLevel) cutLevel = 0
+      if (cutLevel) return
+      text += node.textContent
+      if (heading && node.attrs.inProgress) cutLevel = node.attrs.level
+    })
+    return (text.trim().match(/\S+/g) || []).length
+  }
 
   function setMode(m) {
     mode = m
@@ -1267,7 +1320,14 @@ export function setupPublish({ editor, currentSnapshot }) {
     if (!titleText) { toast('Add a title first'); return }
     $('pubSlug').value = slugify(titleText)
     $('pubDate').value = todayLong()
-    seedThumbFromBody(snap.body)
+    const held = holdBackSections(snap.body)
+    seedThumbFromBody(held.html)
+    const heldEl = $('pubHeld')
+    heldEl.hidden = !held.titles.length
+    heldEl.innerHTML = held.titles.length
+      ? '<b>In progress:</b> ' + held.titles.map(escapeHtml).join(', ') + '. Readers see only the heading and a note.' +
+        (held.deadLinks ? ' ' + (held.deadLinks === 1 ? 'A link' : held.deadLinks + ' links') + ' into that text become plain words.' : '')
+      : ''
     setMode('publish')
     showVersionInfo(slugify(titleText))
     $('publishOverlay').classList.remove('hidden')
@@ -1332,8 +1392,9 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       // 1) split inline data-URI images out to writings/media/<slug>-<hash>.<ext>
       //    (footnote images likewise, as <slug>-fn-<hash>.<ext>)
-      const { html: bodyHtml, files, toc } = await buildBody(snap.body, slug, mediaPrefix)
-      const { html: footHtml, files: fnFiles } = await buildFootnotesHtml($('fnList'), slug, mediaPrefix)
+      const held = holdBackSections(snap.body).html
+      const { html: bodyHtml, files, toc } = await buildBody(held, slug, mediaPrefix)
+      const { html: footHtml, files: fnFiles } = await buildFootnotesHtml($('fnList'), slug, mediaPrefix, held)
       files.push(...fnFiles)
       for (const f of files) await sink.add('writings/media/' + f.name, f.blob)
 

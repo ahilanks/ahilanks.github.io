@@ -128,6 +128,9 @@
       .toc-label { font-family:system-ui, sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-color); margin:0 0 0.9rem 2px; }
       .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }
       .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }
+      .toc-list { transition:opacity 0.2s ease-out; }
+      .toc.quiet .toc-list { opacity:0; transition:opacity 1.6s ease-in; }
+      @media (prefers-reduced-motion: reduce) { .toc-list, .toc.quiet .toc-list { transition:none; } }
       .toc-item:hover { color:var(--text-color); }
       .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }
       .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }
@@ -163,7 +166,7 @@
       </div>
     </nav>
     <main class="container">
-      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="2026-11-05T20:21:42.718Z">Nov 5, 2026, 12:21 PM PST</time></p>
+      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="2026-11-05T20:30:49.776Z">Nov 5, 2026, 12:30 PM PST</time></p>
       <h1>Thoughts on Experiential Learning in Embodied Intelligence</h1>
       <p class="subtitle">Inspired from biological intelligence</p>
       <p class="meta">Nov 5, 26 · 29 min</p>
@@ -242,6 +245,43 @@
         update();
       })();
     </script>
+    <script>(function tocFade() {
+  var toc = document.querySelector('.toc')
+  if (!toc) return
+  var IDLE = 1200        // ms of nothing before it starts to fade
+  var WINDOW = 300       // ms of scrolling measured for speed
+  var FAST = 0.4         // of a screen height within WINDOW counts as scrolling fast
+  var REACH = 48         // px beyond the panel that still counts as "the left side"
+  var timer = 0, inZone = false, focused = false, samples = []
+
+  function sleepSoon() {
+    clearTimeout(timer)
+    if (!inZone && !focused) timer = setTimeout(function () { toc.classList.add('quiet') }, IDLE)
+  }
+  function wake() {
+    toc.classList.remove('quiet')
+    sleepSoon()
+  }
+  document.addEventListener('mousemove', function (e) {
+    var near = e.clientX <= toc.getBoundingClientRect().right + REACH
+    if (near === inZone) return
+    inZone = near
+    wake()
+  }, { passive: true })
+  document.documentElement.addEventListener('mouseleave', function () {
+    if (inZone) { inZone = false; sleepSoon() }
+  })
+  window.addEventListener('scroll', function () {
+    var now = Date.now()
+    samples.push({ t: now, y: window.scrollY })
+    while (samples.length > 1 && now - samples[0].t > WINDOW) samples.shift()
+    if (Math.abs(window.scrollY - samples[0].y) > window.innerHeight * FAST) wake()
+  }, { passive: true })
+  toc.addEventListener('focusin', function () { focused = true; wake() })
+  toc.addEventListener('focusout', function () { focused = false; sleepSoon() })
+  toc.querySelector('.toc-label').addEventListener('click', wake) // touch: no mouse to bring over
+  sleepSoon()
+})();</script>
     <script>(function fnTrip() {
   var pill = document.getElementById('fnReturn')
   if (!pill) return

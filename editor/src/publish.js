@@ -1300,7 +1300,7 @@ function setMsg(el, html, kind) {
  */
 export function setupPublish({ editor, currentSnapshot }) {
   let pendingThumb = null   // { dataUrl, ext } | { path } | null
-  let mode = 'publish'      // 'publish' | 'draft'
+  let mode = 'draft'        // 'draft' (the default) | 'publish'
   let busy = false
 
   const readingMinutes = () => {
@@ -1375,7 +1375,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       ? '<b>In progress:</b> ' + held.titles.map(escapeHtml).join(', ') + '. Readers see only the heading and a note.' +
         (held.deadLinks ? ' ' + (held.deadLinks === 1 ? 'A link' : held.deadLinks + ' links') + ' into that text become plain words.' : '')
       : ''
-    setMode('publish')
+    setMode('draft')
     showVersionInfo(slugify(titleText))
     $('publishOverlay').classList.remove('hidden')
   }

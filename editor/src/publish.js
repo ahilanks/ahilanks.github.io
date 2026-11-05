@@ -1086,7 +1086,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      figure[data-pair]:has(+ figure) img, figure[data-pair]:has(+ figure) video, figure[data-pair]:has(+ figure) + figure img, figure[data-pair]:has(+ figure) + figure video { width:100%; }',
     '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto !important; } }',
     '      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }',
-    '      .in-progress { color:var(--muted); font-style:italic; }',
+    '      .in-progress { color:#a8483a; font-style:italic; }',
     hasVideo ? '      .vwrap { position:relative; display:block; width:fit-content; max-width:100%; margin:0 auto; line-height:0; }' : '',
     hasVideo ? '      figure[style] .vwrap, figure[data-pair] .vwrap, figure[data-pair] + figure .vwrap { width:100%; }' : '',
     hasVideo ? '      .vplay { position:absolute; left:50%; top:50%; width:76px; height:76px; margin:-38px 0 0 -38px; padding:0; border:none; border-radius:50%; background:rgba(20,24,30,0.58); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); box-shadow:0 4px 18px rgba(0,0,0,0.25); transition:opacity 0.18s, transform 0.18s, background 0.18s; }' : '',

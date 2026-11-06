@@ -48,8 +48,28 @@
         font-style: italic;
         font-size: 0.92rem;
         margin-top: -0.35rem;
-        margin-bottom: 3.5rem;
+        margin-bottom: 2.25rem;
         color: var(--muted);
+      }
+
+      .epigraph {
+        max-width: 31rem;
+        margin: 0 auto 3.5rem;
+        text-align: center;
+      }
+      .epigraph blockquote {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.65;
+      }
+      .epigraph figcaption {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .epigraph a {
+        color: inherit;
+        text-underline-offset: 2px;
       }
 
       /* ---------- Post list (Substack-style: neat spacing, no dividers) ---------- */
@@ -122,6 +142,20 @@
     <main class="container">
       <h1>Writings</h1>
       <p class="description">a discretized version of my [latent] thoughts</p>
+
+      <figure class="epigraph">
+        <blockquote>
+          “An essay is something you write to try to figure something out. … You
+          notice a door that’s ajar, and you open it and walk in to see what’s
+          inside.”
+        </blockquote>
+        <figcaption>
+          Paul Graham,
+          <a href="https://paulgraham.com/essay.html" target="_blank" rel="noopener"
+            >The Age of the Essay</a
+          >
+        </figcaption>
+      </figure>
 
       <!--
         To add a thumbnail to a post, drop an image in media/ and put an <img> inside

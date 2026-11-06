@@ -188,6 +188,18 @@ body.vk-open .surface { padding-bottom: 50vh; }
 .collapsible[data-level="2"] > .collapsible-toggle { height: 2.125rem; }
 .collapsible[data-level="3"] > .collapsible-toggle { height: 1.72rem; }
 .collapsible[data-level="4"] > .collapsible-toggle { height: 1.51rem; }
+/* the grip that moves a block (block-drag.js); the text column reaches into the margin so a
+   drag straight down from the grip stays over the editor */
+@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
+  .doc-body-pm { margin-left: -2.5rem; padding-left: 2.5rem; }
+}
+.block-grip { position: fixed; z-index: 40; width: 18px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--muted); opacity: 0.55; border-radius: 4px; cursor: grab; }
+.block-grip[hidden] { display: none; }
+.block-grip:hover { opacity: 1; background: rgba(39, 50, 63, 0.07); }
+.block-grip:active { cursor: grabbing; }
+.block-grip.dragging { visibility: hidden; }
+.block-drop-line { position: fixed; z-index: 40; height: 3px; margin-top: -1.5px; border-radius: 2px; background: rgba(15, 122, 229, 0.8); pointer-events: none; }
+.block-drop-line[hidden] { display: none; }
 /* a plain click opens the link (main.js handleClick), so show the pointer, not an I-beam */
 .doc-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; cursor: pointer; }
 .doc-body hr { border: none; border-top: 1px solid var(--line); margin: 2.2rem auto; width: 40%; }

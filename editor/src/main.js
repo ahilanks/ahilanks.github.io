@@ -10,6 +10,7 @@ import { setupStyle } from './style.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
+import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
@@ -123,6 +124,7 @@ export const editor = new Editor({
     FootnoteRef,
     Figure,
     Collapsible,
+    BlockDrag,
     HeadingAnchor,
     CommentMark,
     Suggestions,
@@ -506,6 +508,8 @@ const wordCount = setupWordCount(editor)
 
 // Publish: build a standalone article and write it to writings/ via File System Access.
 setupPublish({ editor, currentSnapshot })
+
+setupBlockDrag(editor)
 
 // While a ProseMirror drag (an image figure, or dragged text) is in flight, a drop on any
 // OTHER editable surface — title, subtitle, footnote bodies — would natively paste the

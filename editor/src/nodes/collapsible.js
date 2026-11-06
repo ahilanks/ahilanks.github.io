@@ -11,6 +11,10 @@
  *
  * A heading's section turned into one keeps its level and anchor on the title, so it still
  * looks like that heading, links to it still work, and removing the fold restores it.
+ *
+ * Moving things in and out: Tab sends the blocks you're on into the open section just above
+ * them, Shift+Tab sends them out below it, and Backspace at the start of the line below an open
+ * section pulls that line in. The grip in the margin (block-drag.js) does it by mouse.
  */
 
 import { Node, mergeAttributes, Plugin, PluginKey, Selection, TextSelection, Decoration, DecorationSet } from '../../vendor/lib.bundle.js'
@@ -142,6 +146,52 @@ function unwrap(state, dispatch, found) {
     ? (blankBody ? pos + 1 : pos + titleBlocks + (selection.from - bodyContent))
     : pos + 1 + (selection.from - (pos + 2))
   tr.setSelection(Selection.near(tr.doc.resolve(Math.min(caret, tr.doc.content.size)), 1))
+  dispatch(tr.scrollIntoView())
+  return true
+}
+
+/* ---------------------------------------------------------------- moving in and out */
+// The whole blocks a selection covers, at a level things move between: { range, inBody }
+function movableBlocks(state) {
+  const { $from, $to } = state.selection
+  const range = $from.blockRange($to)
+  if (!range) return null
+  const inBody = range.depth > 0 && range.parent.type.name === BODY
+  return range.depth === 0 || inBody ? { range, inBody } : null
+}
+
+// Keep the selection on the same words after they've moved by `delta`.
+function carrySelection(tr, selection, delta) {
+  const max = tr.doc.content.size
+  tr.setSelection(TextSelection.between(tr.doc.resolve(Math.min(selection.anchor + delta, max)), tr.doc.resolve(Math.min(selection.head + delta, max))))
+}
+
+// Into the open section right above these blocks, as its last blocks. → false if there isn't one.
+function moveIn(state, dispatch) {
+  const found = movableBlocks(state)
+  if (!found) return false
+  const { start, end } = found.range
+  const before = state.doc.resolve(start).nodeBefore
+  if (!before || before.type.name !== NODE || !before.attrs.open) return false
+  const blocks = state.doc.slice(start, end).content
+  const at = start - 2 // inside the section: past nothing but the two closing tokens
+  const tr = state.tr.delete(start, end).insert(at, blocks)
+  carrySelection(tr, state.selection, at - start)
+  dispatch(tr.scrollIntoView())
+  return true
+}
+
+// Out of the section these blocks are in, to just below it. → false if they aren't in one.
+function moveOut(state, dispatch) {
+  const found = movableBlocks(state)
+  if (!found || !found.inBody) return false
+  const { start, end, depth } = found.range
+  const $start = state.doc.resolve(start)
+  const section = $start.before(depth - 1)
+  const after = section + $start.node(depth - 1).nodeSize
+  const blocks = state.doc.slice(start, end).content
+  const tr = state.tr.insert(after, blocks).delete(start, end) // emptied, it keeps one blank line
+  carrySelection(tr, state.selection, tr.mapping.map(after, -1) - start)
   dispatch(tr.scrollIntoView())
   return true
 }
@@ -340,8 +390,20 @@ export const Collapsible = Node.create({
           view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(start), 1)).scrollIntoView())
           return true
         }
+        // the line below an open section joins it (a blank line just goes)
+        if ($from.parent.type.name === 'paragraph' && $from.depth > 0) {
+          const before = state.doc.resolve($from.before()).nodeBefore
+          if (before && before.type.name === NODE && before.attrs.open) {
+            if ($from.parent.content.size) return moveIn(state, view.dispatch)
+            const tr = state.tr.delete($from.before(), $from.after())
+            view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve($from.before()), -1)).scrollIntoView())
+            return true
+          }
+        }
         return false
       },
+      Tab: ({ editor }) => moveIn(editor.state, editor.view.dispatch),
+      'Shift-Tab': ({ editor }) => moveOut(editor.state, editor.view.dispatch),
       ArrowDown: ({ editor }) => editor.view.endOfTextblock('down') && past(editor.view),
       ArrowRight: ({ editor }) => {
         const { $from } = editor.state.selection

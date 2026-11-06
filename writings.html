@@ -52,22 +52,48 @@
         color: var(--muted);
       }
 
-      .epigraph {
-        max-width: 31rem;
-        margin: 0 auto 3.5rem;
-        text-align: center;
+      .why-write {
+        max-width: 34rem;
+        margin: 0 0 2.25rem;
       }
-      .epigraph blockquote {
+      .why-write summary {
+        width: fit-content;
+        font-size: 0.85rem;
+        color: var(--muted);
+        cursor: pointer;
+        list-style: none;
+      }
+      .why-write summary::-webkit-details-marker {
+        display: none;
+      }
+      .why-write summary::after {
+        content: "›";
+        display: inline-block;
+        margin-left: 0.4em;
+        transition: transform 0.15s ease;
+      }
+      .why-write[open] summary::after {
+        transform: rotate(90deg);
+      }
+      .why-write summary:hover {
+        color: var(--text-color);
+      }
+      .why-write figure {
+        margin: 1.25rem 0 0;
+      }
+      .why-write blockquote {
         margin: 0;
-        font-size: 0.95rem;
-        line-height: 1.65;
+        font-size: 0.92rem;
+        line-height: 1.7;
       }
-      .epigraph figcaption {
-        margin-top: 0.5rem;
+      .why-write blockquote p {
+        margin: 0 0 0.9em;
+      }
+      .why-write figcaption {
         font-size: 0.85rem;
         color: var(--muted);
       }
-      .epigraph a {
+      .why-write a {
         color: inherit;
         text-underline-offset: 2px;
       }
@@ -143,19 +169,43 @@
       <h1>Writings</h1>
       <p class="description">a discretized version of my [latent] thoughts</p>
 
-      <figure class="epigraph">
-        <blockquote>
-          “An essay is something you write to try to figure something out. … You
-          notice a door that’s ajar, and you open it and walk in to see what’s
-          inside.”
-        </blockquote>
-        <figcaption>
-          Paul Graham,
-          <a href="https://paulgraham.com/essay.html" target="_blank" rel="noopener"
-            >The Age of the Essay</a
-          >
-        </figcaption>
-      </figure>
+      <details class="why-write">
+        <summary>Why write?</summary>
+        <figure>
+          <blockquote>
+            <p>
+              To understand what a real essay is, we have to reach back into
+              history again, though this time not so far. To Michel de Montaigne,
+              who in 1580 published a book of what he called “essais.” He was
+              doing something quite different from what lawyers do, and the
+              difference is embodied in the name. Essayer is the French verb
+              meaning “to try” and an essai is an attempt. An essay is something
+              you write to try to figure something out.
+            </p>
+            <p>
+              Figure out what? You don’t know yet. And so you can’t begin with a
+              thesis, because you don’t have one, and may never have one. An essay
+              doesn’t begin with a statement, but with a question. In a real
+              essay, you don’t take a position and defend it. You notice a door
+              that’s ajar, and you open it and walk in to see what’s inside.
+            </p>
+            <p>
+              If all you want to do is figure things out, why do you need to write
+              anything, though? Why not just sit and think? Well, there precisely
+              is Montaigne’s great discovery. Expressing ideas helps to form them.
+              Indeed, helps is far too weak a word. Most of what ends up in my
+              essays I only thought of when I sat down to write them. That’s why I
+              write them.
+            </p>
+          </blockquote>
+          <figcaption>
+            Paul Graham,
+            <a href="https://paulgraham.com/essay.html" target="_blank" rel="noopener"
+              >The Age of the Essay</a
+            >
+          </figcaption>
+        </figure>
+      </details>
 
       <!--
         To add a thumbnail to a post, drop an image in media/ and put an <img> inside

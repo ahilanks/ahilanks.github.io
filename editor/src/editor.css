@@ -169,6 +169,25 @@ body.vk-open .surface { padding-bottom: 50vh; }
 .doc-body blockquote { margin: 1.5rem 0; padding: 0.2rem 0 0.2rem 1.2rem; color: var(--text); font-size: 1.18rem; position: relative; }
 /* the accent bar is a pseudo-element inset from top/bottom, so it's a little shorter than the quote */
 .doc-body blockquote::before { content: ""; position: absolute; left: 0; top: 0.4rem; bottom: 0.4rem; width: 3px; border-radius: 2px; background: var(--accent); }
+/* collapsible section (nodes/collapsible.js): the chevron hangs at the left edge, the title
+   and contents share one slight indent */
+.doc-body .collapsible { position: relative; margin: 1.25rem 0; }
+.doc-body .collapsible summary { display: block; padding-left: 1.35rem; font-weight: 600; line-height: 1.6; }
+.doc-body .collapsible summary[data-level="2"] { font-size: 1.7rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+.doc-body .collapsible summary[data-level="3"] { font-size: 1.32rem; line-height: 1.3; }
+.doc-body .collapsible summary[data-level="4"] { font-size: 1.12rem; font-weight: 700; line-height: 1.35; }
+.doc-body .collapsible-untitled::before { content: attr(data-placeholder); float: left; height: 0; color: var(--muted); font-weight: 400; pointer-events: none; }
+.doc-body .collapsible-body { padding-left: 1.35rem; margin-top: 0.5rem; }
+.doc-body .collapsible-body > :first-child { margin-top: 0; }
+.doc-body .collapsible-body > :last-child { margin-bottom: 0; }
+.doc-body .collapsible.is-closed > .collapsible-inner > .collapsible-body { display: none; }
+.collapsible-toggle { position: absolute; left: 0; top: 0; width: 1.35rem; height: 1.6em; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; user-select: none; }
+.collapsible-toggle:hover { color: var(--text); }
+.collapsible-toggle::before { content: ""; width: 0.42rem; height: 0.42rem; margin-left: 0.1rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-0.08rem, -0.08rem); transition: transform 0.15s ease; }
+.collapsible.is-closed > .collapsible-toggle::before { transform: rotate(-45deg); }
+.collapsible[data-level="2"] > .collapsible-toggle { height: 2.125rem; }
+.collapsible[data-level="3"] > .collapsible-toggle { height: 1.72rem; }
+.collapsible[data-level="4"] > .collapsible-toggle { height: 1.51rem; }
 /* a plain click opens the link (main.js handleClick), so show the pointer, not an I-beam */
 .doc-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; cursor: pointer; }
 .doc-body hr { border: none; border-top: 1px solid var(--line); margin: 2.2rem auto; width: 40%; }

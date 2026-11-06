@@ -9,6 +9,7 @@ import { FootnoteRef, setupFootnotes, setupFootnoteMargin, setFootnotePlacement,
 import { setupStyle } from './style.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
+import { Collapsible } from './nodes/collapsible.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
@@ -121,6 +122,7 @@ export const editor = new Editor({
     BlockMath,
     FootnoteRef,
     Figure,
+    Collapsible,
     HeadingAnchor,
     CommentMark,
     Suggestions,
@@ -301,6 +303,7 @@ document.querySelectorAll('.tb-btn[data-cmd], .bubble button[data-cmd]').forEach
 })
 
 $('quoteBtn').addEventListener('mousedown', (e) => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() })
+$('collapseBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().toggleCollapsible().run() })
 
 $('formatSelect').addEventListener('change', (e) => {
   const v = e.target.value
@@ -318,6 +321,7 @@ function updateToolbar() {
     if (c === 'bold' || c === 'italic') b.classList.toggle('active', editor.isActive(c))
   })
   $('quoteBtn').classList.toggle('active', editor.isActive('blockquote'))
+  $('collapseBtn').classList.toggle('active', editor.isActive('collapsible'))
   const sel = $('formatSelect')
   if (editor.isActive('heading', { level: 2 })) sel.value = 'h2'
   else if (editor.isActive('heading', { level: 3 })) sel.value = 'h3'

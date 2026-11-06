@@ -7,6 +7,7 @@
 
 import { Extension } from '../vendor/lib.bundle.js'
 import { $ } from './dom.js'
+import { revealPos } from './nodes/collapsible.js'
 
 export const HeadingAnchor = Extension.create({
   name: 'headingAnchor',
@@ -35,7 +36,7 @@ export const HeadingAnchor = Extension.create({
 export function docHeadings(editor) {
   const out = []
   editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === 'heading') {
+    if (node.type.name === 'heading' || (node.type.name === 'collapsibleTitle' && node.attrs.level)) {
       const text = node.textContent.trim()
       if (text) out.push({ pos, node, text, level: node.attrs.level, anchor: node.attrs.anchor })
     }
@@ -65,6 +66,7 @@ export function anchorFor(editor, heading) {
 // Scroll the editor to the heading an "#anchor" href points at and flash it.
 export function jumpToSection(editor, href) {
   const h = headingForHref(editor, href)
+  if (h) revealPos(editor.view, h.pos)
   const el = h && editor.view.nodeDOM(h.pos)
   const scroll = $('scrollArea')
   if (!el || !scroll) return false

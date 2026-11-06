@@ -30,7 +30,8 @@ export function setupToc(editor, { focusHeading }) {
   document.body.appendChild(panel)
   const list = panel.querySelector('.toc-list')
 
-  const headings = () => Array.from(editor.view.dom.querySelectorAll('h2, h3, h4'))
+  // a heading inside a collapsible section isn't part of the outline: readers may never open it
+  const headings = () => Array.from(editor.view.dom.querySelectorAll('h2, h3, h4')).filter((h) => !h.closest('.collapsible'))
 
   let items = [] // [{ btn, index, depth, parentSec, parentSub }] — index into headings() at interaction time
 
@@ -125,6 +126,7 @@ export function setupToc(editor, { focusHeading }) {
     const sel = editor.state.selection
     let idx = -1; let count = 0
     editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'collapsible') return false
       if (node.type.name === 'heading' && node.attrs.level <= 4) {
         if (pos <= sel.from) idx = count
         count++

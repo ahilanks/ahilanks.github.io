@@ -89,6 +89,8 @@ function serializeBlock(node, ctx) {
       const inner = blocksToMarkdown(node, ctx)
       return inner.split('\n').map((l) => (l ? '> ' + l : '>')).join('\n')
     }
+    case 'collapsible':
+      return '<details>\n<summary>' + serializeInline(node.child(0), ctx) + '</summary>\n\n' + blocksToMarkdown(node.child(1), ctx) + '\n\n</details>'
     case 'bulletList':
       return serializeList(node, ctx, false, '')
     case 'orderedList':

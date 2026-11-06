@@ -11,6 +11,7 @@
 import { Node } from '../../vendor/lib.bundle.js'
 import { $, uid, debounce, toast } from '../dom.js'
 import { cleanPastedHTML, insertCleanHTML, insertPlain } from '../paste.js'
+import { visibleRect } from './collapsible.js'
 
 /* ----------------------------------------------------------------- the node */
 export const FootnoteRef = Node.create({
@@ -389,7 +390,7 @@ export function setupFootnoteMargin(editor, comments) {
       // (a note hidden by Focus on section has no box, and no place in the margin)
       return Array.from($('fnList').children).filter((li) => li.getClientRects().length).map((li) => {
         const ref = !li.classList.contains('fn-orphan') && editor.view.dom.querySelector(`.fn-ref[data-fn="${li.dataset.fn}"]`)
-        const r = ref ? ref.getBoundingClientRect() : null
+        const r = ref ? visibleRect(ref) : null
         return { card: li, active: false, top: r ? r.top - sRect.top : end, bottom: r ? r.bottom - sRect.top : end, left: 0 }
       })
     },

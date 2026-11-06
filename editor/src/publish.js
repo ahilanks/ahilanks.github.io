@@ -96,8 +96,8 @@ function randomToken() {
 // Allowlist sanitiser — nothing attacker-controlled that got pasted from a third-party page
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
-const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -176,7 +176,7 @@ function holdBackSections(bodyHtml) {
   const titles = []
   const cutAnchors = new Set()
   const isHeading = (el) => /^H[1-6]$/.test(el.tagName)
-  Array.from(d.querySelectorAll(':scope > [data-in-progress]')).forEach((h) => {
+  Array.from(d.querySelectorAll(':scope > [data-in-progress], .collapsible-body > [data-in-progress]')).forEach((h) => {
     if (!d.contains(h)) return // inside a marked section above it, already gone
     h.removeAttribute('data-in-progress')
     titles.push((h.textContent || '').trim())
@@ -260,11 +260,19 @@ function bodyToPublishHtml(clone, { sliders = true } = {}) {
   const hs = []
   clone.querySelectorAll('h2, h3, h4').forEach((h) => {
     const text = (h.textContent || '').trim()
-    if (text) hs.push({ h, text, lvl: +h.tagName[1] })
+    // inside a collapsible section it gets an id but stays out of the contents panel
+    if (text) hs.push({ h, text, lvl: +h.tagName[1], folded: !!h.closest('details') })
   })
-  const lvls = Array.from(new Set(hs.map((e) => e.lvl))).sort()
+  const lvls = Array.from(new Set(hs.filter((e) => !e.folded).map((e) => e.lvl))).sort()
   const toc = []
   const usedIds = new Set()
+  // a collapsible section's title: the anchor links use, and something for readers to click
+  clone.querySelectorAll('summary').forEach((s) => {
+    const anchor = s.getAttribute('data-anchor')
+    s.removeAttribute('data-anchor')
+    if (anchor && /^[\w-]+$/.test(anchor) && !usedIds.has(anchor)) { usedIds.add(anchor); s.id = anchor }
+    if (!s.textContent.trim() && !s.querySelector('img')) s.textContent = 'More'
+  })
   let secN = 0
   hs.forEach((e) => {
     const depth = lvls.indexOf(e.lvl)
@@ -274,6 +282,7 @@ function bodyToPublishHtml(clone, { sliders = true } = {}) {
     e.h.removeAttribute('data-anchor')
     if (anchor && /^[\w-]+$/.test(anchor) && !usedIds.has(anchor)) { usedIds.add(anchor); e.h.id = anchor }
     else e.h.id = headingId(e.text, usedIds)
+    if (e.folded) return
     toc.push({ id: e.h.id, text: e.text, level: depth + 2, n: depth === 0 ? secN : 0 })
   })
   clone.querySelectorAll('h2[data-anchor], h3[data-anchor], h4[data-anchor]').forEach((h) => h.removeAttribute('data-anchor'))
@@ -502,6 +511,23 @@ function fnTrip() {
 // while the pointer is on the marker or the card (a short grace period covers the gap, so
 // its links can be clicked) and goes when it leaves both. Mouse/trackpad only — on touch a
 // tap still makes the round trip to the note (fnTrip).
+// Runs INSIDE the published article. A link to something folded inside a collapsible section
+// (a footnote's way home, a section link, an address with a #) opens it first, so there's
+// somewhere to land. Capturing, so it happens before anything scrolls.
+function collapsibleReveal() {
+  function reveal(id) {
+    var el = id && document.getElementById(id)
+    for (var d = el && el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]')
+    if (a) reveal(a.getAttribute('href').slice(1))
+  }, true)
+  function fromHash() { reveal(decodeURIComponent(location.hash.slice(1))) }
+  window.addEventListener('hashchange', fromHash)
+  fromHash()
+}
+
 function fnPeek() {
   if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
   var card = document.createElement('div')
@@ -620,7 +646,10 @@ function fnSide(minWidth, start) {
       var at = y
       if (sup && back) {
         var own = baseline(back, back.firstChild) - li.getBoundingClientRect().top
-        at = Math.max(baseline(sup.parentNode, sup) - top0 - own, y)
+        // a marker folded inside a collapsible section: level with that section's title
+        var shut = null
+        for (var d = sup.closest('details'); d; d = d.parentElement.closest('details')) if (!d.open) shut = d.querySelector('summary')
+        at = Math.max((shut ? baseline(shut, shut.firstChild) : baseline(sup.parentNode, sup)) - top0 - own, y)
       }
       li.style.top = at + 'px'
       y = at + li.offsetHeight + GAP
@@ -1236,6 +1265,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   const looks = normalizeStyle(style)
   const fnMargin = !!footHtml && looks.footnotes === 'margin'
   const hasSliders = bodyHtml.includes('data-levels=')
+  const hasCollapsibles = bodyHtml.includes('<details')
   // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
   // column sliding left of centre to make it. A contents panel on the left needs 240px more.
   const fnMinWidth = hasToc ? 1400 : 1160
@@ -1289,6 +1319,17 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto !important; } }',
     '      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }',
     '      .in-progress { color:#a8483a; font-style:italic; }',
+    hasCollapsibles ? '      details.collapsible { margin:1.25rem 0; }' : '',
+    hasCollapsibles ? '      details.collapsible > summary { position:relative; padding-left:1.35rem; font-weight:600; cursor:pointer; list-style:none; }' : '',
+    hasCollapsibles ? '      details.collapsible > summary::-webkit-details-marker { display:none; }' : '',
+    hasCollapsibles ? '      details.collapsible > summary::before { content:""; position:absolute; left:0.1rem; top:0.55em; width:0.42rem; height:0.42rem; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform 0.15s ease; }' : '',
+    hasCollapsibles ? '      details.collapsible[open] > summary::before { transform:rotate(45deg) translate(-0.08rem,-0.08rem); }' : '',
+    hasCollapsibles ? '      details.collapsible > summary[data-level="2"] { font-size:1.7rem; font-weight:700; line-height:1.25; letter-spacing:-0.01em; }' : '',
+    hasCollapsibles ? '      details.collapsible > summary[data-level="3"] { font-size:1.32rem; line-height:1.3; }' : '',
+    hasCollapsibles ? '      details.collapsible > summary[data-level="4"] { font-size:1.12rem; font-weight:700; line-height:1.35; }' : '',
+    hasCollapsibles ? '      .collapsible-body { padding-left:1.35rem; margin-top:0.5rem; }' : '',
+    hasCollapsibles ? '      .collapsible-body > :first-child { margin-top:0; }' : '',
+    hasCollapsibles ? '      .collapsible-body > :last-child { margin-bottom:0; }' : '',
     hasVideo ? '      .vwrap { position:relative; display:block; width:fit-content; max-width:100%; margin:0 auto; line-height:0; }' : '',
     hasVideo ? '      figure[style] .vwrap, figure[data-pair] .vwrap, figure[data-pair] + figure .vwrap { width:100%; }' : '',
     hasVideo ? '      .vplay { position:absolute; left:50%; top:50%; width:76px; height:76px; margin:-38px 0 0 -38px; padding:0; border:none; border-radius:50%; background:rgba(20,24,30,0.58); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); box-shadow:0 4px 18px rgba(0,0,0,0.25); transition:opacity 0.18s, transform 0.18s, background 0.18s; }' : '',
@@ -1412,6 +1453,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ',' + JSON.stringify(fnMargin ? 'side' : 'below') + ');</script>' : '',
     hasSliders ? '    <script>(' + eqSlider.toString() + ')();</script>' : '',
+    hasCollapsibles ? '    <script>(' + collapsibleReveal.toString() + ')();</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',

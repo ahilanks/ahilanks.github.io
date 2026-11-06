@@ -41,6 +41,7 @@ function blocksOf(html, footnotes) {
     for (const c of el.children) {
       const tag = c.tagName.toLowerCase()
       if (/^h[1-6]$/.test(tag)) out.push({ kind: tag, text: clean(c.textContent) })
+      else if (tag === 'summary') { const t = clean(c.textContent); if (t) out.push({ kind: 'p', text: t }) }
       else if (tag === 'p') { const t = clean(c.textContent); if (t) out.push({ kind: ctx || 'p', text: t }) }
       else if (tag === 'li') { if (c.querySelector('p')) walk(c, 'li'); else out.push({ kind: 'li', text: clean(c.textContent) }) }
       else if (tag === 'blockquote') walk(c, 'quote')

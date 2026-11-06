@@ -1,8 +1,9 @@
-/* block-drag.js — a grip in the left margin that moves a whole block.
+/* block-drag.js — a grip in the left margin for moving things in and out of collapsible sections.
  *
- * It follows the pointer: the paragraph, heading, list, quote or figure you're on, one inside a
- * collapsible section included, or the whole section when you're on its title. With several
- * blocks selected, grabbing one of them moves them all. A move is one undo step.
+ * It only appears around them (the writer doesn't want a grip on every line): on a section's
+ * title, which moves the whole section, on anything inside an open section, and on the block
+ * directly above or below an open one. With several blocks selected, grabbing one of them moves
+ * them all. A move is one undo step.
  *
  * Where it lands goes by the pointer's height alone (the top or bottom half of the block under
  * it), so a drag straight down the margin reaches every gap, the end of a section's contents
@@ -31,6 +32,15 @@ function blockAt(doc, pos) {
     return { from, to: from + node.nodeSize, node }
   }
   return null
+}
+
+// Whether a block gets a grip: a section, its contents, or an open section's next-door neighbour.
+function hasGrip(doc, block) {
+  if (block.node.type.name === 'collapsible') return true
+  const $from = doc.resolve(block.from)
+  if ($from.parent.type.name === 'collapsibleBody') return true
+  const isOpen = (n) => !!n && n.type.name === 'collapsible' && n.attrs.open
+  return isOpen($from.nodeBefore) || isOpen(doc.resolve(block.to).nodeAfter)
 }
 
 // What a drag from `block` carries: the block, or every block in a selection that includes it.
@@ -164,7 +174,7 @@ export function setupBlockDrag(editor) {
     if (e.target.closest && e.target.closest('.cmt-layer, .doc-footnotes')) { hide(); return }
     const hit = view.posAtCoords({ left: Math.max(e.clientX, r.left + parseFloat(getComputedStyle(view.dom).paddingLeft) + 1), top: e.clientY })
     const next = hit && blockAt(view.state.doc, hit.pos)
-    if (next) place(next); else hide()
+    if (next && hasGrip(view.state.doc, next)) place(next); else hide()
   })
   scroll.addEventListener('mouseleave', (e) => { if (e.relatedTarget !== grip && !grip.contains(e.relatedTarget)) hide() })
   scroll.addEventListener('scroll', hide, { passive: true })

@@ -287,6 +287,9 @@ export const editor = new Editor({
   autofocus: false, // never autofocus on load (focus triggers a scroll that clobbers restore)
   onUpdate: () => { scheduleSave(); updateToolbar() },
   onSelectionUpdate: () => { updateToolbar(); updateBubble() },
+  // ⌘B with nothing selected changes neither text nor selection, only what you type next:
+  // light the button up right away rather than on the next keystroke
+  onTransaction: ({ transaction }) => { if (transaction.storedMarksSet && !transaction.docChanged) updateToolbar() },
 })
 
 // expose for console debugging
@@ -591,6 +594,9 @@ document.addEventListener('keydown', (e) => {
   // or a box you're typing a question into
   const t = e.target
   if (t && (t.tagName === 'MATH-FIELD' || (t.closest && t.closest('#mathAsk, #askPanel, #sgMenu')))) return
+  // ⌘B/⌘I in the article are TipTap's own (already handled, so defaultPrevented); this covers
+  // Ctrl+B/Ctrl+I, which TipTap leaves to the Mac's caret keys, and the footnote boxes
+  if ((k === 'b' || k === 'i') && e.defaultPrevented) return
   if (k === 'b') { e.preventDefault(); cmd.bold() }
   else if (k === 'i') { e.preventDefault(); cmd.italic() }
   else if (k === 'm') { e.preventDefault(); insertAndEditMath(editor, { block: e.shiftKey }) }

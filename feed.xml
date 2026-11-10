@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Ahilan Karuppusami</title>
+    <link>https://ahilanks.github.io/writings.html</link>
+    <atom:link href="https://ahilanks.github.io/feed.xml" rel="self" type="application/rss+xml" />
+    <description>Essays by Ahilan Karuppusami.</description>
+    <language>en</language>
+    <item>
+      <title>Why AI is Eating Software</title>
+      <link>https://ahilanks.substack.com/p/why-ai-is-eating-software</link>
+      <guid>https://ahilanks.substack.com/p/why-ai-is-eating-software</guid>
+      <pubDate>Fri, 06 Feb 2026 00:00:00 -0800</pubDate>
+    </item>
+    <item>
+      <title>Information Consumption</title>
+      <link>https://ahilanks.substack.com/p/finding-good-donuts</link>
+      <guid>https://ahilanks.substack.com/p/finding-good-donuts</guid>
+      <pubDate>Sat, 09 Aug 2025 00:00:00 -0700</pubDate>
+    </item>
+  </channel>
+</rss>

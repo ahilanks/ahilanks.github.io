@@ -6,6 +6,7 @@
     <title>Writings - Ahilan Karuppusami</title>
     <meta name="description" content="Essays by Ahilan Karuppusami." />
     <link rel="canonical" href="https://ahilanks.github.io/writings.html" />
+    <link rel="alternate" type="application/rss+xml" title="Ahilan Karuppusami" href="https://ahilanks.github.io/feed.xml" />
 
     <!-- Google Font -->
     <link
@@ -158,6 +159,16 @@
         font-size: 0.85rem;
       }
 
+      .rss {
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .rss:hover {
+        color: var(--text-color);
+        text-decoration: underline;
+      }
+
       @media (max-width: 560px) {
         .post-thumb { width: 120px; height: 64px; }
         .post-title { font-size: 1rem; }
@@ -259,6 +270,7 @@
           </div>
         </li>
       </ul>
+      <a class="rss" href="feed.xml">RSS</a>
     </main>
   </body>
 </html>

@@ -789,6 +789,74 @@ def site_commit_push(paths, message):
             return {"ok": False, "detail": f"git error: {e}"}
 
 
+SITE_URL = "https://ahilanks.github.io/"
+POST_LI_RE = re.compile(r'<li class="post"[^>]*>(.*?)</li>', re.S)
+
+
+def _feed_date(text):
+    from email.utils import format_datetime
+    from datetime import datetime
+    t = re.sub(r"\s+", " ", (text or "").split("·")[0]).strip()
+    for fmt in ("%b %d, %y", "%b %d, %Y", "%B %d, %Y", "%B %d, %y", "%Y-%m-%d"):
+        try:
+            return format_datetime(datetime.strptime(t, fmt).astimezone())
+        except ValueError:
+            pass
+    return None
+
+
+def build_feed():
+    """feed.xml (RSS 2.0) from writings.html's post list, newest first as listed there. An
+    essay on this site gets its subtitle as the description. Rebuilt whenever a publish
+    writes writings.html. Returns True if the file changed."""
+    try:
+        with open(os.path.join(ROOT, "writings.html"), encoding="utf-8") as f:
+            index = f.read()
+    except OSError:
+        return False
+    esc = lambda s: htmlmod.escape(s or "", quote=False)
+    items = []
+    for m in POST_LI_RE.finditer(index):
+        li = m.group(1)
+        a = re.search(r'<a\s[^>]*class="post-title"[^>]*href="([^"]+)"[^>]*>(.*?)</a\s*>', li, re.S) or \
+            re.search(r'<a\s[^>]*href="([^"]+)"[^>]*class="post-title"[^>]*>(.*?)</a\s*>', li, re.S)
+        if not a:
+            continue
+        href, title = a.group(1), re.sub(r"\s+", " ", strip_html(a.group(2)))
+        link = href if re.match(r"^https?://", href) else SITE_URL + href.lstrip("/")
+        meta = re.search(r'<p class="post-meta">(.*?)</p>', li, re.S)
+        date = _feed_date(strip_html(meta.group(1))) if meta else None
+        desc = ""
+        if not re.match(r"^https?://", href):
+            try:
+                with open(os.path.join(ROOT, href.split("#")[0]), encoding="utf-8") as f:
+                    sm = re.search(r'<p class="subtitle"[^>]*>(.*?)</p>', f.read(), re.S)
+                desc = re.sub(r"\s+", " ", strip_html(sm.group(1))) if sm else ""
+            except OSError:
+                pass
+        items.append(
+            "    <item>\n"
+            f"      <title>{esc(title)}</title>\n"
+            f"      <link>{esc(link)}</link>\n"
+            f"      <guid>{esc(link)}</guid>\n"
+            + (f"      <pubDate>{date}</pubDate>\n" if date else "")
+            + (f"      <description>{esc(desc)}</description>\n" if desc else "")
+            + "    </item>\n")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+        "  <channel>\n"
+        "    <title>Ahilan Karuppusami</title>\n"
+        f"    <link>{SITE_URL}writings.html</link>\n"
+        f'    <atom:link href="{SITE_URL}feed.xml" rel="self" type="application/rss+xml" />\n'
+        "    <description>Essays by Ahilan Karuppusami.</description>\n"
+        "    <language>en</language>\n"
+        + "".join(items) +
+        "  </channel>\n"
+        "</rss>\n")
+    return write_if_changed(os.path.join(ROOT, "feed.xml"), xml)
+
+
 def write_publish_files(files):
     """Write the editor's publish payload ([{path, text | b64}]) under ROOT. Only the
     allow-listed site paths (writings/, writings/media/, writings/p/, media/, writings.html)."""
@@ -1405,6 +1473,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_error(400, "bad json")
             try:
                 written = write_publish_files(body.get("files") or [])
+                if "writings.html" in written:
+                    build_feed()
+                    written.append("feed.xml")
             except Exception as e:
                 return self._send_json({"ok": False, "error": str(e)}, 400)
             return self._send_json({"ok": True, "written": written})
@@ -1413,6 +1484,8 @@ class Handler(SimpleHTTPRequestHandler):
             if body is None:
                 return self.send_error(400, "bad json")
             paths = [str(p) for p in (body.get("paths") or []) if PUBLISH_PATH_RE.match(str(p)) or str(p) in ("writings/proofs", "robots.txt")]
+            if "writings.html" in paths and "feed.xml" not in paths:
+                paths.append("feed.xml")   # build_feed() rewrote it alongside
             if not paths:
                 return self._send_json({"ok": False, "error": "no publishable paths"}, 400)
             r = site_commit_push(paths, str(body.get("message") or "Publish"))

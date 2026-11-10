@@ -24,9 +24,10 @@ function fileToDataUrl(file) {
   })
 }
 
-const INLINE_MAX = 2 * 1024 * 1024 // bigger than this (or any GIF) is stored as a file
+const INLINE_MAX = 2 * 1024 * 1024 // with the server unreachable, smaller than this embeds inline
 
-// POST a GIF file's bytes, or ask the server to fetch a link → the stored file's src.
+// POST an image file's bytes (any image, not just GIFs), or ask the server to fetch a link
+// → the stored file's src.
 async function storeGif(draftId, { file, url }) {
   const q = '/api/gif?draft=' + encodeURIComponent(draftId) + (url ? '&url=' + encodeURIComponent(url) : '')
   const r = await fetch(q, url ? { method: 'POST' } : { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
@@ -56,16 +57,49 @@ function insertImageSrc(editor, src, pos) {
 async function insertImageFile(editor, file, getDocId, pos) {
   if (!file || !file.type.startsWith('image/')) return
   const at = pinPos(editor, pos)
-  if (file.type === 'image/gif' || file.size > INLINE_MAX) {
-    toast(file.type === 'image/gif' ? 'Adding GIF…' : 'Adding image…')
-    try { const src = await storeGif(getDocId(), { file }); insertImageSrc(editor, src, at()); return }
-    catch (e) {
-      if (file.size > INLINE_MAX) { at(); toast(e.message || "Couldn't save the image"); return }
-      // small enough to embed: fall back to inline (e.g. the server is unreachable)
-    }
+  // Every image is a file on the server: inline base64 piles up in localStorage until saves fail.
+  if (file.size > 300 * 1024) toast(file.type === 'image/gif' ? 'Adding GIF…' : 'Adding image…')
+  try { const src = await storeGif(getDocId(), { file }); insertImageSrc(editor, src, at()); return }
+  catch (e) {
+    if (file.size > INLINE_MAX) { at(); toast(e.message || "Couldn't save the image"); return }
+    // small enough to embed: fall back to inline (the server is unreachable); it moves out
+    // to a file later (storeInlineImages)
   }
   const src = await fileToDataUrl(file)
   insertImageSrc(editor, src, at())
+}
+
+/* Move inline (data:) images in the open draft out to files on the server: ones from before
+ * images were stored as files, a crop, or one added while the server was down. Runs after a
+ * draft loads and after edits; quietly does nothing while the server can't be reached. */
+let storing = false
+export async function storeInlineImages(editor, getDocId, onFootnotesChange) {
+  if (storing) return
+  storing = true
+  try {
+    const draftId = getDocId()
+    const srcs = new Set()
+    editor.state.doc.descendants((n) => { if (typeof n.attrs.src === 'string' && n.attrs.src.startsWith('data:image/')) srcs.add(n.attrs.src) })
+    const fnImgs = Array.from(document.querySelectorAll('#fnList img[src^="data:image/"]'))
+    fnImgs.forEach((img) => srcs.add(img.getAttribute('src')))
+    if (!srcs.size) return
+    const stored = new Map()
+    for (const src of srcs) {
+      try {
+        const blob = await (await fetch(src)).blob()
+        stored.set(src, await storeGif(draftId, { file: new File([blob], 'image', { type: blob.type }) }))
+      } catch (e) { /* svg, or the server is down: stays inline */ }
+    }
+    if (!stored.size || getDocId() !== draftId) return
+    const tr = editor.state.tr
+    editor.state.doc.descendants((n, pos) => {
+      if (stored.has(n.attrs.src)) tr.setNodeMarkup(pos, null, { ...n.attrs, src: stored.get(n.attrs.src) })
+    })
+    let fnChanged = false
+    fnImgs.forEach((img) => { const s = stored.get(img.getAttribute('src')); if (s && img.isConnected) { img.setAttribute('src', s); fnChanged = true } })
+    if (tr.docChanged) editor.view.dispatch(tr.setMeta('addToHistory', false))
+    if (fnChanged && onFootnotesChange) onFootnotesChange()
+  } finally { storing = false }
 }
 
 async function insertGifUrl(editor, url, getDocId, pos) {

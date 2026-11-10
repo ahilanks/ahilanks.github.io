@@ -19,12 +19,18 @@ import { $, debounce, uid } from './dom.js'
 
 /* ------------------------------------------------------------- LS accessors */
 function getDrafts() { try { return JSON.parse(localStorage.getItem(LS.drafts) || '{}') } catch (e) { return {} } }
-function putDraftsLocal(d) { localStorage.setItem(LS.drafts, JSON.stringify(d)) }
+// The browser's copy of every draft. localStorage holds ~5 MB for them all, so this can
+// fail; the server's copy is the durable one, so a full browser never stops a save (see
+// pushLive). True if it stuck.
+function putDraftsLocal(d) {
+  try { localStorage.setItem(LS.drafts, JSON.stringify(d)); return true }
+  catch (e) { console.warn('[drafts] browser storage full; saving to the server only', e); return false }
+}
 // Tombstones: { id: deletedAtMs }. A delete is recorded here (never a bare hard
 // delete) so it can propagate across devices without a stale device resurrecting
 // the draft — while a genuinely newer edit (updated > deletedAt) still wins.
 function getDeleted() { try { return JSON.parse(localStorage.getItem(LS.deleted) || '{}') } catch (e) { return {} } }
-function putDeletedLocal(d) { localStorage.setItem(LS.deleted, JSON.stringify(d)) }
+function putDeletedLocal(d) { try { localStorage.setItem(LS.deleted, JSON.stringify(d)) } catch (e) {} }
 
 // A draft is considered tombstoned-away when a tombstone at/after its version exists.
 // Mirrors merge() step 3, so a draft re-created by a newer edit is NOT hidden.
@@ -46,7 +52,7 @@ function getLayout() {
   } catch (e) {}
   return { folders: DEFAULT_FOLDERS.map((f) => ({ ...f })), order: {}, updated: 0 }
 }
-function putLayoutLocal(l) { localStorage.setItem(LS.layout, JSON.stringify(l)) }
+function putLayoutLocal(l) { try { localStorage.setItem(LS.layout, JSON.stringify(l)) } catch (e) {} }
 
 /* --------------------------------------------------------------- reconcile */
 // Fold server drafts/tombstones into local LS. Same policy as editor-server.py merge().
@@ -99,6 +105,7 @@ function reconcile(serverDrafts, serverDeleted, serverLayout) {
  */
 export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, setDocId }) {
   const scrollArea = $('scrollArea')
+  let live = null // the open draft's latest copy when the browser couldn't store it (pushLive)
   let didInitialRefresh = false // guards the one-time boot re-apply after the first server pull
 
   /* ---- persist the live draft to LS (used at switch/new boundaries; main.js
@@ -108,8 +115,8 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     const drafts = getDrafts()
     if (!s.created && drafts[s.id]) s.created = drafts[s.id].created
     drafts[s.id] = s
-    putDraftsLocal(drafts)
-    localStorage.setItem(LS.current, s.id)
+    if (!putDraftsLocal(drafts)) live = s
+    try { localStorage.setItem(LS.current, s.id) } catch (e) {}
     if (!SANDBOX) SYNC.schedulePush()
     return s
   }
@@ -421,16 +428,21 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     async push() {
       if (SANDBOX) return
       clearTimeout(this.pushTimer) // a direct push supersedes any scheduled one
+      // Every draft goes up in one push, plus the open one's latest copy when the
+      // browser was too full to keep it (pushLive).
+      const all = getDrafts()
+      if (live && (!all[live.id] || (all[live.id].updated || 0) < live.updated)) all[live.id] = live
       try {
         const r = await fetch(this.url, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ drafts: getDrafts(), deleted: getDeleted(), layout: getLayout() }),
+          body: JSON.stringify({ drafts: all, deleted: getDeleted(), layout: getLayout() }),
         })
-        if (!r.ok) return
+        if (!r.ok) return false
         const data = await r.json()
         if (reconcile(data.drafts || {}, data.deleted || {}, data.layout)) renderDraftsList()
-      } catch (e) {}
+        return true
+      } catch (e) { return false }
     },
     start() {
       if (SANDBOX || this.started) return
@@ -506,8 +518,12 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
                       JSON.stringify(cur.comments || {}) !== JSON.stringify(s.comments || {}) ||
                       JSON.stringify(cur.closedComments || []) !== JSON.stringify(s.closedComments || [])
         if (!s.created && cur) s.created = cur.created
-        if (dirty) { drafts[s.id] = s; putDraftsLocal(drafts); localStorage.setItem(LS.current, s.id) }
-        await SYNC.push()
+        if (dirty) {
+          drafts[s.id] = s
+          if (!putDraftsLocal(drafts)) live = s
+          try { localStorage.setItem(LS.current, s.id) } catch (e) {}
+        }
+        if (!(await SYNC.push())) throw new Error('drafts not saved to the server')
         const res = await (await fetch('/api/push', { method: 'POST' })).json()
         if (res && res.ok === false) {
           show('⚠ backup failed', '#c0392b')
@@ -554,5 +570,12 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     SYNC.schedulePush() // seed this device's existing drafts up to the shared store
   }
 
-  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), restoreScrollPos, backup }
+  // After every autosave (main.js): send it to the server, with the snapshot itself when the
+  // browser couldn't store it (s), so the server never misses an edit.
+  function pushLive(s) {
+    if (s) live = s
+    else if (live && live.id === getDocId()) live = null // the browser has it again
+    SYNC.schedulePush()
+  }
+  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), pushLive, restoreScrollPos, backup }
 }

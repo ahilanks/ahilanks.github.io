@@ -12,7 +12,7 @@ import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
-import { setupFigures, rehydrateVideos } from './figures.js'
+import { setupFigures, rehydrateVideos, storeInlineImages } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
@@ -394,13 +394,23 @@ const setStatus = (state, text) => {
 }
 const _save = debounce(() => {
   const s = currentSnapshot()
-  const drafts = JSON.parse(localStorage.getItem(LS.drafts) || '{}')
-  if (!s.created && drafts[doc.id]) s.created = drafts[doc.id].created // keep a created a sync added
-  drafts[doc.id] = s
-  localStorage.setItem(LS.drafts, JSON.stringify(drafts))
-  localStorage.setItem(LS.current, doc.id)
+  let all = {}
+  try { all = JSON.parse(localStorage.getItem(LS.drafts) || '{}') } catch (e) {}
+  if (!s.created && all[doc.id]) s.created = all[doc.id].created // keep a created a sync added
+  all[doc.id] = s
+  // The browser's copy can fail (localStorage is ~5 MB, all drafts together): the server's
+  // copy is the one that matters, so the save goes there either way.
+  let local = true
+  try {
+    localStorage.setItem(LS.drafts, JSON.stringify(all))
+    localStorage.setItem(LS.current, doc.id)
+  } catch (e) { local = false }
+  if (window.__drafts) window.__drafts.pushLive(local ? null : s) // (set up after load())
   setStatus('saved', 'Saved')
+  storeInlineImagesSoon()
 }, CONFIG.autosaveMs)
+// inline images in the open draft → files on the server (figures.js), a moment after edits
+const storeInlineImagesSoon = debounce(() => storeInlineImages(editor, getDocId, scheduleSave), 1500)
 const notes = setupNotes({ onChange: () => scheduleSave() })
 function scheduleSave() { setStatus('saving', 'Saving…'); _save() }
 
@@ -426,6 +436,7 @@ function applySnapshot(s) {
   if (wordCount) wordCount.refresh()
   // Re-create video sources for the draft just displayed (IndexedDB → disk backup).
   rehydrateVideos(editor, s.id || doc.id)
+  storeInlineImagesSoon()
 }
 function load() {
   const drafts = JSON.parse(localStorage.getItem(LS.drafts) || '{}')

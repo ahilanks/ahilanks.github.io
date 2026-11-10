@@ -1117,7 +1117,8 @@ def save_gif(draft_id, raw, mime):
     ext = MIME_EXT.get(mime, "")
     if not ext or ext == "svg":
         return None
-    fname = "gif-%s.%s" % (hashlib.sha1(raw).hexdigest()[:12], ext)
+    # gif-/img- prefixed names are never swept by prune_media (that only takes bare hashes)
+    fname = "%s-%s.%s" % ("gif" if ext == "gif" else "img", hashlib.sha1(raw).hexdigest()[:12], ext)
     d = media_dir(draft_id)
     os.makedirs(d, exist_ok=True)
     fp = os.path.join(d, fname)
@@ -1126,6 +1127,51 @@ def save_gif(draft_id, raw, mime):
             f.write(raw)
         os.replace(fp + ".tmp", fp)
     return "/drafts/media/%s/%s" % (draft_id, fname)
+
+
+DATA_IMG_RE = re.compile(r'src=(["\'])data:(image/[A-Za-z0-9.+\-]+);base64,([A-Za-z0-9+/=\s]+)\1')
+
+
+def store_inline_images(draft_id, html):
+    """Move a draft's inline base64 images out to files (save_gif) and point at those instead.
+    Inline, they add up in the browser's ~5 MB localStorage until every save fails: on
+    2026-11-09 one added photo tipped it over and the backup button just errored.
+    Returns (html, changed)."""
+    if not html or "data:image/" not in html:
+        return html, False
+    changed = False
+
+    def sub(m):
+        nonlocal changed
+        try:
+            raw = base64.b64decode(re.sub(r"\s+", "", m.group(3)))
+        except Exception:
+            return m.group(0)
+        src = save_gif(draft_id, raw, _sniff_image(raw) or m.group(2).lower())
+        if not src:
+            return m.group(0)  # svg and the like stay inline
+        changed = True
+        return 'src="%s"' % src
+
+    return DATA_IMG_RE.sub(sub, html), changed
+
+
+def store_all_inline_images(store):
+    """store_inline_images for every draft. A changed draft's `updated` goes up by 1 ms so
+    browsers take the slimmed copy in place of their inline one (newest wins). True if any did."""
+    any_changed = False
+    for _id, d in (store.get("drafts") or {}).items():
+        if not isinstance(d, dict) or not SAFE_ID_RE.match(_id):
+            continue
+        hit = False
+        for key in ("body", "footnotes"):
+            if isinstance(d.get(key), str):
+                d[key], changed = store_inline_images(_id, d[key])
+                hit = hit or changed
+        if hit:
+            d["updated"] = (d.get("updated") or 0) + 1
+            any_changed = True
+    return any_changed
 
 
 def _sniff_image(raw):
@@ -1329,6 +1375,7 @@ class Handler(SimpleHTTPRequestHandler):
         with LOCK:
             store = load_store()
             merge(store, incoming)
+            store_all_inline_images(store)
             save_store(store)
             out = store
         self._send_json(out)
@@ -1417,7 +1464,11 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     # mirror any existing drafts to files at startup
     try:
-        sync_draft_files(load_store())
+        _store = load_store()
+        if store_all_inline_images(_store):
+            save_store(_store)   # also mirrors the files
+        else:
+            sync_draft_files(_store)
     except Exception as e:
         sys.stderr.write(f"[drafts] startup sync failed: {e}\n")
     threading.Thread(target=auto_push_loop, daemon=True).start()

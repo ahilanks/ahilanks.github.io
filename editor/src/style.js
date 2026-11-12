@@ -11,6 +11,14 @@ import { $ } from './dom.js'
 
 export const STYLE_OPTIONS = [
   {
+    // a poem: lines sit right under each other, an empty line is the gap between stanzas
+    key: 'kind',
+    label: 'Kind',
+    def: 'essay',
+    choices: [{ value: 'essay', label: 'Essay' }, { value: 'poem', label: 'Poem' }],
+    hint: { poem: 'No gap between lines; leave an empty line between stanzas.' },
+  },
+  {
     key: 'footnotes',
     label: 'Footnotes',
     def: 'bottom',

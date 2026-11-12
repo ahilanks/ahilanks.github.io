@@ -488,6 +488,7 @@ setupFootnoteMargin(editor, comments)
 const style = setupStyle({
   apply: (s) => {
     setFootnotePlacement(s.footnotes)
+    document.body.classList.toggle('poem', s.kind === 'poem')
     document.body.classList.toggle('eq-sliders-off', s.eqSlider === 'off')
   },
   onChange: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },

@@ -1298,6 +1298,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      .katex { font-size: 1em; }',
     '      p, ul, ol { margin:0 0 1.25rem; }',
     '      p.small { font-size:0.85em; margin-bottom:1rem; }',
+    // a poem: lines right under each other, an empty line (which has no height of its own) the stanza break
+    looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; }' : '',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
     '      ul { list-style-type:disc; }',
@@ -1433,7 +1435,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '    </style>',
     '  </head>',
     // what publishing checks to tell whether the live page's style is out of date
-    styleKey(looks) ? '  <body data-style="' + escapeHtml(styleKey(looks)) + '">' : '  <body>',
+    '  <body' + (looks.kind === 'poem' ? ' class="poem"' : '') + (styleKey(looks) ? ' data-style="' + escapeHtml(styleKey(looks)) + '"' : '') + '>',
     tocHtml,
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.

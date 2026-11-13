@@ -66,6 +66,7 @@
       .prov-line:hover .prov-text { color:var(--text-color); }
       .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }
       .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }
+      .prov-line { margin-left:0.2em; } .prov-text:empty { display:none; }
       .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }
       .prov.open .prov-caret { transform:rotate(180deg); }
       .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }
@@ -110,7 +111,7 @@
     <main class="container">
       <h1>Before and After Handover</h1>
       <p class="subtitle">a collection of brief thoughts on digital intelligence</p>
-      <div class="meta"><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><span class="prov-sep">·</span><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">timestamp</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
+      <div class="meta"><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
       <figure class="img-block"><img src="media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""><figcaption><a target="_blank" rel="noopener" href="https://x.com/doganuraldesign/status/2101561517971750950">source</a></figcaption></figure><h2 id="sec-self-governance">Self-Governance</h2><p class="poem-date">Nov 12, 2026</p><p>Across the world</p><p>from <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose <a target="_blank" rel="noopener" href="https://ourworldindata.org/the-rise-of-electoral-democracy">heads of representation</a>.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now before us— stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p class="poem-date">Nov 13, 2026</p><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p><p></p>
     </main>
     <script>
@@ -237,10 +238,9 @@
       parts.push('an earlier version')
       dot.className = 'prov-dot old'
     } else {
+      // the status itself is in the panel; the line keeps just its coloured dot
       var st = mine ? statusOf(mine) : null
-      if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
-      else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }
-      else if (st && st.k === 'bad') { parts.push('timestamp invalid'); dot.className = 'prov-dot bad' }
+      dot.className = 'prov-dot' + (st ? ' ' + st.k : '')
     }
     text.textContent = parts.join(' · ')
     if (viewingOld && latest && here < latest.n) {
@@ -266,7 +266,11 @@
       h += '</ol>'
     }
     var cur = vs.length ? vs[0] : null
-    h += '<p class="prov-links">Timestamped in Bitcoin with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
+    var mine = null
+    for (var k = 0; k < vs.length; k++) if (vs[k].n === here) mine = vs[k]
+    var st = mine ? statusOf(mine) : null
+    var said = !st ? 'Timestamped in Bitcoin' : st.k === 'ok' ? 'Timestamped in Bitcoin' : st.k === 'bad' ? 'Bitcoin timestamp invalid' : 'Bitcoin timestamp pending'
+    h += '<p class="prov-links">' + said + ' with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
       (cur && vs.length === 1 ? ' · <a href="proofs/' + esc(slug) + '/' + esc(cur.ots) + '" download>proof</a>' : '') + '</p>'
     panel.innerHTML = h
   }

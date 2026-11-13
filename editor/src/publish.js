@@ -1042,10 +1042,9 @@ function provWidget() {
       parts.push('an earlier version')
       dot.className = 'prov-dot old'
     } else {
+      // the status itself is in the panel; the line keeps just its coloured dot
       var st = mine ? statusOf(mine) : null
-      if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
-      else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }
-      else if (st && st.k === 'bad') { parts.push('timestamp invalid'); dot.className = 'prov-dot bad' }
+      dot.className = 'prov-dot' + (st ? ' ' + st.k : '')
     }
     text.textContent = parts.join(' · ')
     if (viewingOld && latest && here < latest.n) {
@@ -1071,7 +1070,11 @@ function provWidget() {
       h += '</ol>'
     }
     var cur = vs.length ? vs[0] : null
-    h += '<p class="prov-links">Timestamped in Bitcoin with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
+    var mine = null
+    for (var k = 0; k < vs.length; k++) if (vs[k].n === here) mine = vs[k]
+    var st = mine ? statusOf(mine) : null
+    var said = !st ? 'Timestamped in Bitcoin' : st.k === 'ok' ? 'Timestamped in Bitcoin' : st.k === 'bad' ? 'Bitcoin timestamp invalid' : 'Bitcoin timestamp pending'
+    h += '<p class="prov-links">' + said + ' with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
       (cur && vs.length === 1 ? ' · <a href="proofs/' + esc(slug) + '/' + esc(cur.ots) + '" download>proof</a>' : '') + '</p>'
     panel.innerHTML = h
   }
@@ -1097,6 +1100,7 @@ const PROV_CSS = [
   '      .prov-line:hover .prov-text { color:var(--text-color); }',
   '      .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }',
   '      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }',
+  '      .prov-line { margin-left:0.2em; } .prov-text:empty { display:none; }',
   '      .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }',
   '      .prov.open .prov-caret { transform:rotate(180deg); }',
   '      .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }',
@@ -1209,7 +1213,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   // fills in the status.
   const provHtml = version
     ? '<span class="prov" id="prov" data-slug="' + escapeHtml(slug) + '" data-v="' + version.n + '" data-date="' + escapeHtml(version.date) + '">' +
-      '<span class="prov-sep">·</span><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">timestamp</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>' +
+      '<button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>' +
       '<span class="prov-panel" hidden></span></span>'
     : draft
       ? '      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'

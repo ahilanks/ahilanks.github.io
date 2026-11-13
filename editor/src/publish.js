@@ -1298,12 +1298,12 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '    <style>',
     '      :root { --text-color:#27323f; --link-color:#0f7ae5; --bg-color:#f1ebdf; --muted:#6b7280; --accent:#e8743b; }',
     '      body { margin:0; padding:0 1.5rem; font-family:' + fontFamily + '; color:var(--text-color); background:var(--bg-color); line-height:1.7; }',
-    '      .container { max-width:820px; margin:' + (draft ? '2rem' : '4rem') + ' auto 6rem; }',
+    '      .container { max-width:820px; margin:' + (draft ? '1.25rem' : '1.75rem') + ' auto 6rem; }',
     '      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }',
     '      .back:hover { text-decoration:underline; }',
     '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.8rem; letter-spacing:-0.01em; }',
     '      .subtitle { text-align:left; font-size:1.3rem; color:var(--muted); margin:0 0 1rem; }',
-    '      .meta { text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 3rem; }',
+    '      .meta { text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 1.75rem; }',
     '      .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }',
     '      .math-block .katex-display { margin:0; }',
     '      .math-block.align-left, .math-block.align-left .katex-display { text-align:left; }',
@@ -1486,7 +1486,16 @@ async function updateWritingsIndex(sink, post) {
   let text = await r.text()
 
   const liId = 'post-' + post.slug
-  if (text.includes('id="' + liId + '"')) return false // already listed
+  const sub = (post.subtitle || '').trim()
+  const subHtml = sub ? '<p class="post-sub">' + escapeHtml(sub) + '</p>' : ''
+  if (text.includes('id="' + liId + '"')) {
+    // already listed: keep its subtitle line in step with the article's
+    const re = new RegExp('(<li class="post" id="' + liId + '">[\\s\\S]*?</a\\s*>)(\\s*<p class="post-sub">[\\s\\S]*?</p>)?(?=\\s*<p class="post-meta">)')
+    const next = text.replace(re, (m, head) => head + (subHtml ? '\n            ' + subHtml : ''))
+    if (next === text) return false
+    await sink.add('writings.html', next)
+    return true
+  }
 
   const thumbInner = post.thumb
     ? '<img src="' + post.thumb + '" alt="" onerror="this.parentNode.classList.add(\'no-img\');this.remove();" />'
@@ -1496,6 +1505,7 @@ async function updateWritingsIndex(sink, post) {
     '          <a class="post-thumb" href="writings/' + post.slug + '.html">' + thumbInner + '</a>\n' +
     '          <div class="post-info">\n' +
     '            <a class="post-title" href="writings/' + post.slug + '.html">' + escapeHtml(post.title) + '</a>\n' +
+    (subHtml ? '            ' + subHtml + '\n' : '') +
     '            <p class="post-meta">' + escapeHtml(post.date) + ' · ' + post.minutes + ' min</p>\n' +
     '          </div>\n' +
     '        </li>'
@@ -1754,7 +1764,7 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       // 4) update the writings.html index list
       if ($('pubUpdateList').checked) {
-        await updateWritingsIndex(sink, { slug, title: titleText, date: dateStr, minutes, thumb: thumbPath })
+        await updateWritingsIndex(sink, { slug, title: titleText, subtitle: subtitleText, date: dateStr, minutes, thumb: thumbPath })
       }
 
       const written = await sink.flush()

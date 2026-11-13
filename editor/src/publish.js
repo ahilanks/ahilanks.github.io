@@ -1039,11 +1039,9 @@ function provWidget() {
     for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
     var parts = []
     if (viewingOld && latest && here < latest.n) {
-      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
-      parts.push('superseded')
+      parts.push('an earlier version')
       dot.className = 'prov-dot old'
     } else {
-      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       var st = mine ? statusOf(mine) : null
       if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
       else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }
@@ -1093,16 +1091,17 @@ function provWidget() {
 }
 
 const PROV_CSS = [
-  '      .prov { margin:-1.1rem 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); line-height:1.5; }',
-  '      .prov-line { display:inline-flex; align-items:center; gap:0.45rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; letter-spacing:0.01em; }',
+  '      .prov { display:contents; }',
+  '      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }',
+  '      .prov-line:focus:not(:focus-visible) { outline:none; }',
   '      .prov-line:hover .prov-text { color:var(--text-color); }',
   '      .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }',
   '      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }',
   '      .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }',
   '      .prov.open .prov-caret { transform:rotate(180deg); }',
-  '      .prov-current { display:block; margin:0.15rem 0 0 0.95rem; color:var(--text-color); text-decoration:none; }',
+  '      .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }',
   '      .prov-current:hover { text-decoration:underline; }',
-  '      .prov-panel { margin:0.4rem 0 0 0.95rem; }',
+  '      .prov-panel { flex-basis:100%; margin:0.3rem 0 0; font-size:0.85rem; }',
   '      .prov-links { margin:0; } .prov-panel a { color:var(--muted); } .prov-panel a:hover { color:var(--text-color); }',
   '      .prov-list { list-style:none; margin:0 0 0.3rem; padding:0; }',
   '      .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }',
@@ -1205,13 +1204,13 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       : font === 'mono' ? 'JetBrains+Mono:wght@400;500'
         : 'Inter:wght@400;600;700'
 
-  // Provenance line above the title (publish) / draft label (draft). The static text is
-  // what shows before (or without) the manifest fetch; provWidget() enriches it.
+  // Timestamp status, at the end of the date · minutes line (publish) / draft label above the
+  // title (draft). The static text shows before (or without) the manifest fetch; provWidget()
+  // fills in the status.
   const provHtml = version
-    ? '      <div class="prov" id="prov" data-slug="' + escapeHtml(slug) + '" data-v="' + version.n + '" data-date="' + escapeHtml(version.date) + '">\n' +
-      '        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">' + escapeHtml(longDate(version.date)) + '</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>\n' +
-      '        <div class="prov-panel" hidden></div>\n' +
-      '      </div>'
+    ? '<span class="prov" id="prov" data-slug="' + escapeHtml(slug) + '" data-v="' + version.n + '" data-date="' + escapeHtml(version.date) + '">' +
+      '<span class="prov-sep">·</span><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">timestamp</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>' +
+      '<span class="prov-panel" hidden></span></span>'
     : draft
       ? '      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
@@ -1243,9 +1242,9 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      .container { max-width:820px; margin:' + (draft ? '1.25rem' : '1.75rem') + ' auto 6rem; }',
     '      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }',
     '      .back:hover { text-decoration:underline; }',
-    '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.8rem; letter-spacing:-0.01em; }',
+    '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }',
     '      .subtitle { text-align:left; font-size:1.3rem; color:var(--muted); margin:0 0 1rem; }',
-    '      .meta { text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 1.75rem; }',
+    '      .meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.4em; text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 1.75rem; }',
     '      .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }',
     '      .math-block .katex-display { margin:0; }',
     '      .math-block.align-left, .math-block.align-left .katex-display { text-align:left; }',
@@ -1395,11 +1394,10 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     tocHtml,
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.
-    draft ? '' : '      <a class="back" href="' + up + 'writings.html">← Writings</a>',
-    provHtml,
+    version ? '' : provHtml, // a draft's label
     '      <h1>' + title + '</h1>',
     subtitle ? '      <p class="subtitle">' + subtitle + '</p>' : '',
-    '      <p class="meta">' + (looks.poemDates === 'each' ? '' : escapeHtml(dateStr) + ' · ') + minutes + ' min</p>',
+    '      <div class="meta"><span>' + escapeHtml(dateStr) + ' · ' + minutes + ' min</span>' + (version ? provHtml : '') + '</div>',
     '      ' + bodyHtml,
     footHtml,
     '    </main>',

@@ -14,9 +14,9 @@
       .container { max-width:820px; margin:1.75rem auto 6rem; }
       .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }
       .back:hover { text-decoration:underline; }
-      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.8rem; letter-spacing:-0.01em; }
+      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }
       .subtitle { text-align:left; font-size:1.3rem; color:var(--muted); margin:0 0 1rem; }
-      .meta { text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 1.75rem; }
+      .meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.4em; text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 1.75rem; }
       .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }
       .math-block .katex-display { margin:0; }
       .math-block.align-left, .math-block.align-left .katex-display { text-align:left; }
@@ -60,16 +60,17 @@
       .fn-back:hover { color:var(--text-color); }
       .fn-flash { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); border-radius:3px; }
       .fn-flash.fn-flash-fade { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); transition:background-color 1.2s ease-out, box-shadow 1.2s ease-out; }
-      .prov { margin:-1.1rem 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:var(--muted); line-height:1.5; }
-      .prov-line { display:inline-flex; align-items:center; gap:0.45rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; letter-spacing:0.01em; }
+      .prov { display:contents; }
+      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }
+      .prov-line:focus:not(:focus-visible) { outline:none; }
       .prov-line:hover .prov-text { color:var(--text-color); }
       .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }
       .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }
       .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }
       .prov.open .prov-caret { transform:rotate(180deg); }
-      .prov-current { display:block; margin:0.15rem 0 0 0.95rem; color:var(--text-color); text-decoration:none; }
+      .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }
       .prov-current:hover { text-decoration:underline; }
-      .prov-panel { margin:0.4rem 0 0 0.95rem; }
+      .prov-panel { flex-basis:100%; margin:0.3rem 0 0; font-size:0.85rem; }
       .prov-links { margin:0; } .prov-panel a { color:var(--muted); } .prov-panel a:hover { color:var(--text-color); }
       .prov-list { list-style:none; margin:0 0 0.3rem; padding:0; }
       .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }
@@ -107,14 +108,9 @@
       </div>
     </nav>
     <main class="container">
-      <a class="back" href="../writings.html">← Writings</a>
-      <div class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z">
-        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">Nov 13, 2026</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
-        <div class="prov-panel" hidden></div>
-      </div>
       <h1>Before and After Handover</h1>
       <p class="subtitle">a collection of brief thoughts on digital intelligence</p>
-      <p class="meta">1 min</p>
+      <div class="meta"><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><span class="prov-sep">·</span><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">timestamp</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
       <figure class="img-block"><img src="media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""><figcaption><a target="_blank" rel="noopener" href="https://x.com/doganuraldesign/status/2101561517971750950">source</a></figcaption></figure><h2 id="sec-self-governance">Self-Governance</h2><p class="poem-date">Nov 12, 2026</p><p>Across the world</p><p>from <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose <a target="_blank" rel="noopener" href="https://ourworldindata.org/the-rise-of-electoral-democracy">heads of representation</a>.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now before us— stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p class="poem-date">Nov 13, 2026</p><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p><p></p>
     </main>
     <script>
@@ -238,11 +234,9 @@
     for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
     var parts = []
     if (viewingOld && latest && here < latest.n) {
-      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
-      parts.push('superseded')
+      parts.push('an earlier version')
       dot.className = 'prov-dot old'
     } else {
-      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       var st = mine ? statusOf(mine) : null
       if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
       else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }

@@ -397,6 +397,54 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix, bodyHtml) {
   return { html, files }
 }
 
+/* ------------------------------------------------------------ copy for Substack */
+// The published article's body as rich HTML for Substack's editor: images and links made
+// absolute (Substack copies the images in on paste), editor/page-only parts dropped, folds
+// opened, footnote markers as plain superscripts with the notes listed at the end. Title and
+// subtitle go in Substack's own fields. Math stays as LaTeX text (Substack can't take it).
+async function substackHtml(slug) {
+  const site = (CONFIG.siteUrl || '').replace(/\/$/, '')
+  const r = await fetch('/writings/' + encodeURIComponent(slug) + '.html', { cache: 'no-store' })
+  if (!r.ok) throw new Error('Publish it first: Substack needs the images online.')
+  const page = new DOMParser().parseFromString(await r.text(), 'text/html')
+  const main = page.querySelector('main') || page.body
+  main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
+  const base = site + '/writings/' + slug + '.html'
+  main.querySelectorAll('img[src]').forEach((img) => { img.src = new URL(img.getAttribute('src'), base).href })
+  main.querySelectorAll('a[href]').forEach((a) => {
+    const h = a.getAttribute('href')
+    if (h.startsWith('#')) { if (a.closest('sup')) a.replaceWith(...a.childNodes); else a.removeAttribute('href') }
+    else a.href = new URL(h, base).href
+  })
+  // folds: their title as a heading, their text in the open
+  main.querySelectorAll('details').forEach((d) => {
+    const sum = d.querySelector('summary')
+    const h = page.createElement('h3')
+    if (sum) { h.innerHTML = sum.innerHTML; sum.remove() }
+    d.replaceWith(h, ...d.childNodes)
+  })
+  main.querySelectorAll('ol.footnotes').forEach((ol) => {
+    const h = page.createElement('h3'); h.textContent = 'Notes'
+    ol.before(h)
+    ol.querySelectorAll('.fn-text').forEach((t) => t.replaceWith(...t.childNodes))
+  })
+  // a poem: each stanza one paragraph, its lines joined by line breaks (Substack spaces paragraphs apart)
+  if (page.body.classList.contains('poem')) {
+    const kids = Array.from(main.children)
+    let stanza = null
+    for (const el of kids) {
+      const line = el.tagName === 'P' && !el.className
+      if (!line) { stanza = null; continue }
+      if (!el.textContent.trim() && !el.querySelector('img')) { el.remove(); stanza = null; continue }
+      if (stanza) { stanza.append(page.createElement('br'), ...el.childNodes); el.remove() } else stanza = el
+    }
+  }
+  main.querySelectorAll('[id], [class], [style], [data-levels], [data-dy]').forEach((el) => {
+    ;['id', 'class', 'style', 'data-levels', 'data-dy'].forEach((a) => el.removeAttribute(a))
+  })
+  return { html: main.innerHTML.trim(), math: /\$[^$\s][^$]*\$/.test(main.textContent || '') }
+}
+
 /* ------------------------------------------------------ footnote round trip (page) */
 // Runs INSIDE the published article (embedded via fnTrip.toString(), same rules as
 // provWidget below). A footnote marker glides to its note and raises a floating
@@ -1747,6 +1795,20 @@ export function setupPublish({ editor, currentSnapshot }) {
 
   $('publishBtn').addEventListener('click', openPublish)
   $('publishClose').addEventListener('click', closePublish)
+  // Copy for Substack: the clipboard is written from inside the click (a promised blob keeps
+  // the browser's permission while the page loads)
+  $('pubSubstack').addEventListener('click', () => {
+    const slug = slugify($('pubSlug').value || htmlToText(currentSnapshot().title))
+    let math = false, failed = null
+    const html = substackHtml(slug).then((x) => { math = x.math; return x.html }, (e) => { failed = e; throw e })
+    const item = new ClipboardItem({
+      'text/html': html.then((h) => new Blob([h], { type: 'text/html' })),
+      'text/plain': html.then((h) => { const d = document.createElement('div'); d.innerHTML = h; return new Blob([d.innerText], { type: 'text/plain' }) }),
+    })
+    navigator.clipboard.write([item])
+      .then(() => toast(math ? 'Copied. It has math, which Substack shows as LaTeX text' : 'Copied — paste into a new Substack post; title and subtitle go in their own fields'))
+      .catch(() => toast(failed ? failed.message : "Couldn't copy for Substack"))
+  })
   $('publishConfirm').addEventListener('click', doPublish)
   $('thumbDrop').addEventListener('click', chooseThumb)
   document.querySelectorAll('#pubMode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))

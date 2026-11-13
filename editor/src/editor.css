@@ -154,7 +154,10 @@ body.vk-open .surface { padding-bottom: 50vh; }
 .doc-body { font-size: 1.12rem; }
 .doc-body > * { margin: 0 0 1.25rem; }
 /* a poem (Style → Kind): lines right under each other; an empty line is the stanza break */
-body.poem .doc-body-pm > p, body.poem .collapsible-body > p { margin: 0; }
+body.poem .doc-body-pm > p, body.poem .collapsible-body > p { margin: 0; line-height: 1.42; }
+/* the stanza break: a shorter empty line */
+body.poem .doc-body-pm > p:has(> br:only-child), body.poem .collapsible-body > p:has(> br:only-child),
+body.poem .doc-body-pm > p:empty, body.poem .collapsible-body > p:empty { line-height: 0.85; }
 /* "Small" paragraph style (toolbar): notes/asides a step below body size. em-based so it
    tracks the writing font's own size; a tighter gap so consecutive small lines read as one block. */
 .doc-body p.small { font-size: 0.85em; margin-bottom: 1rem; }

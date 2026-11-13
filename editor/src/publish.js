@@ -1299,7 +1299,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      p, ul, ol { margin:0 0 1.25rem; }',
     '      p.small { font-size:0.85em; margin-bottom:1rem; }',
     // a poem: lines right under each other, an empty line (which has no height of its own) the stanza break
-    looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; }' : '',
+    looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; line-height:1.42; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }' : '',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
     '      ul { list-style-type:disc; }',

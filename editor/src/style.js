@@ -19,6 +19,15 @@ export const STYLE_OPTIONS = [
     hint: { poem: 'No gap between lines; leave an empty line between stanzas.' },
   },
   {
+    // a collection of poems, each written on its own day: the date goes under each poem's title
+    key: 'poemDates',
+    label: 'Dates',
+    def: 'header',
+    when: { kind: 'poem' },
+    choices: [{ value: 'header', label: 'In the header' }, { value: 'each', label: 'Under each poem' }],
+    hint: { each: 'Type each date under its poem’s heading.' },
+  },
+  {
     key: 'footnotes',
     label: 'Footnotes',
     def: 'bottom',
@@ -39,6 +48,7 @@ export function normalizeStyle(style) {
   const out = {}
   for (const o of STYLE_OPTIONS) {
     const v = style && style[o.key]
+    if (o.when && !Object.entries(o.when).every(([k, w]) => style && style[k] === w)) continue
     if (v !== o.def && o.choices.some((c) => c.value === v)) out[o.key] = v
   }
   return out
@@ -95,12 +105,13 @@ export function setupStyle({ onChange, apply }) {
     hint.className = 'style-hint'
     row.append(name, seg, hint)
     panel.appendChild(row)
-    return { o, buttons, hint }
+    return { o, buttons, hint, row }
   })
   document.body.appendChild(panel)
 
   function refresh() {
-    rows.forEach(({ o, buttons, hint }) => {
+    rows.forEach(({ o, buttons, hint, row }) => {
+      row.hidden = !!o.when && !Object.entries(o.when).every(([k, w]) => (style[k] || STYLE_OPTIONS.find((x) => x.key === k).def) === w)
       const cur = style[o.key] || o.def
       buttons.forEach(({ b, value }) => {
         b.classList.toggle('active', value === cur)

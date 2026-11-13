@@ -7,6 +7,7 @@ import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
 import { FootnoteRef, setupFootnotes, setupFootnoteMargin, setFootnotePlacement, footnotesHTML, loadFootnotesHTML, activeFootnoteBody } from './nodes/footnote.js'
 import { setupStyle } from './style.js'
+import { PoemDates, setPoemDates } from './poem-dates.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
@@ -128,6 +129,7 @@ export const editor = new Editor({
     Canvas.configure({ getDocId: () => getDocId() }),
     BlockDrag,
     HeadingAnchor,
+    PoemDates,
     CommentMark,
     Suggestions,
     SectionFocus,
@@ -492,6 +494,7 @@ const style = setupStyle({
   apply: (s) => {
     setFootnotePlacement(s.footnotes)
     document.body.classList.toggle('poem', s.kind === 'poem')
+    setPoemDates(editor, s.kind === 'poem' && s.poemDates === 'each')
     document.body.classList.toggle('eq-sliders-off', s.eqSlider === 'off')
   },
   onChange: () => { scheduleSave(); setTimeout(() => drafts.schedulePush(), CONFIG.autosaveMs + 100) },

@@ -20,6 +20,12 @@ export const HeadingAnchor = Extension.create({
           parseHTML: (el) => el.getAttribute('data-anchor') || null,
           renderHTML: (attrs) => (attrs.anchor ? { 'data-anchor': attrs.anchor } : {}),
         },
+        // a poem's own date (Style → Dates → Under each poem), shown under its heading
+        date: {
+          default: null,
+          parseHTML: (el) => el.getAttribute('data-date') || null,
+          renderHTML: (attrs) => (attrs.date ? { 'data-date': attrs.date } : {}),
+        },
         // "In progress" (Contents panel): publish.js sends readers the heading and a short
         // note instead of the section's text
         inProgress: {

@@ -207,7 +207,17 @@ function holdBackSections(bodyHtml) {
 // math nodes -> $..$ / $$..$$ text for KaTeX auto-render, footnote refs -> numbered anchors.
 // Also gives every non-empty H2/H3 an id and returns the contents-panel entries
 // ({ id, text, level, n }, where n is the §-number counted over H2s only).
-function bodyToPublishHtml(clone, { sliders = true } = {}) {
+function bodyToPublishHtml(clone, { sliders = true, poemDates = false } = {}) {
+  // a poem's own date (Style → Dates → Under each poem) → a line under its heading
+  clone.querySelectorAll('[data-date]').forEach((h) => {
+    const date = (h.getAttribute('data-date') || '').trim()
+    h.removeAttribute('data-date')
+    if (!poemDates || !date || !/^H[1-6]$/.test(h.tagName)) return
+    const p = document.createElement('p')
+    p.className = 'poem-date'
+    p.textContent = date
+    h.after(p)
+  })
   // review comments are editor-only: unwrap their anchor spans, keep the words
   clone.querySelectorAll('span[data-comment]').forEach((s) => s.replaceWith(...s.childNodes))
   // inline math -> literal $tex$ text
@@ -1302,7 +1312,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      p, ul, ol { margin:0 0 1.25rem; }',
     '      p.small { font-size:0.85em; margin-bottom:1rem; }',
     // a poem: lines right under each other, an empty line (which has no height of its own) the stanza break
-    looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; line-height:1.42; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }' : '',
+    looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta):not(.poem-date), body.poem .collapsible-body > p:not(.poem-date) { margin:0; line-height:1.42; } .poem-date { margin:0 0 1rem; font-size:0.85rem; color:var(--muted); } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }' : '',
     hasCanvas ? CANVAS_CSS.split('\n').filter(Boolean).map((l) => '      ' + l).join('\n') : '',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
@@ -1447,7 +1457,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     provHtml,
     '      <h1>' + title + '</h1>',
     subtitle ? '      <p class="subtitle">' + subtitle + '</p>' : '',
-    '      <p class="meta">' + escapeHtml(dateStr) + ' · ' + minutes + ' min</p>',
+    '      <p class="meta">' + (looks.poemDates === 'each' ? '' : escapeHtml(dateStr) + ' · ') + minutes + ' min</p>',
     '      ' + bodyHtml,
     footHtml,
     '    </main>',
@@ -1681,7 +1691,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       // 1) split inline data-URI images out to writings/media/<slug>-<hash>.<ext>
       //    (footnote images likewise, as <slug>-fn-<hash>.<ext>)
       const held = holdBackSections(snap.body).html
-      const { html: bodyHtml, files, toc } = await buildBody(held, slug, mediaPrefix, { sliders: normalizeStyle(snap.style).eqSlider !== 'off' })
+      const { html: bodyHtml, files, toc } = await buildBody(held, slug, mediaPrefix, { sliders: normalizeStyle(snap.style).eqSlider !== 'off', poemDates: normalizeStyle(snap.style).poemDates === 'each' })
       const { html: footHtml, files: fnFiles } = await buildFootnotesHtml($('fnList'), slug, mediaPrefix, held)
       files.push(...fnFiles)
       for (const f of files) await sink.add('writings/media/' + f.name, f.blob)

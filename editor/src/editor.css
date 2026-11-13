@@ -1176,3 +1176,11 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .poem-date-in::placeholder { color: rgba(107, 114, 128, 0.45); }
 .poem-date-in:hover::placeholder, .poem-date-in:focus::placeholder { color: rgba(107, 114, 128, 0.8); }
 .style-row[hidden] { display: none; }
+
+/* Style → Poem → Layout: Canvas — the whole poem is one canvas and the toolbar adds to it */
+.tb-canvas-only { display: none; }
+body.poem-canvas .tb-canvas-only { display: inline-flex; }
+body.poem-canvas .cv-bar { display: none; }
+body.poem-canvas .canvas-block.cv-edit { margin-top: 0.5rem; }
+body.poem-canvas :is(#footnoteBtn, #videoBtn, #mathBtn, #mathKbdToggle, #collapseBtn, #linkBtn, #formatSelect) { opacity: 0.3; pointer-events: none; }
+body.poem-canvas .doc-body-pm > .canvas-block ~ p:empty { display: none; }

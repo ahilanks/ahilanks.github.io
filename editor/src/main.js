@@ -11,10 +11,10 @@ import { PoemDates, setPoemDates } from './poem-dates.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
-import { Canvas } from './nodes/canvas.js'
+import { Canvas, activeCanvas, docToCanvas, canvasToDoc, isAllCanvas } from './nodes/canvas.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
-import { setupFigures, rehydrateVideos, storeInlineImages } from './figures.js'
+import { setupFigures, rehydrateVideos, storeInlineImages, routeToCanvas } from './figures.js'
 import { setupMathLive, mathKeyboard } from './mathlive-config.js'
 import { setupAiMath } from './ai-math.js'
 import { setupLinks } from './links.js'
@@ -303,16 +303,26 @@ window.__editor = editor
 // A footnote body (raw contenteditable outside the doc) formats natively; anything else
 // goes through TipTap. Without the branch, `focus()` would yank the caret into the article.
 const cmd = {
-  bold: () => activeFootnoteBody() ? document.execCommand('bold') : editor.chain().focus().toggleBold().run(),
-  italic: () => activeFootnoteBody() ? document.execCommand('italic') : editor.chain().focus().toggleItalic().run(),
+  bold: () => activeFootnoteBody() || canvasTyping() ? document.execCommand('bold') : editor.chain().focus().toggleBold().run(),
+  italic: () => activeFootnoteBody() || canvasTyping() ? document.execCommand('italic') : editor.chain().focus().toggleItalic().run(),
 }
 
 document.querySelectorAll('.tb-btn[data-cmd], .bubble button[data-cmd]').forEach((b) => {
   b.addEventListener('mousedown', (e) => { e.preventDefault(); cmd[b.dataset.cmd]?.() })
 })
 
-$('quoteBtn').addEventListener('mousedown', (e) => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() })
-$('canvasBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().insertCanvas().run() })
+$('quoteBtn').addEventListener('mousedown', (e) => {
+  e.preventDefault()
+  const cv = activeCanvas()
+  if (cv) cv.addText('quote'); else editor.chain().focus().toggleBlockquote().run()
+})
+// A poem laid out as a canvas (Style → Layout): the toolbar adds to the canvas
+const canvasTyping = () => { const cv = activeCanvas(); return !!(cv && cv.editing()) }
+$('textBoxBtn').addEventListener('mousedown', (e) => { e.preventDefault(); const cv = activeCanvas(); if (cv) cv.addText('text') })
+routeToCanvas({
+  active: () => !!activeCanvas(),
+  image: (src) => { const cv = activeCanvas(); if (!cv) return false; cv.addImageSrc(src); return true },
+})
 $('collapseBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().toggleCollapsible().run() })
 
 $('formatSelect').addEventListener('change', (e) => {
@@ -491,9 +501,14 @@ window.__comments = comments // console debugging, like __editor
 // Style: the toolbar's per-article look. A pick saves and syncs at once, since no edit follows it.
 setupFootnoteMargin(editor, comments)
 const style = setupStyle({
-  apply: (s) => {
+  apply: (s, picked) => {
     setFootnotePlacement(s.footnotes)
     document.body.classList.toggle('poem', s.kind === 'poem')
+    const asCanvas = s.kind === 'poem' && s.layout === 'canvas'
+    document.body.classList.toggle('poem-canvas', asCanvas)
+    // the writer switched layouts: the poem's text moves onto a canvas, or back off it
+    if (picked && asCanvas && !isAllCanvas(editor)) docToCanvas(editor)
+    else if (picked && !asCanvas) canvasToDoc(editor)
     setPoemDates(editor, s.kind === 'poem' && s.poemDates === 'each')
     document.body.classList.toggle('eq-sliders-off', s.eqSlider === 'off')
   },

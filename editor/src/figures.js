@@ -47,8 +47,13 @@ function pinPos(editor, pos) {
   return () => { editor.off('transaction', track); return pos }
 }
 
+/* A poem laid out as a canvas takes images as boxes on it instead (main.js sets this). */
+let canvasRoute = null
+export function routeToCanvas(r) { canvasRoute = r }
+
 // Insert at `pos` (a drop point) or the current selection.
 function insertImageSrc(editor, src, pos) {
+  if (canvasRoute && canvasRoute.image(src)) return
   const chain = editor.chain().focus()
   if (pos != null) chain.setTextSelection(pos)
   chain.insertFigure({ src, mediaType: 'image' }).run()
@@ -140,6 +145,7 @@ async function backupVideo(draftId, name, file) {
 
 async function insertVideoFile(editor, file, getDocId, pos) {
   if (!file || !file.type.startsWith('video/')) return
+  if (canvasRoute && canvasRoute.active()) { toast("Videos can't go on a canvas"); return }
   const id = uid()
   const ext = extFromType(file.type, (file.name.split('.').pop() || 'mp4').toLowerCase())
   const at = pinPos(editor, pos)

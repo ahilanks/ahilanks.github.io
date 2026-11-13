@@ -10,7 +10,7 @@
  * Text boxes keep their lines as <div>s; an empty line (<div><br></div>) is a stanza break.
  */
 
-import { Node, DOMSerializer } from '../../vendor/lib.bundle.js'
+import { Node, DOMSerializer, DOMParser, Fragment } from '../../vendor/lib.bundle.js'
 import { toast } from '../dom.js'
 import { storeGif } from '../figures.js'
 
@@ -108,6 +108,15 @@ export function canvasForPublish(root) {
         (w != null ? 'width:' + cq(w) + ';' : '') + (fs != null && !bx.classList.contains('cv-image') ? 'font-size:' + cq(fs) + ';' : ''))
     })
   })
+}
+
+/* The open canvas views. A poem laid out as a canvas (Style → Layout: Canvas, which puts
+   body.poem-canvas on the page) is one canvas, and the toolbar adds to it (activeCanvas). */
+const views = new Set()
+export function activeCanvas() {
+  if (!document.body.classList.contains('poem-canvas')) return null
+  for (const v of views) if (v.dom.isConnected) return v
+  return null
 }
 
 let cssAdded = false
@@ -237,16 +246,34 @@ function canvasView({ node, editor, getPos, extension }) {
   }
 
   function freeY() { return boxes.length ? r2(contentBottom() + 2) : 4 }
+  // where something new goes: the middle of the part of the canvas you can see
+  function spot() {
+    const r = dom.getBoundingClientRect(), u = unit()
+    const top = Math.max(r.top, 60), bottom = Math.min(r.bottom, window.innerHeight)
+    if (bottom - top < 40) return { x: 30, y: freeY() }
+    return { x: 30, y: r2(Math.max(0, ((top + bottom) / 2 - r.top) / u - 4)) }
+  }
+  let lastDrop = null // the canvas point a file is being dragged over (its drop lands there)
 
   function addText(k) {
     if (editing >= 0) finishEdit()
-    const b = { k, x: 6, y: freeY(), w: k === 'quote' ? 50 : null, fs: DEF_FS, html: '<div>' + (k === 'quote' ? 'A quote' : 'Text') + '</div>' }
+    const at = full() ? spot() : { x: 6, y: freeY() }
+    const b = { k, x: full() ? at.x : 6, y: at.y, w: k === 'quote' ? 50 : null, fs: DEF_FS, html: '<div>' + (k === 'quote' ? 'A quote' : 'Text') + '</div>' }
     boxes.push(b)
     sel = boxes.length - 1
     render()
     fit(true)
     commit()
     startEdit(boxes.length - 1, null, true)
+  }
+
+  function addImageSrc(src) {
+    const at = lastDrop && Date.now() - lastDrop.t < 3000 ? { x: r2(clamp(lastDrop.x - 15, 0, 70)), y: r2(Math.max(0, lastDrop.y - 5)) } : spot()
+    lastDrop = null
+    boxes.push({ k: 'image', x: at.x, y: at.y, w: 30, src })
+    sel = boxes.length - 1
+    render()
+    commit()
   }
 
   async function addImages(files, at) {
@@ -471,7 +498,12 @@ function canvasView({ node, editor, getPos, extension }) {
 
   /* ── drop image files onto the canvas ── */
   const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')
-  dom.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); dom.classList.add('drop') } })
+  dom.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return
+    e.preventDefault(); dom.classList.add('drop')
+    const r = dom.getBoundingClientRect(), u = unit()
+    lastDrop = { x: (e.clientX - r.left) / u, y: (e.clientY - r.top) / u, t: Date.now() }
+  })
   dom.addEventListener('dragleave', () => dom.classList.remove('drop'))
   dom.addEventListener('drop', (e) => {
     dom.classList.remove('drop')
@@ -481,9 +513,39 @@ function canvasView({ node, editor, getPos, extension }) {
     addImages(Array.from(e.dataTransfer.files), { x: (e.clientX - r.left) / u, y: (e.clientY - r.top) / u })
   })
 
+  const full = () => dom.classList.contains('cv-full') || (document.body.classList.contains('poem-canvas') && dom.isConnected)
+
+  // A canvas just made from text starts at height 0: stack its boxes top to bottom in their
+  // order (measured, once the images have loaded), then fit the canvas around them.
+  async function stack() {
+    await Promise.all(Array.from(layer.querySelectorAll('img')).map((i) => i.decode().catch(() => {})))
+    if (!dom.isConnected) return
+    const u = unit()
+    let y = 4
+    boxes.forEach((b, i) => {
+      b.y = r2(y)
+      const el = boxElAt(i)
+      if (el) place(el, b)
+      const next = boxes[i + 1]
+      const title = b.k === 'text' && b.fs > DEF_FS * 1.2
+      const dateNext = next && next.k === 'text' && next.fs < DEF_FS * 0.9
+      y += (el ? el.offsetHeight / u : 5) + (title ? (dateNext ? 0.3 : 1.2) : b.fs < DEF_FS * 0.9 ? 1.6 : 5)
+    })
+    h = Math.ceil(y + (full() ? 12 : 0))
+    dom.style.aspectRatio = '100 / ' + h
+    commit(false)
+  }
+
   render()
-  // a canvas just made from selected text starts at height 0: fit it to the text
-  if (!h) setTimeout(() => fit(false, true), 0)
+  if (!h) setTimeout(() => (boxes.length ? stack() : fit(false, true)), 0)
+
+  const api = {
+    dom,
+    addText,
+    addImageSrc,
+    editing: () => editing >= 0,
+  }
+  views.add(api)
 
   return {
     dom,
@@ -504,7 +566,7 @@ function canvasView({ node, editor, getPos, extension }) {
       return true
     },
     ignoreMutation() { return true },
-    destroy() { clearTimeout(nudgeT) },
+    destroy() { clearTimeout(nudgeT); views.delete(api) },
   }
 }
 
@@ -515,6 +577,17 @@ export const Canvas = Node.create({
   selectable: true,
   draggable: false,
   addOptions() { return { getDocId: null } },
+  // the boxes' words, for the word count (and anything else that reads the doc's text)
+  extendNodeSchema(ext) {
+    if (ext.name !== 'canvas') return {}
+    return {
+      leafText: (node) => (node.attrs.boxes || []).filter((b) => b.k !== 'image').map((b) => {
+        const d = document.createElement('div')
+        d.innerHTML = (b.html || '').replace(/<\/div>|<br>/g, ' ')
+        return d.textContent
+      }).join(' '),
+    }
+  },
   addAttributes() {
     return {
       h: { default: 50, parseHTML: (el) => num(el.getAttribute('data-h'), 50) },
@@ -568,3 +641,101 @@ export const Canvas = Node.create({
     }
   },
 })
+
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const TITLE_RE = /^<div><b>([\s\S]*)<\/b><\/div>$/
+
+/* Style → Layout: Canvas. The whole draft becomes one canvas: each heading (a poem's title)
+   a bold box, its date a small one, each run of lines a box, quotes quote boxes, images image
+   boxes, all stacked in order to start with. */
+export function docToCanvas(editor) {
+  const { state } = editor
+  const ser = DOMSerializer.fromSchema(state.schema)
+  const inline = (n) => { const d = document.createElement('div'); d.append(ser.serializeFragment(n.content)); return d.innerHTML }
+  const boxes = []
+  let run = []
+  const text = (html, fs, extra) => boxes.push({ k: 'text', x: 6, y: 0, w: null, fs, html: cleanBoxHtml(html), ...extra })
+  const flush = () => {
+    while (run.length && run[run.length - 1] === '<div><br></div>') run.pop()
+    if (run.length) text(run.join(''), DEF_FS)
+    run = []
+  }
+  const walk = (n) => {
+    const t = n.type.name
+    if (t === 'heading') {
+      flush()
+      const h = inline(n)
+      if (h) text('<div><b>' + h + '</b></div>', n.attrs.level <= 2 ? 3.3 : 2.9)
+      if (n.attrs.date) text('<div>' + esc(n.attrs.date) + '</div>', 1.9)
+    } else if (n.isTextblock) {
+      const h = inline(n)
+      if (h || run.length) run.push('<div>' + (h || '<br>') + '</div>')
+    } else if (t === 'blockquote') {
+      flush()
+      const lines = []
+      n.descendants((c) => { if (c.isTextblock) { lines.push('<div>' + (inline(c) || '<br>') + '</div>'); return false } })
+      if (lines.length) boxes.push({ k: 'quote', x: 6, y: 0, w: 60, fs: DEF_FS, html: cleanBoxHtml(lines.join('')) })
+    } else if (t === 'figure') {
+      flush()
+      if (n.attrs.mediaType !== 'video' && n.attrs.src) boxes.push({ k: 'image', x: 6, y: 0, w: 44, src: n.attrs.src })
+    } else if (t === 'canvas') {
+      flush()
+      for (const b of n.attrs.boxes || []) boxes.push({ ...b })
+    } else if (n.childCount) n.forEach(walk) // lists, folds
+  }
+  state.doc.forEach(walk)
+  flush()
+  const canvas = state.schema.nodes.canvas.create({ h: 0, boxes })
+  editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, canvas))
+}
+
+/* Style → Layout: Flow. Each canvas turns back into text, top to bottom. */
+export function canvasToDoc(editor) {
+  const { state } = editor
+  const parser = DOMParser.fromSchema(state.schema)
+  const nodes = []
+  let changed = false
+  state.doc.forEach((n) => {
+    if (n.type.name !== 'canvas') { nodes.push(n); return }
+    changed = true
+    const boxes = [...(n.attrs.boxes || [])].sort((a, b) => a.y - b.y || a.x - b.x)
+    const lines = (html) => {
+      const d = document.createElement('div')
+      d.innerHTML = html || ''
+      const out = Array.from(d.childNodes).some((c) => c.nodeType === 1 && (c.tagName === 'DIV' || c.tagName === 'P'))
+        ? Array.from(d.childNodes).map((c) => (c.nodeType === 1 && (c.tagName === 'DIV' || c.tagName === 'P') ? c.innerHTML.replace(/^<br>$/, '') : c.nodeType === 3 ? esc(c.textContent) : c.outerHTML))
+        : [d.innerHTML]
+      return out.map((l) => '<p>' + l + '</p>').join('')
+    }
+    let html = ''
+    let heading = null // a title waiting to see whether a date box follows it
+    const putHeading = () => {
+      if (heading) html += '<h2' + (heading.date ? ' data-date="' + esc(heading.date) + '"' : '') + '>' + heading.html + '</h2>'
+      heading = null
+    }
+    boxes.forEach((b) => {
+      const m = b.k === 'text' && b.fs > DEF_FS * 1.2 && TITLE_RE.exec(b.html || '')
+      if (m) { putHeading(); heading = { html: m[1] }; return }
+      if (heading && !heading.date && b.k === 'text' && b.fs < DEF_FS * 0.9 && !/<div>[\s\S]*<div>/.test(b.html)) {
+        const d = document.createElement('div'); d.innerHTML = b.html
+        heading.date = d.textContent.trim(); return
+      }
+      putHeading()
+      if (b.k === 'image') html += '<figure class="img-block"><img src="' + esc(b.src) + '"><figcaption></figcaption></figure>'
+      else if (b.k === 'quote') html += '<blockquote>' + lines(b.html) + '</blockquote>'
+      else html += lines(b.html) + '<p></p>'
+    })
+    putHeading()
+    const d = document.createElement('div')
+    d.innerHTML = html.replace(/(<p><\/p>)+$/, '') || '<p></p>'
+    parser.parse(d).content.forEach((c) => nodes.push(c))
+  })
+  if (!changed) return
+  editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, Fragment.fromArray(nodes)))
+}
+
+export const isAllCanvas = (editor) => {
+  let n = 0, other = false
+  editor.state.doc.forEach((c) => { if (c.type.name === 'canvas') n++; else if (c.content.size) other = true })
+  return n === 1 && !other
+}

@@ -19,6 +19,15 @@ export const STYLE_OPTIONS = [
     hint: { poem: 'No gap between lines; leave an empty line between stanzas.' },
   },
   {
+    // the whole poem as one canvas: boxes of text, quotes and images placed anywhere
+    key: 'layout',
+    label: 'Layout',
+    def: 'flow',
+    when: { kind: 'poem' },
+    choices: [{ value: 'flow', label: 'Flow' }, { value: 'canvas', label: 'Canvas' }],
+    hint: { canvas: 'Drag anything anywhere. Add text (T), quotes and images from the toolbar.' },
+  },
+  {
     // a collection of poems, each written on its own day: the date goes under each poem's title
     key: 'poemDates',
     label: 'Dates',
@@ -60,8 +69,9 @@ export function styleKey(style) {
 }
 
 /**
- * @param {{ onChange: () => void, apply: (style: object) => void }} deps
+ * @param {{ onChange: () => void, apply: (style: object, picked?: boolean) => void }} deps
  *   onChange — the writer picked something (save the draft); apply — show `style` in the editor
+ *   (`picked`: the writer just chose it, rather than a draft loading with it)
  * @returns {{ get: () => object, set: (style: object) => void }}
  */
 export function setupStyle({ onChange, apply }) {
@@ -95,7 +105,7 @@ export function setupStyle({ onChange, apply }) {
       b.addEventListener('click', () => {
         style = normalizeStyle({ ...style, [o.key]: c.value })
         refresh()
-        apply(style)
+        apply(style, true)
         onChange()
       })
       seg.appendChild(b)

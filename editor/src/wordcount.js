@@ -45,7 +45,9 @@ export function setupWordCount(editor) {
     // while focused on a section, every number is about that section
     const range = focusRange(editor.state)
     const doc = range ? editor.state.doc.cut(range.from, range.to) : editor.state.doc
-    const text = (node) => node.textBetween(0, node.content.size, ' ', ' ')
+    // a leaf block (a canvas) has no content of its own: its spec says what text it holds
+    const text = (node) => node.isLeaf ? ((node.type.spec.leafText && node.type.spec.leafText(node)) || '')
+      : node.textBetween(0, node.content.size, ' ', ' ')
     const s = { words: 0, chars: 0, charsNoSpace: 0, paragraphs: 0, sentences: 0,
       inlineMath: 0, blockMath: 0, figures: 0, links: new Set(), sections: [] }
 

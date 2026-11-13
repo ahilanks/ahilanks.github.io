@@ -1735,6 +1735,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       const url = site + '/writings/' + slug + '.html'
       setMsg(msg, '<a href="' + url + '" target="_blank" rel="noopener">v' + n + '</a> live in a minute. ' + stampNote, 'ok')
       toast('Published v' + n + ' ✓')
+      if (window.__drafts && snap.id) window.__drafts.markPublished(snap.id) // first publish: into the Published folder
       showVersionInfo(slug)
     } catch (err) {
       setMsg(msg, escapeHtml(err.message || 'Publish failed.'), 'err')

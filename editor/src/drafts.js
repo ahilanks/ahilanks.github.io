@@ -15,7 +15,7 @@
  */
 
 import { CONFIG, LS, SANDBOX } from './config.js'
-import { $, debounce, uid } from './dom.js'
+import { $, debounce, uid, slugify } from './dom.js'
 
 /* ------------------------------------------------------------- LS accessors */
 function getDrafts() { try { return JSON.parse(localStorage.getItem(LS.drafts) || '{}') } catch (e) { return {} } }
@@ -43,14 +43,16 @@ function isTombstoned(s, deleted) {
  * The menu's arrangement is ONE object, synced like a draft (newest `updated` wins):
  *   { folders: [{ id, name }], order: { folderId: [draftId…] }, updated }
  * A draft listed under a folder is in it (first listing wins); any other draft is
- * "Unsorted", newest first. The server files each draft under drafts/<folder id>/. */
+ * "Unsorted", newest first. The server files each draft under drafts/<folder id>/.
+ * `filed`: drafts already moved into "Published" once, when first published — drag one
+ * out and publishing it again leaves it where you put it. */
 const DEFAULT_FOLDERS = [{ id: 'technical', name: 'Technical' }, { id: 'non-technical', name: 'Non-technical' }]
 function getLayout() {
   try {
     const l = JSON.parse(localStorage.getItem(LS.layout) || 'null')
-    if (l && Array.isArray(l.folders)) return { folders: l.folders, order: l.order || {}, updated: +l.updated || 0 }
+    if (l && Array.isArray(l.folders)) return { folders: l.folders, order: l.order || {}, updated: +l.updated || 0, filed: Array.isArray(l.filed) ? l.filed : [] }
   } catch (e) {}
-  return { folders: DEFAULT_FOLDERS.map((f) => ({ ...f })), order: {}, updated: 0 }
+  return { folders: DEFAULT_FOLDERS.map((f) => ({ ...f })), order: {}, updated: 0, filed: [] }
 }
 function putLayoutLocal(l) { try { localStorage.setItem(LS.layout, JSON.stringify(l)) } catch (e) {} }
 
@@ -232,6 +234,39 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     layout.folders.splice(at < 0 ? layout.folders.length : at, 0, f)
     saveLayout(layout)
   }
+  /* A draft's first publish files it under "Published" (made at the bottom of the menu,
+     folded, the first time), out of the way of the drafts still being written. */
+  function markPublished(id) {
+    if (!id) return
+    const layout = getLayout()
+    if (layout.filed.includes(id)) return
+    layout.filed.push(id)
+    if (!layout.folders.some((f) => f.id === 'published')) {
+      layout.folders.push({ id: 'published', name: 'Published' })
+      setCollapsed('published', true)
+    }
+    for (const f in layout.order) layout.order[f] = layout.order[f].filter((x) => x !== id)
+    layout.order.published = [id, ...(layout.order.published || [])]
+    saveLayout(layout)
+  }
+  // Drafts published before there was a Published folder: the ones whose title matches an
+  // article on the site (writings/<slug>.html in the writings list).
+  async function filePublishedBefore() {
+    try {
+      const r = await fetch('/writings.html', { cache: 'no-store' })
+      if (!r.ok) return
+      const live = new Set([...(await r.text()).matchAll(/href="writings\/([\w-]+)\.html"/g)].map((m) => m[1]))
+      const deleted = getDeleted()
+      for (const s of Object.values(getDrafts())) {
+        if (!s || !s.id || isTombstoned(s, deleted)) continue
+        const tmp = document.createElement('div')
+        tmp.innerHTML = s.title || ''
+        if (live.has(slugify(tmp.textContent || ''))) markPublished(s.id)
+      }
+    } catch (e) { /* offline: try again next time */ }
+  }
+  if (!SANDBOX) setTimeout(filePublishedBefore, 4000) // after the first sync with the server
+
   function saveLayout(layout) {
     layout.updated = Date.now()
     putLayoutLocal(layout)
@@ -577,5 +612,5 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     else if (live && live.id === getDocId()) live = null // the browser has it again
     SYNC.schedulePush()
   }
-  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), pushLive, restoreScrollPos, backup }
+  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), pushLive, restoreScrollPos, backup, markPublished }
 }

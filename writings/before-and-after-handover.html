@@ -109,7 +109,7 @@
     <main class="container">
       <a class="back" href="../writings.html">← Writings</a>
       <div class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z">
-        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">v1 · Nov 13, 2026</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">Nov 13, 2026</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
         <div class="prov-panel" hidden></div>
       </div>
       <h1>Before and After Handover</h1>
@@ -238,12 +238,11 @@
     for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
     var parts = []
     if (viewingOld && latest && here < latest.n) {
-      parts.push('v' + here + ' of ' + latest.n)
       parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       parts.push('superseded')
       dot.className = 'prov-dot old'
     } else {
-      parts.push('v' + here + (latest && latest.n > 1 ? ' · ' + day(mine ? mine.date : root.getAttribute('data-date')) : ' · ' + day(root.getAttribute('data-date'))))
+      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       var st = mine ? statusOf(mine) : null
       if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
       else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }

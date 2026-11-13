@@ -1039,12 +1039,11 @@ function provWidget() {
     for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
     var parts = []
     if (viewingOld && latest && here < latest.n) {
-      parts.push('v' + here + ' of ' + latest.n)
       parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       parts.push('superseded')
       dot.className = 'prov-dot old'
     } else {
-      parts.push('v' + here + (latest && latest.n > 1 ? ' · ' + day(mine ? mine.date : root.getAttribute('data-date')) : ' · ' + day(root.getAttribute('data-date'))))
+      parts.push(day(mine ? mine.date : root.getAttribute('data-date')))
       var st = mine ? statusOf(mine) : null
       if (st && st.k === 'ok') { parts.push('timestamped in Bitcoin'); dot.className = 'prov-dot ok' }
       else if (st && st.k === 'wait') { parts.push('timestamp pending'); dot.className = 'prov-dot wait' }
@@ -1210,7 +1209,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   // what shows before (or without) the manifest fetch; provWidget() enriches it.
   const provHtml = version
     ? '      <div class="prov" id="prov" data-slug="' + escapeHtml(slug) + '" data-v="' + version.n + '" data-date="' + escapeHtml(version.date) + '">\n' +
-      '        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">v' + version.n + ' · ' + escapeHtml(longDate(version.date)) + '</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>\n' +
+      '        <button class="prov-line" type="button" aria-expanded="false" title="Version history &amp; Bitcoin timestamp proof"><span class="prov-dot"></span><span class="prov-text">' + escapeHtml(longDate(version.date)) + '</span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>\n' +
       '        <div class="prov-panel" hidden></div>\n' +
       '      </div>'
     : draft

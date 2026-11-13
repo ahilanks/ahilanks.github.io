@@ -69,29 +69,11 @@
       .prov.open .prov-caret { transform:rotate(180deg); }
       .prov-current { display:block; margin:0.15rem 0 0 0.95rem; color:var(--text-color); text-decoration:none; }
       .prov-current:hover { text-decoration:underline; }
-      .prov-panel { margin:0.7rem 0 0; padding:0.1rem 0 0.1rem 0.9rem; border-left:2px solid rgba(39,50,63,0.12); max-width:560px; }
-      .prov-intro { margin:0 0 0.8rem; }
-      .prov-empty { margin:0 0 0.6rem; font-style:italic; }
-      .prov-list { list-style:none; margin:0 0 0.6rem; padding:0; display:flex; flex-direction:column; gap:0.6rem; }
-      .prov-v.here { background:rgba(39,50,63,0.04); margin:0 -0.4rem; padding:0.35rem 0.4rem; border-radius:6px; }
-      .prov-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:0.35rem 0.6rem; }
+      .prov-panel { margin:0.4rem 0 0 0.95rem; }
+      .prov-links { margin:0; } .prov-panel a { color:var(--muted); } .prov-panel a:hover { color:var(--text-color); }
+      .prov-list { list-style:none; margin:0 0 0.3rem; padding:0; }
       .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }
       .prov-vlink:hover { text-decoration:underline; }
-      .prov-tag { font-size:0.66rem; text-transform:uppercase; letter-spacing:0.08em; padding:0.05rem 0.35rem; border:1px solid rgba(39,50,63,0.2); border-radius:4px; }
-      .prov-words { opacity:0.8; }
-      .prov-st { display:flex; align-items:center; gap:0.4rem; margin-top:0.1rem; }
-      .prov-fp { margin-top:0.1rem; display:flex; flex-wrap:wrap; gap:0.2rem 0.55rem; align-items:baseline; }
-      .prov-fplabel { opacity:0.7; }
-      .prov-fp code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }
-      .prov-check.ok { color:#4a9a5a; } .prov-check.bad { color:#c0392b; }
-      .prov-fp a { color:var(--muted); }
-      .prov-fp a:hover { color:var(--text-color); }
-      .prov-how { margin-top:0.3rem; }
-      .prov-how summary { cursor:pointer; }
-      .prov-how ol { margin:0.4rem 0; padding-left:1.2rem; }
-      .prov-how li { margin:0 0 0.3rem; }
-      .prov-how p { margin:0.3rem 0 0; }
-      .prov-how code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.7rem; }
       .prov a { color:var(--muted); }
       .prov a:hover { color:var(--text-color); }
       .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }
@@ -277,62 +259,23 @@
     }
   }
 
+  // Minimal on purpose: the proof file(s) and where to check them. Readers who care can.
   function render() {
     var vs = manifest && manifest.versions ? manifest.versions.slice().reverse() : []
     var h = ''
-    h += '<p class="prov-intro">Each version of this essay is frozen as a file, and the SHA-256 fingerprint of that file is anchored in the Bitcoin blockchain via <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>. Change one character and the fingerprint changes completely — so a fingerprint in a block mined on a given date proves this exact text existed by then. Nobody, including the author, can backdate or quietly rewrite it.</p>'
-    if (!vs.length) {
-      h += '<p class="prov-empty">Version list unavailable (proofs/' + esc(slug) + '/manifest.json could not be loaded).</p>'
-    } else {
+    if (vs.length > 1) {
       h += '<ol class="prov-list">'
       for (var i = 0; i < vs.length; i++) {
         var v = vs[i]
-        var st = statusOf(v)
-        var isLatest = i === 0
-        var isHere = v.n === here
-        h += '<li class="prov-v' + (isHere ? ' here' : '') + '" data-n="' + v.n + '" data-file="' + esc(v.file) + '" data-sha="' + esc(v.sha256) + '">'
-        h += '<div class="prov-row">'
-        h += '<a class="prov-vlink" href="' + esc(isLatest ? slug + '.html' : v.file) + '">v' + v.n + '</a>'
-        h += '<span class="prov-when">' + esc(dayTime(v.date)) + '</span>'
-        if (isLatest) h += '<span class="prov-tag">current</span>'
-        if (isHere && !isLatest) h += '<span class="prov-tag">you are reading this one</span>'
-        if (v.words) h += '<span class="prov-words">' + num(v.words) + ' words</span>'
-        h += '</div>'
-        h += '<div class="prov-st ' + st.k + '"><span class="prov-dot ' + (st.k === 'wait' ? 'wait' : st.k === 'bad' ? 'bad' : 'ok') + '"></span>' + esc(st.s) + '</div>'
-        h += '<div class="prov-fp"><span class="prov-fplabel">sha256</span> <code title="' + esc(v.sha256) + '">' + esc(v.sha256.slice(0, 12)) + '…' + esc(v.sha256.slice(-8)) + '</code>'
-        h += ' <span class="prov-check" data-n="' + v.n + '">checking file…</span>'
-        h += ' <a class="prov-ots" href="proofs/' + esc(slug) + '/' + esc(v.ots) + '" download>proof (.ots)</a>'
-        if (v.blockHash) h += ' <a class="prov-blk" href="https://mempool.space/block/' + esc(v.blockHash) + '" rel="noopener" target="_blank">block ↗</a>'
-        h += '</div>'
-        h += '</li>'
+        h += '<li><a class="prov-vlink" href="' + esc(i === 0 ? slug + '.html' : v.file) + '">v' + v.n + '</a> · ' + esc(day(v.date)) +
+          ' · <a href="proofs/' + esc(slug) + '/' + esc(v.ots) + '" download>proof</a></li>'
       }
       h += '</ol>'
     }
-    h += '<details class="prov-how"><summary>How to verify this yourself</summary><ol>'
-    h += '<li>Save the version file (the <b>vN</b> link above, “Save page as… → HTML only”, or <code>curl -O</code> its URL) and its <b>proof (.ots)</b>.</li>'
-    h += '<li>Check the file’s fingerprint: <code>shasum -a 256 &lt;file&gt;</code> should print the sha256 shown above. Your browser also re-hashes each frozen file when this panel opens (the “file matches” mark).</li>'
-    h += '<li>Drop both files at <a href="https://opentimestamps.org" rel="noopener" target="_blank">opentimestamps.org</a>, or run <code>ots verify &lt;file&gt;.ots</code>. The proof leads from the fingerprint to a Bitcoin block header; the block’s date is the latest the text could have been written.</li>'
-    h += '</ol><p>A fresh proof shows “awaiting Bitcoin confirmation” until the calendar’s commitment is mined (usually a few hours); the completed proof is then published here.</p></details>'
+    var cur = vs.length ? vs[0] : null
+    h += '<p class="prov-links">Timestamped in Bitcoin with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
+      (cur && vs.length === 1 ? ' · <a href="proofs/' + esc(slug) + '/' + esc(cur.ots) + '" download>proof</a>' : '') + '</p>'
     panel.innerHTML = h
-    checkFiles()
-  }
-
-  // Re-hash every frozen file in the browser and compare with the manifest fingerprint.
-  function checkFiles() {
-    var items = panel.querySelectorAll('.prov-v')
-    Array.prototype.forEach.call(items, function (li) {
-      var out = li.querySelector('.prov-check')
-      var file = li.getAttribute('data-file'), sha = li.getAttribute('data-sha')
-      if (!out || !file || !window.crypto || !crypto.subtle) { if (out) out.textContent = ''; return }
-      fetch(file, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer() })
-        .then(function (buf) { return crypto.subtle.digest('SHA-256', buf) })
-        .then(function (d) {
-          var hex = Array.prototype.map.call(new Uint8Array(d), function (b) { return ('0' + b.toString(16)).slice(-2) }).join('')
-          out.className = 'prov-check ' + (hex === sha ? 'ok' : 'bad')
-          out.textContent = hex === sha ? '✓ file matches' : '✗ file differs from fingerprint'
-        })
-        .catch(function () { out.className = 'prov-check'; out.textContent = '' })
-    })
   }
 
   line.addEventListener('click', function () {

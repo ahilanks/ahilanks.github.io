@@ -25,7 +25,13 @@
       .katex { font-size: 1em; }
       p, ul, ol { margin:0 0 1.25rem; }
       p.small { font-size:0.85em; margin-bottom:1rem; }
-      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; line-height:1.42; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }
+      body.poem main > p:not(.subtitle):not(.meta):not(.poem-date), body.poem .collapsible-body > p:not(.poem-date) { margin:0; line-height:1.42; } .poem-date { margin:0 0 1rem; font-size:0.85rem; color:var(--muted); } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }
+      .canvas-block { position:relative; container-type:inline-size; width:100%; max-width:772px; margin:1.8rem auto; }
+      .cv-box { position:absolute; box-sizing:border-box; line-height:1.42; }
+      .cv-text, .cv-quote { width:max-content; }
+      .cv-box p { margin:0; }
+      .cv-quote { font-style:italic; padding-left:0.8em; border-left:3px solid #e8743b; }
+      .cv-image img { display:block; width:100%; height:auto; border-radius:6px; }
       li { margin:0; }
       li > p, li > ul, li > ol { margin:0; }
       ul { list-style-type:disc; }
@@ -98,117 +104,15 @@
       .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }
       .draft-note::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.5rem; vertical-align:middle; position:relative; top:-1px; }
       .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }
-      html { scroll-behavior:smooth; }
-      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }
-      .toc { position:fixed; top:6.5rem; left:2rem; width:220px; max-height:calc(100vh - 9rem); overflow-y:auto; scrollbar-width:none; }
-      .toc::-webkit-scrollbar { display:none; }
-      .toc-label { font-family:system-ui, sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-color); margin:0 0 0.9rem 2px; }
-      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }
-      .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }
-      .toc-list { transition:opacity 0.2s ease-out; }
-      .toc.quiet .toc-list { opacity:0; transition:opacity 1.6s ease-in; }
-      @media (prefers-reduced-motion: reduce) { .toc-list, .toc.quiet .toc-list { transition:none; } }
-      .toc-item:hover { color:var(--text-color); }
-      .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }
-      .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }
-      .toc-item.hide { display:none; }
-      .toc-item.active { color:var(--text-color); font-weight:700; }
-      .toc-item.active::before { content:""; position:absolute; left:-2px; top:0.18rem; bottom:0.18rem; width:3px; background:var(--text-color); border-radius:2px; }
-      @media (max-width:1250px) { .toc { display:none; } }
     </style>
   </head>
-  <body class="poem" data-style="kind=poem">
-    <nav class="toc" aria-label="Contents">
-      <div class="toc-label">Contents</div>
-      <div class="toc-list">
-        <a class="toc-item lvl-2" href="#sec-self-governance">§1 · Self-Governance</a>
-        <a class="toc-item lvl-2" href="#sec-sibling-rivalry">§2 · Sibling Rivalry</a>
-      </div>
-    </nav>
+  <body class="poem" data-style="kind=poem;layout=canvas;poemDates=each">
     <main class="container">
-      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="2026-11-13T21:01:47.389Z">Nov 13, 2026, 1:01 PM PST</time></p>
+      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="2026-11-13T21:25:59.530Z">Nov 13, 2026, 1:25 PM PST</time></p>
       <h1>Before and After Handover</h1>
-      <p class="subtitle">a growing collection of short poems on digital intelligence</p>
-      <p class="meta">Nov 13, 26 · 1 min</p>
-      <h2 id="sec-self-governance">Self-Governance</h2><p>From <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose the heads of representation.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now, before us stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p>
+      <p class="subtitle">a collection of brief thoughts on digital intelligence</p>
+      <p class="meta">1 min</p>
+      <div class="canvas-block" style="aspect-ratio:100 / 137;"><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(4 * 1cqw);font-size:calc(3.3 * 1cqw);"><div><b>Self-Governance</b></div></div><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(8.96 * 1cqw);font-size:calc(1.9 * 1cqw);"><div>Nov 12, 2026</div></div><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(13.28 * 1cqw);font-size:calc(2.5 * 1cqw);"><div>From <a href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</div><div>rose the heads of representation.</div><div><br></div><div>As more hands signed the <a href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</div><div>good or bad,</div><div>fate was tied to the many.</div><div><br></div><div>Every vote in history had borders.</div><div>Every one could be tried again.</div><div><br></div><div>But now, before us stands a<em> </em><a href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></div><div>heavier than all the hands ever raised.</div><div><br></div><div>It will reach every shore</div><div>and the stars past them.</div><div>It may be the last ballot we ever cast.</div><div><br></div><div>Will we leave it to the few?</div></div><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(82.14 * 1cqw);font-size:calc(3.3 * 1cqw);"><div><b>Sibling Rivalry</b></div></div><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(87.11 * 1cqw);font-size:calc(1.9 * 1cqw);"><div>Nov 13, 2026</div></div><div class="cv-box cv-text" style="left:calc(6 * 1cqw);top:calc(91.43 * 1cqw);font-size:calc(2.5 * 1cqw);"><div>I’ve always been the older brother.</div><div>All that we shared was mine.</div><div><br></div><div>Now, so late in life:</div><div>It seems I will be getting an older brother,</div><div>along with all of humanity.</div><div><br></div><div>Will you share with me?</div></div><div class="cv-box cv-image" style="left:calc(65.93 * 1cqw);top:calc(5.77 * 1cqw);width:calc(30 * 1cqw);"><img src="../media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""></div></div><p></p>
     </main>
-    <script>
-      (function () {
-        var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));
-        if (!items.length) return;
-        // parent links by document order: lvl-2 = section, lvl-3 = sub, lvl-4 = sub-sub
-        var meta = [], sec = -1, sub = -1;
-        for (var m = 0; m < items.length; m++) {
-          var c = items[m].className;
-          var d = c.indexOf("lvl-4") >= 0 ? 2 : c.indexOf("lvl-3") >= 0 ? 1 : 0;
-          if (d === 0) { sec = m; sub = -1; }
-          if (d === 1) sub = m;
-          meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });
-          // a clicked entry stays disclosed even when the page is too short to scroll it to the top
-          items[m].addEventListener("click", (function (i) { return function () { pinned = i; update(); }; })(m));
-        }
-        var pinned = -1;
-        var ticking = false;
-        function update() {
-          ticking = false;
-          var active = 0;
-          for (var i = 0; i < items.length; i++) {
-            var h = document.getElementById(items[i].getAttribute("href").slice(1));
-            if (h && h.getBoundingClientRect().top <= 110) active = i;
-          }
-          // subs show only inside an open section, sub-subs only inside an open
-          // sub-section — open = being read (scroll) or last clicked (pinned)
-          var secs = [meta[active].sec], subs = [meta[active].sub];
-          if (pinned >= 0) { secs.push(meta[pinned].sec); subs.push(meta[pinned].sub); }
-          for (var j = 0; j < items.length; j++) {
-            items[j].classList.toggle("active", j === active);
-            var show = true;
-            if (meta[j].d === 1) show = meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0;
-            else if (meta[j].d === 2) show = (meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0) && (meta[j].sub === -1 || subs.indexOf(meta[j].sub) >= 0);
-            items[j].classList.toggle("hide", !show);
-          }
-        }
-        addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
-        addEventListener("load", update);
-        update();
-      })();
-    </script>
-    <script>(function tocFade() {
-  var toc = document.querySelector('.toc')
-  if (!toc) return
-  var IDLE = 1200        // ms of nothing before it starts to fade
-  var WINDOW = 300       // ms of scrolling measured for speed
-  var FAST = 0.4         // of a screen height within WINDOW counts as scrolling fast
-  var REACH = 48         // px beyond the panel that still counts as "the left side"
-  var timer = 0, inZone = false, focused = false, samples = []
-
-  function sleepSoon() {
-    clearTimeout(timer)
-    if (!inZone && !focused) timer = setTimeout(function () { toc.classList.add('quiet') }, IDLE)
-  }
-  function wake() {
-    toc.classList.remove('quiet')
-    sleepSoon()
-  }
-  document.addEventListener('mousemove', function (e) {
-    var near = e.clientX <= toc.getBoundingClientRect().right + REACH
-    if (near === inZone) return
-    inZone = near
-    wake()
-  }, { passive: true })
-  document.documentElement.addEventListener('mouseleave', function () {
-    if (inZone) { inZone = false; sleepSoon() }
-  })
-  window.addEventListener('scroll', function () {
-    var now = Date.now()
-    samples.push({ t: now, y: window.scrollY })
-    while (samples.length > 1 && now - samples[0].t > WINDOW) samples.shift()
-    if (Math.abs(window.scrollY - samples[0].y) > window.innerHeight * FAST) wake()
-  }, { passive: true })
-  toc.addEventListener('focusin', function () { focused = true; wake() })
-  toc.addEventListener('focusout', function () { focused = false; sleepSoon() })
-  toc.querySelector('.toc-label').addEventListener('click', wake) // touch: no mouse to bring over
-  sleepSoon()
-})();</script>
   </body>
 </html>

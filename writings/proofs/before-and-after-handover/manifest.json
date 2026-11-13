@@ -1,0 +1,29 @@
+{
+  "slug": "before-and-after-handover",
+  "versions": [
+    {
+      "n": 1,
+      "file": "before-and-after-handover.v1.html",
+      "sha256": "5945fd8314409a8bd32a275aa3f379a621e82df74d6e66368c428c8f264aac75",
+      "contentSha256": "7a121476a493bad6775c59e2f55972561323cc238428536b503b82295da34bde",
+      "date": "2026-11-13T22:06:29.886Z",
+      "title": "Before and After Handover",
+      "words": 95,
+      "ots": "v1.ots",
+      "status": "pending",
+      "submitted": "2026-11-13T22:06:35Z",
+      "calendars": [
+        "https://a.pool.opentimestamps.org",
+        "https://b.pool.opentimestamps.org",
+        "https://a.pool.eternitywall.com",
+        "https://ots.btc.catallaxy.com"
+      ],
+      "block": null,
+      "blockHash": null,
+      "blockTime": null,
+      "verified": false
+    }
+  ],
+  "title": "Before and After Handover",
+  "updated": "2026-11-13T22:06:35Z"
+}

@@ -1181,6 +1181,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       '            var h = document.getElementById(items[i].getAttribute("href").slice(1));\n' +
       '            if (h && h.getBoundingClientRect().top <= 110) active = i;\n' +
       '          }\n' +
+      '          // scrolled to the end: the last section is the one being read, even if its heading cannot reach the top\n' +
+      '          if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) active = items.length - 1;\n' +
       '          // subs show only inside an open section, sub-subs only inside an open\n' +
       '          // sub-section — open = being read (scroll) or last clicked (pinned)\n' +
       '          var secs = [meta[active].sec], subs = [meta[active].sub];\n' +
@@ -1243,7 +1245,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '    <style>',
     '      :root { --text-color:#27323f; --link-color:#0f7ae5; --bg-color:#f1ebdf; --muted:#6b7280; --accent:#e8743b; }',
     '      body { margin:0; padding:0 1.5rem; font-family:' + fontFamily + '; color:var(--text-color); background:var(--bg-color); line-height:1.7; }',
-    '      .container { max-width:820px; margin:' + (draft ? '1.25rem' : '1.75rem') + ' auto 6rem; }',
+    '      .container { max-width:820px; margin:' + (draft ? '1.25rem' : '1.75rem') + ' auto 2.5rem; }',
     '      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }',
     '      .back:hover { text-decoration:underline; }',
     '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }',

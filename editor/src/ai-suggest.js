@@ -349,6 +349,15 @@ const cleanComment = (c) => String(c || '')
   .replace(/\s+/g, ' ').trim().slice(0, 400)
 const cleanUrl = (u) => String(u || '').trim().replace(/[.,;:!?]+$/, '')
 const urlAllowed = (url, allowed) => !!url && (allowed.has(url) || allowed.has(url.replace(/\/$/, '')) || allowed.has(url + '/'))
+// Encyclopedias and SEO explainer sites: the writer wants primary and specialist sources, so a
+// web link to one of these is never offered (a link from their own notes still is).
+const GENERIC_HOSTS = /(^|\.)(wikipedia\.org|wikiwand\.com|wikimedia\.org|britannica\.com|investopedia\.com|geeksforgeeks\.org|towardsdatascience\.com|medium\.com|analyticsvidhya\.com|builtin\.com|techtarget\.com|simplilearn\.com|javatpoint\.com|tutorialspoint\.com|w3schools\.com|datacamp\.com|baeldung\.com|machinelearningmastery\.com|v7labs\.com|deepai\.org|paperswithcode\.com)$/i
+function genericSource(url) {
+  try {
+    const u = new URL(url)
+    return GENERIC_HOSTS.test(u.hostname) || (/(^|\.)ibm\.com$/i.test(u.hostname) && /\/(think\/)?topics\//.test(u.pathname))
+  } catch (e) { return true }
+}
 
 // Math the model proposes: no delimiters, and it must render in KaTeX (which draws the
 // published page) — anything else is shown as a note instead.
@@ -400,6 +409,7 @@ function toItem(sg, blocks, mode, doc, allowed) {
     const url = cleanUrl(sg.url)
     if (!/^https?:\/\/\S+$/.test(url) || touchesAtoms || doc.rangeHasMark(from, to, doc.type.schema.marks.link)) return null
     const source = urlAllowed(url, allowed || new Set()) ? 'notes' : 'web'
+    if (source === 'web' && genericSource(url)) return null
     return { ...base, category: 'link', kind: 'link', from, to, text, url, source, title: String(sg.title || '').trim().slice(0, 300) }
   }
   if (kind === 'format') {
@@ -680,11 +690,19 @@ const LINKS =
   'book, repo, dataset, model, benchmark or a concept worth looking up. Return kind "link", category "link":\n' +
   '- "quote": the exact words in the passage that name the thing (usually 2–8 words); they become the link text.\n' +
   '- "url": from the author’s notes (in <author_notes>, if any), copied EXACTLY — prefer these. Otherwise from the ' +
-  'web, but only a canonical URL you are certain of: an arXiv abstract page (https://arxiv.org/abs/ID, never /pdf/), ' +
-  'a DOI link (https://doi.org/…) for a published paper with no arXiv version, a Wikipedia article, or an official ' +
-  'project, docs or repo page. Never guess an id, a DOI or a path; if unsure, ' +
+  'web, but only a canonical URL you are certain of. Link the PRIMARY or most authoritative specialist source — what ' +
+  'an expert in the field would cite: the paper that introduced the idea (arXiv abstract page https://arxiv.org/abs/ID, ' +
+  'never /pdf/; or a DOI link https://doi.org/… for a published paper with no arXiv version; or the proceedings page ' +
+  'on proceedings.mlr.press, papers.nips.cc, openreview.net, aclanthology.org), the authors’ or lab’s own write-up ' +
+  '(e.g. a research blog post from the lab that did the work), a respected expert explainer (distill.pub, a ' +
+  'researcher’s own blog, university lecture notes or a textbook’s official online chapter), or an official project, ' +
+  'docs or repo page. For a concept, link the work that introduced or defined it, or the best expert treatment of it — ' +
+  'favour the specific and less obvious source a well-read researcher would point to over a generic overview. ' +
+  'NEVER link Wikipedia or any encyclopedia, Medium/Towards Data Science, or tutorial/SEO explainer sites ' +
+  '(GeeksforGeeks, IBM "topics", Investopedia, Built In, DataCamp and the like) — those are thrown away; if no ' +
+  'reputable source fits, skip the link. Never guess an id, a DOI or a path; if unsure, ' +
   'skip it. Every web link is checked: one that doesn’t load, or whose page title doesn’t match "title", is thrown away.\n' +
-  '- "title": the linked page’s own title — the paper’s title, the Wikipedia article’s name.\n' +
+  '- "title": the linked page’s own title — the paper’s title, the post’s title.\n' +
   '- "comment": what it is (e.g. "Ng et al. 1999, reward shaping"); for a link from the notes, also where it is ' +
   'in them (e.g. "journal, Mar 3").\n' +
   '- Link each source at most once, at its first mention in the passage, and never words that are already a link ' +
@@ -794,7 +812,8 @@ const PROMPTS = {
     'You find links for a draft essay (technical writing about AI and machine learning, published as a web page). ' +
     'Your only job is LINKS, and you are thorough: every paper, method, model, dataset, benchmark, library, person’s ' +
     'work or technical concept named in the PASSAGE that a curious reader might want to look up deserves a link, ' +
-    'if there is a reliable URL for it. Return only kind "link" suggestions.\n\n' +
+    'if there is a primary or reputable specialist source for it (never Wikipedia or a generic explainer site). ' +
+    'Return only kind "link" suggestions.\n\n' +
     'Rules:\n' + ANCHOR_RULES +
     '- If nothing in the passage needs a link, return an empty list.',
   ask:

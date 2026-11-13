@@ -35,6 +35,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 import { CONFIG } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
 import { levelsFor } from './equation-levels.js'
+import { CANVAS_CSS, canvasForPublish } from './nodes/canvas.js'
 
 /* ------------------------------------------------------------ file sink (server) */
 // Files are collected here during a publish and sent to the local server in one request.
@@ -97,7 +98,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -237,6 +238,7 @@ function bodyToPublishHtml(clone, { sliders = true } = {}) {
     f.removeAttribute('contenteditable')
   })
   sanitizeNode(clone) // strip anything unsafe before it reaches the public page
+  canvasForPublish(clone) // canvas boxes: saved geometry → inline styles
   // resized figures: convert the validated data-w (kept through sanitise) into an inline width
   clone.querySelectorAll('figure[data-w]').forEach((f) => {
     const w = Math.max(20, Math.min(100, parseFloat(f.getAttribute('data-w')) || 100))
@@ -1266,6 +1268,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   const fnMargin = !!footHtml && looks.footnotes === 'margin'
   const hasSliders = bodyHtml.includes('data-levels=')
   const hasCollapsibles = bodyHtml.includes('<details')
+  const hasCanvas = bodyHtml.includes('canvas-block')
   // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
   // column sliding left of centre to make it. A contents panel on the left needs 240px more.
   const fnMinWidth = hasToc ? 1400 : 1160
@@ -1300,6 +1303,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      p.small { font-size:0.85em; margin-bottom:1rem; }',
     // a poem: lines right under each other, an empty line (which has no height of its own) the stanza break
     looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta), body.poem .collapsible-body > p { margin:0; line-height:1.42; } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }' : '',
+    hasCanvas ? CANVAS_CSS.split('\n').filter(Boolean).map((l) => '      ' + l).join('\n') : '',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
     '      ul { list-style-type:disc; }',

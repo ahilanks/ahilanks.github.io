@@ -28,7 +28,7 @@ const INLINE_MAX = 2 * 1024 * 1024 // with the server unreachable, smaller than 
 
 // POST an image file's bytes (any image, not just GIFs), or ask the server to fetch a link
 // → the stored file's src.
-async function storeGif(draftId, { file, url }) {
+export async function storeGif(draftId, { file, url }) {
   const q = '/api/gif?draft=' + encodeURIComponent(draftId) + (url ? '&url=' + encodeURIComponent(url) : '')
   const r = await fetch(q, url ? { method: 'POST' } : { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
   let data = {}

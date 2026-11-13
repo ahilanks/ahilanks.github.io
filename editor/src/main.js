@@ -10,6 +10,7 @@ import { setupStyle } from './style.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
+import { Canvas } from './nodes/canvas.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos, storeInlineImages } from './figures.js'
@@ -124,6 +125,7 @@ export const editor = new Editor({
     FootnoteRef,
     Figure,
     Collapsible,
+    Canvas.configure({ getDocId: () => getDocId() }),
     BlockDrag,
     HeadingAnchor,
     CommentMark,
@@ -308,6 +310,7 @@ document.querySelectorAll('.tb-btn[data-cmd], .bubble button[data-cmd]').forEach
 })
 
 $('quoteBtn').addEventListener('mousedown', (e) => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() })
+$('canvasBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().insertCanvas().run() })
 $('collapseBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().toggleCollapsible().run() })
 
 $('formatSelect').addEventListener('change', (e) => {

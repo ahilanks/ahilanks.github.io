@@ -442,7 +442,9 @@ async function substackHtml(slug) {
   main.querySelectorAll('[id], [class], [style], [data-levels], [data-dy]').forEach((el) => {
     ;['id', 'class', 'style', 'data-levels', 'data-dy'].forEach((a) => el.removeAttribute(a))
   })
-  return { html: main.innerHTML.trim(), math: /\$[^$\s][^$]*\$/.test(main.textContent || '') }
+  // where it came from: the writings page (not this one article)
+  const home = '<p><em>Originally published at <a href="' + site + '/writings.html">' + site.replace(/^https?:\/\//, '') + '</a>.</em></p>'
+  return { html: main.innerHTML.trim() + home, math: /\$[^$\s][^$]*\$/.test(main.textContent || '') }
 }
 
 /* ------------------------------------------------------ footnote round trip (page) */

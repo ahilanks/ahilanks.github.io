@@ -1177,10 +1177,20 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .poem-date-in:hover::placeholder, .poem-date-in:focus::placeholder { color: rgba(107, 114, 128, 0.8); }
 .style-row[hidden] { display: none; }
 
-/* Style → Poem → Layout: Canvas — the whole poem is one canvas and the toolbar adds to it */
+/* canvas panels beside the text (nodes/canvas.js) */
 .tb-canvas-only { display: none; }
-body.poem-canvas .tb-canvas-only { display: inline-flex; }
-body.poem-canvas .cv-bar { display: none; }
-body.poem-canvas .canvas-block.cv-edit { margin-top: 0.5rem; }
-body.poem-canvas :is(#footnoteBtn, #videoBtn, #mathBtn, #mathKbdToggle, #collapseBtn, #linkBtn, #formatSelect) { opacity: 0.3; pointer-events: none; }
-body.poem-canvas .doc-body-pm > .canvas-block ~ p:empty { display: none; }
+body.canvas-active .tb-canvas-only { display: inline-flex; }
+.canvas-item > .canvas-block.cv-edit { margin: 0; z-index: 3; background: rgba(241, 235, 223, 0.001); }
+.canvas-item > .canvas-block.cv-edit.active { box-shadow: 0 0 0 1.5px rgba(15, 122, 229, 0.55); }
+.canvas-item > .canvas-block.cv-edit .cv-layer { cursor: grab; }
+.canvas-item > .canvas-block.cv-edit.moving .cv-layer { cursor: grabbing; }
+.canvas-item.cv-static { height: auto; }
+.canvas-item.cv-static > .canvas-block { position: relative; }
+.cv-del { position: absolute; top: -10px; right: -10px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(39, 50, 63, 0.2); background: #fff; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.12s; z-index: 4; padding: 0; }
+.canvas-block.cv-edit:hover .cv-del { opacity: 1; }
+.cv-del:hover { color: #c0392b; }
+.cv-wgrip { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; border-radius: 3px; background: #fff; border: 1.5px solid rgba(39, 50, 63, 0.35); cursor: nwse-resize; opacity: 0; transition: opacity 0.12s; touch-action: none; z-index: 4; }
+.canvas-block.cv-edit:hover .cv-wgrip { opacity: 1; }
+.cv-fixed-guides { position: fixed; inset: 0; pointer-events: none; z-index: 200; }
+.cv-fixed-guides .cv-guide.v { top: auto; bottom: auto; width: 1px; }
+.cv-fixed-guides .cv-guide.h { left: auto; right: auto; height: 1px; }

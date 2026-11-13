@@ -19,15 +19,6 @@ export const STYLE_OPTIONS = [
     hint: { poem: 'No gap between lines; leave an empty line between stanzas.' },
   },
   {
-    // the whole poem as one canvas: boxes of text, quotes and images placed anywhere
-    key: 'layout',
-    label: 'Layout',
-    def: 'flow',
-    when: { kind: 'poem' },
-    choices: [{ value: 'flow', label: 'Flow' }, { value: 'canvas', label: 'Canvas' }],
-    hint: { canvas: 'Drag anything anywhere. Add text (T), quotes and images from the toolbar.' },
-  },
-  {
     // a collection of poems, each written on its own day: the date goes under each poem's title
     key: 'poemDates',
     label: 'Dates',
@@ -105,7 +96,7 @@ export function setupStyle({ onChange, apply }) {
       b.addEventListener('click', () => {
         style = normalizeStyle({ ...style, [o.key]: c.value })
         refresh()
-        apply(style, true)
+        apply(style)
         onChange()
       })
       seg.appendChild(b)

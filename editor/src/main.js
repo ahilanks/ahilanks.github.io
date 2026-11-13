@@ -11,7 +11,7 @@ import { PoemDates, setPoemDates } from './poem-dates.js'
 import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
-import { Canvas, activeCanvas, docToCanvas, canvasToDoc, isAllCanvas } from './nodes/canvas.js'
+import { Canvas, activeCanvas, canvasToDoc } from './nodes/canvas.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos, storeInlineImages, routeToCanvas } from './figures.js'
@@ -316,7 +316,9 @@ $('quoteBtn').addEventListener('mousedown', (e) => {
   const cv = activeCanvas()
   if (cv) cv.addText('quote'); else editor.chain().focus().toggleBlockquote().run()
 })
-// A poem laid out as a canvas (Style → Layout): the toolbar adds to the canvas
+// Canvas panels: the Canvas button adds one beside the caret's line; while one is clicked,
+// the toolbar's T, quote, image/GIF, B and I add to it (nodes/canvas.js)
+$('canvasBtn').addEventListener('mousedown', (e) => { e.preventDefault(); if (!activeFootnoteBody()) editor.chain().focus().insertCanvas().run() })
 const canvasTyping = () => { const cv = activeCanvas(); return !!(cv && cv.editing()) }
 $('textBoxBtn').addEventListener('mousedown', (e) => { e.preventDefault(); const cv = activeCanvas(); if (cv) cv.addText('text') })
 routeToCanvas({
@@ -438,6 +440,8 @@ function applySnapshot(s) {
   docSubtitle.innerHTML = s.subtitle || ''
   style.set(s.style)
   editor.commands.setContent(s.body || '<p></p>', { emitUpdate: false })
+  // a canvas from before canvases were panels beside the text goes back to being text
+  if (canvasToDoc(editor)) scheduleSave()
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
   notes.set(s.notes)
@@ -501,14 +505,9 @@ window.__comments = comments // console debugging, like __editor
 // Style: the toolbar's per-article look. A pick saves and syncs at once, since no edit follows it.
 setupFootnoteMargin(editor, comments)
 const style = setupStyle({
-  apply: (s, picked) => {
+  apply: (s) => {
     setFootnotePlacement(s.footnotes)
     document.body.classList.toggle('poem', s.kind === 'poem')
-    const asCanvas = s.kind === 'poem' && s.layout === 'canvas'
-    document.body.classList.toggle('poem-canvas', asCanvas)
-    // the writer switched layouts: the poem's text moves onto a canvas, or back off it
-    if (picked && asCanvas && !isAllCanvas(editor)) docToCanvas(editor)
-    else if (picked && !asCanvas) canvasToDoc(editor)
     setPoemDates(editor, s.kind === 'poem' && s.poemDates === 'each')
     document.body.classList.toggle('eq-sliders-off', s.eqSlider === 'off')
   },

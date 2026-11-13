@@ -35,7 +35,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 import { CONFIG } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
 import { levelsFor } from './equation-levels.js'
-import { CANVAS_CSS, canvasForPublish } from './nodes/canvas.js'
+import { CANVAS_CSS, canvasForPublish, canvasPlace } from './nodes/canvas.js'
 
 /* ------------------------------------------------------------ file sink (server) */
 // Files are collected here during a publish and sent to the local server in one request.
@@ -98,7 +98,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -1471,6 +1471,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     hasSliders ? '    <script>(' + eqSlider.toString() + ')();</script>' : '',
     hasCollapsibles ? '    <script>(' + collapsibleReveal.toString() + ')();</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
+    bodyHtml.includes('canvas-item') ? '    <script>(' + canvasPlace.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',
     '',

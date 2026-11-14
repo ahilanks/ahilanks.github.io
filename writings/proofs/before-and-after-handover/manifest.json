@@ -10,7 +10,7 @@
       "title": "Before and After Handover",
       "words": 95,
       "ots": "v1.ots",
-      "status": "pending",
+      "status": "verified",
       "submitted": "2026-11-13T22:06:35Z",
       "calendars": [
         "https://a.pool.opentimestamps.org",
@@ -18,12 +18,15 @@
         "https://a.pool.eternitywall.com",
         "https://ots.btc.catallaxy.com"
       ],
-      "block": null,
-      "blockHash": null,
-      "blockTime": null,
-      "verified": false
+      "block": 975723,
+      "blockHash": "0000000000000000000046e06cc704720d0ff371eb92d744ec805b012090fabd",
+      "blockTime": 1794611103,
+      "verified": true,
+      "confirmed": "2026-11-14T00:57:55Z",
+      "verifiedVia": "https://blockstream.info/api",
+      "verifiedAt": "2026-11-14T00:57:55Z"
     }
   ],
   "title": "Before and After Handover",
-  "updated": "2026-11-13T22:06:35Z"
+  "updated": "2026-11-14T00:57:55Z"
 }

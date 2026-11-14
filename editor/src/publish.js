@@ -36,6 +36,7 @@ import { CONFIG } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
 import { levelsFor } from './equation-levels.js'
 import { CANVAS_CSS, canvasForPublish, canvasPlace } from './nodes/canvas.js'
+import { extractEmbeds, embedsForPublish, EMBED_CSS, embedResize } from './nodes/embed.js'
 
 /* ------------------------------------------------------------ file sink (server) */
 // Files are collected here during a publish and sent to the local server in one request.
@@ -98,7 +99,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy', 'data-embed'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -249,6 +250,7 @@ function bodyToPublishHtml(clone, { sliders = true, poemDates = false } = {}) {
   })
   sanitizeNode(clone) // strip anything unsafe before it reaches the public page
   canvasForPublish(clone) // canvas boxes: saved geometry → inline styles
+  embedsForPublish(clone) // diagram slots → sandboxed frames
   // resized figures: convert the validated data-w (kept through sanitise) into an inline width
   clone.querySelectorAll('figure[data-w]').forEach((f) => {
     const w = Math.max(20, Math.min(100, parseFloat(f.getAttribute('data-w')) || 100))
@@ -362,6 +364,7 @@ async function buildBody(bodyHtml, slug, mediaPrefix, opts) {
   const files = []
   await extractDataImages(clone, slug, files, mediaPrefix)
   await extractVideos(clone, slug, files, mediaPrefix)
+  await extractEmbeds(clone, slug, files, mediaPrefix)
   const { html, toc } = bodyToPublishHtml(clone, opts)
   return { html, files, toc }
 }
@@ -410,6 +413,8 @@ async function substackHtml(slug) {
   const main = page.querySelector('main') || page.body
   main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .home, .end-home, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
   const base = site + '/writings/' + slug + '.html'
+  // diagrams can't run on Substack: a link to see them on the site
+  main.querySelectorAll('figure.embed').forEach((f) => { f.outerHTML = '<p><em><a href="' + base + '">Interactive diagram: see it on the site</a></em></p>' })
   main.querySelectorAll('img[src]').forEach((img) => { img.src = new URL(img.getAttribute('src'), base).href })
   main.querySelectorAll('a[href]').forEach((a) => {
     const h = a.getAttribute('href')
@@ -1276,6 +1281,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   const hasSliders = bodyHtml.includes('data-levels=')
   const hasCollapsibles = bodyHtml.includes('<details')
   const hasCanvas = bodyHtml.includes('canvas-block')
+  const hasEmbed = bodyHtml.includes('class="embed"')
   // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
   // column sliding left of centre to make it. A contents panel on the left needs 240px more.
   const fnMinWidth = hasToc ? 1400 : 1160
@@ -1311,6 +1317,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      p.small { font-size:0.85em; margin-bottom:1rem; }',
     // a poem: lines right under each other, an empty line (which has no height of its own) the stanza break
     looks.kind === 'poem' ? '      body.poem main > p:not(.subtitle):not(.meta):not(.poem-date), body.poem .collapsible-body > p:not(.poem-date) { margin:0; line-height:1.42; } .poem-date { margin:0 0 1rem; font-size:0.85rem; color:var(--muted); } body.poem main > p:empty::before, body.poem .collapsible-body > p:empty::before { content:"\\00a0"; } body.poem main > p:empty:not(.subtitle):not(.meta), body.poem .collapsible-body > p:empty { line-height:0.85; }' : '',
+    hasEmbed ? EMBED_CSS.split('\n').map((l) => '      ' + l).join('\n') : '',
     hasCanvas ? CANVAS_CSS.split('\n').filter(Boolean).map((l) => '      ' + l).join('\n') : '',
     '      li { margin:0; }',
     '      li > p, li > ul, li > ol { margin:0; }',
@@ -1479,6 +1486,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     hasSliders ? '    <script>(' + eqSlider.toString() + ')();</script>' : '',
     hasCollapsibles ? '    <script>(' + collapsibleReveal.toString() + ')();</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
+    hasEmbed ? '    <script>(' + embedResize.toString() + ')();</script>' : '',
     bodyHtml.includes('canvas-item') ? '    <script>(' + canvasPlace.toString() + ')();</script>' : '',
     '  </body>',
     '</html>',

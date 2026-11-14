@@ -1194,3 +1194,20 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 .cv-fixed-guides { position: fixed; inset: 0; pointer-events: none; z-index: 200; }
 .cv-fixed-guides .cv-guide.v { top: auto; bottom: auto; width: 1px; }
 .cv-fixed-guides .cv-guide.h { left: auto; right: auto; height: 1px; }
+
+/* HTML diagrams (nodes/embed.js) */
+.html-embed-view { position: relative; margin: 1.6rem 0; border-radius: 6px; }
+.html-embed-view iframe { display: block; width: 100%; height: 320px; border: 0; }
+.html-embed-view .he-shield { position: absolute; inset: 0; cursor: pointer; }
+.html-embed-view.selected { outline: 2px solid var(--link); outline-offset: 4px; }
+.html-embed-view.selected .he-shield { display: none; }
+.html-embed-view .he-edit { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: 0; transition: opacity 0.12s; border: 1px solid var(--line); background: var(--bg-soft); color: var(--text); border-radius: 7px; padding: 0.22rem 0.55rem; font-size: 0.75rem; cursor: pointer; }
+.html-embed-view:hover .he-edit, .html-embed-view.selected .he-edit { opacity: 1; }
+#diagramPop { width: 440px; max-width: calc(100vw - 20px); }
+#diagramPop textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; line-height: 1.4; min-height: 160px; white-space: pre; }
+.html-embed-view { margin-left: auto; margin-right: auto; }
+.html-embed-view .he-resize { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; z-index: 2; border-radius: 50%; background: var(--bg-soft); border: 2px solid var(--link); cursor: nwse-resize; opacity: 0; transition: opacity 0.12s; touch-action: none; }
+.html-embed-view:hover .he-resize, .html-embed-view.selected .he-resize, .html-embed-view.resizing .he-resize { opacity: 1; }
+.html-embed-view.resizing iframe { pointer-events: none; }
+.html-embed-view.resizing .he-shield { display: block; cursor: nwse-resize; }
+.html-embed-view .he-resize[data-w]::after { content: attr(data-w); position: absolute; right: 16px; bottom: 14px; font: 600 0.72rem system-ui, sans-serif; color: #fff; background: var(--text); border-radius: 5px; padding: 0.1rem 0.35rem; white-space: nowrap; }

@@ -12,6 +12,7 @@ import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
 import { Canvas, activeCanvas, canvasToDoc } from './nodes/canvas.js'
+import { HtmlEmbed, setupEmbeds } from './nodes/embed.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
 import { setupFigures, rehydrateVideos, storeInlineImages, routeToCanvas } from './figures.js'
@@ -127,6 +128,7 @@ export const editor = new Editor({
     Figure,
     Collapsible,
     Canvas.configure({ getDocId: () => getDocId() }),
+    HtmlEmbed,
     BlockDrag,
     HeadingAnchor,
     PoemDates,
@@ -528,6 +530,7 @@ window.__closed = setupClosedList([comments.closedSource, window.__suggest.close
 
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor, { getDocId })
+setupEmbeds(editor)
 
 // Links: ⌘K / toolbar / bubble link popover + hover URL preview chip.
 setupLinks(editor)

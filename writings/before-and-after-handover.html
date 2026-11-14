@@ -83,7 +83,15 @@
       .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }
       html { scroll-behavior:smooth; }
       h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }
-      .toc { position:fixed; top:2.2rem; left:2rem; width:220px; max-height:calc(100vh - 4.5rem); overflow-y:auto; scrollbar-width:none; }
+      .home { position:fixed; top:1.6rem; left:2rem; padding:0.2rem 2px; font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); text-decoration:none; transition:color 0.12s, opacity 0.2s ease-out; }
+      .home:hover { color:var(--text-color); }
+      .toc.quiet ~ .home { opacity:0; transition:opacity 1.6s ease-in; }
+      .toc.quiet ~ .home:hover, .toc.quiet ~ .home:focus { opacity:1; transition:opacity 0.2s ease-out; }
+      @media (max-width:1060px) { .home { display:none; } }
+      .end-home { margin:3.5rem 0 0; text-align:center; font-family:system-ui, sans-serif; font-size:0.8rem; }
+      .end-home a { color:var(--muted); text-decoration:none; }
+      .end-home a:hover { color:var(--text-color); }
+      .toc { position:fixed; top:3.9rem; left:2rem; width:220px; max-height:calc(100vh - 6.2rem); overflow-y:auto; scrollbar-width:none; }
       .toc::-webkit-scrollbar { display:none; }
       .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }
       .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }
@@ -108,11 +116,13 @@
         <a class="toc-item lvl-2" href="#sec-sibling-rivalry">§2 · Sibling Rivalry</a>
       </div>
     </nav>
+    <a class="home" href="../writings.html">← Writings</a>
     <main class="container">
       <h1>Before and After Handover</h1>
       <p class="subtitle">a collection of brief thoughts on digital intelligence</p>
       <div class="meta"><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
       <figure class="img-block"><img src="media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""><figcaption><a target="_blank" rel="noopener" href="https://x.com/doganuraldesign/status/2101561517971750950">source</a></figcaption></figure><h2 id="sec-self-governance">Self-Governance</h2><p class="poem-date">Nov 12, 2026</p><p>Across the world</p><p>from <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose <a target="_blank" rel="noopener" href="https://ourworldindata.org/the-rise-of-electoral-democracy">heads of representation</a>.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now before us— stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p class="poem-date">Nov 13, 2026</p><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p><p></p>
+      <p class="end-home"><a href="../writings.html">← All writings</a></p>
     </main>
     <script>
       (function () {

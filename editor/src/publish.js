@@ -408,7 +408,7 @@ async function substackHtml(slug) {
   if (!r.ok) throw new Error('Publish it first: Substack needs the images online.')
   const page = new DOMParser().parseFromString(await r.text(), 'text/html')
   const main = page.querySelector('main') || page.body
-  main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
+  main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .home, .end-home, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
   const base = site + '/writings/' + slug + '.html'
   main.querySelectorAll('img[src]').forEach((img) => { img.src = new URL(img.getAttribute('src'), base).href })
   main.querySelectorAll('a[href]').forEach((a) => {
@@ -1428,7 +1428,15 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '      @media print { .rd-gear, .rd-panel { display:none; } }' : '',
     hasToc ? '      html { scroll-behavior:smooth; }' : '',
     hasToc ? '      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }' : '',
-    hasToc ? '      .toc { position:fixed; top:2.2rem; left:2rem; width:220px; max-height:calc(100vh - 4.5rem); overflow-y:auto; scrollbar-width:none; }' : '',
+    version ? '      .home { position:fixed; top:1.6rem; left:2rem; padding:0.2rem 2px; font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); text-decoration:none; transition:color 0.12s, opacity 0.2s ease-out; }' : '',
+    version ? '      .home:hover { color:var(--text-color); }' : '',
+    version ? '      .toc.quiet ~ .home { opacity:0; transition:opacity 1.6s ease-in; }' : '',
+    version ? '      .toc.quiet ~ .home:hover, .toc.quiet ~ .home:focus { opacity:1; transition:opacity 0.2s ease-out; }' : '',
+    version ? '      @media (max-width:1060px) { .home { display:none; } }' : '',
+    version ? '      .end-home { margin:3.5rem 0 0; text-align:center; font-family:system-ui, sans-serif; font-size:0.8rem; }' : '',
+    version ? '      .end-home a { color:var(--muted); text-decoration:none; }' : '',
+    version ? '      .end-home a:hover { color:var(--text-color); }' : '',
+    hasToc ? '      .toc { position:fixed; top:' + (version ? '3.9rem' : '2.2rem') + '; left:2rem; width:220px; max-height:calc(100vh - ' + (version ? '6.2rem' : '4.5rem') + '); overflow-y:auto; scrollbar-width:none; }' : '',
     hasToc ? '      .toc::-webkit-scrollbar { display:none; }' : '',
     hasToc ? '      .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }' : '',
     hasToc ? '      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }' : '',
@@ -1448,6 +1456,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     // what publishing checks to tell whether the live page's style is out of date
     '  <body' + (looks.kind === 'poem' ? ' class="poem"' : '') + (styleKey(looks) ? ' data-style="' + escapeHtml(styleKey(looks)) + '"' : '') + '>',
     tocHtml,
+    // a quiet way home: in the left margin above Contents (wide screens), and at the very end
+    version ? '    <a class="home" href="../writings.html">← Writings</a>' : '',
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.
     version ? '' : provHtml, // a draft's label
@@ -1456,6 +1466,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      <div class="meta"><span>' + escapeHtml(dateStr) + ' · ' + minutes + ' min</span>' + (version ? provHtml : '') + '</div>',
     '      ' + bodyHtml,
     footHtml,
+    version ? '      <p class="end-home"><a href="../writings.html">← All writings</a></p>' : '',
     '    </main>',
     footHtml ? '    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>' : '',
     tocScript,

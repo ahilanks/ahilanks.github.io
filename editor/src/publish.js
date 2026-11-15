@@ -1484,9 +1484,6 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     version ? '      .toc.quiet ~ .home { opacity:0; transition:opacity 1.6s ease-in; }' : '',
     version ? '      .toc.quiet ~ .home:hover, .toc.quiet ~ .home:focus { opacity:1; transition:opacity 0.2s ease-out; }' : '',
     version ? '      @media (max-width:1060px) { .home { display:none; } }' : '',
-    version ? '      .end-home { margin:3.5rem 0 0; text-align:center; font-family:system-ui, sans-serif; font-size:0.8rem; }' : '',
-    version ? '      .end-home a { color:var(--muted); text-decoration:none; }' : '',
-    version ? '      .end-home a:hover { color:var(--text-color); }' : '',
     hasToc ? '      .toc { position:fixed; top:' + (version ? '3.9rem' : '2.2rem') + '; left:2rem; width:220px; max-height:calc(100vh - ' + (version ? '6.2rem' : '4.5rem') + '); overflow-y:auto; scrollbar-width:none; }' : '',
     hasToc ? '      .toc::-webkit-scrollbar { display:none; }' : '',
     hasToc ? '      .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }' : '',
@@ -1507,7 +1504,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     // what publishing checks to tell whether the live page's style is out of date
     '  <body' + (looks.kind === 'poem' ? ' class="poem"' : '') + (styleKey(looks) ? ' data-style="' + escapeHtml(styleKey(looks)) + '"' : '') + '>',
     tocHtml,
-    // a quiet way home: in the left margin above Contents (wide screens), and at the very end
+    // a quiet way home: in the left margin above Contents (wide screens)
     version ? '    <a class="home" href="../writings.html">← Writings</a>' : '',
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.
@@ -1517,7 +1514,6 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      <div class="meta">' + bylineHtml() + '<span>' + escapeHtml(dateStr) + ' · ' + minutes + ' min</span>' + (version ? provHtml : '') + '</div>',
     '      ' + bodyHtml,
     footHtml,
-    version ? '      <p class="end-home"><a href="../writings.html">← All writings</a></p>' : '',
     '    </main>',
     footHtml ? '    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>' : '',
     tocScript,

@@ -140,6 +140,11 @@
         .profile-img {
           width: 180px;
           height: 180px;
+          margin-left: 0;       /* the desktop gap beside the text pushed it off-centre */
+        }
+
+        .social-links {
+          justify-content: center;
         }
       }
 
@@ -247,7 +252,13 @@
         .project-item,
         .project-item:nth-child(even) {
           flex-direction: column;
-          text-align: center;
+          text-align: left;
+        }
+
+        .project-header {
+          flex-wrap: wrap;       /* the date drops under a long title instead of squeezing it */
+          gap: 0.15rem 0.75rem;
+          margin-bottom: 0.6rem;
         }
 
         .project-media {

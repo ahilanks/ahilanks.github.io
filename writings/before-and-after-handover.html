@@ -99,7 +99,7 @@
       .home:hover { color:var(--text-color); }
       .toc.quiet ~ .home { opacity:0; transition:opacity 1.6s ease-in; }
       .toc.quiet ~ .home:hover, .toc.quiet ~ .home:focus { opacity:1; transition:opacity 0.2s ease-out; }
-      @media (max-width:1060px) { .home { display:none; } }
+      .home-arr { display:none; } @media (max-width:1060px) { .home { position:static; display:flex; align-items:center; justify-content:center; width:2.5rem; height:2.5rem; padding:0; margin:0.9rem 0 0 max(-0.6rem, calc((100% - 820px) / 2 - 0.6rem)); border-radius:50%; color:var(--text-color); -webkit-tap-highlight-color:transparent; } .home:active { background:rgba(39,50,63,0.08); } .toc.quiet ~ .home { opacity:1; } .home-txt { display:none; } .home-arr { display:block; width:24px; height:24px; } .home + .container { margin-top:0.3rem; } }
       .toc { position:fixed; top:3.9rem; left:2rem; width:220px; max-height:calc(100vh - 6.2rem); overflow-y:auto; scrollbar-width:none; }
       .toc::-webkit-scrollbar { display:none; }
       .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }
@@ -125,7 +125,7 @@
         <a class="toc-item lvl-2" href="#sec-sibling-rivalry">§2 · Sibling Rivalry</a>
       </div>
     </nav>
-    <a class="home" href="../writings.html">← Writings</a>
+    <a class="home" href="../writings.html" aria-label="All writings"><span class="home-txt">← Writings</span><svg class="home-arr" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     <main class="container">
       <h1>Before and After Handover</h1>
       <p class="subtitle">a collection of brief thoughts on digital intelligence</p>

@@ -17,16 +17,28 @@
  * gets a link to the article instead.
  */
 
-import { Node } from '../../vendor/lib.bundle.js'
+import { Node, NodeSelection } from '../../vendor/lib.bundle.js'
 import { $, toast } from '../dom.js'
 
 const clampW = (v) => Math.max(20, Math.min(100, Math.round(parseFloat(v) || 100)))
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
 const MAX_H = 4000
 
-// Posts the diagram's height to the page whenever it changes (runs inside the frame).
-const RESIZE = '<script>(function(){var last=0;function s(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}' +
-  'try{new ResizeObserver(s).observe(document.documentElement)}catch(e){setInterval(s,500)}addEventListener("load",s);s()})()</script>'
+// Runs inside the frame. A diagram drawn wider than its frame (a fixed-width chart) is laid
+// out at its own width and scaled down to fit, so it's always seen whole with no sideways
+// scrollbar; then the diagram's (scaled) height is posted to the page whenever it changes.
+const RESIZE = '<script>(function(){var d=document.documentElement,last=0,busy=0;' +
+  'function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";' +
+  'var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);' +
+  'if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}' +
+  'function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}' +
+  'try{new ResizeObserver(function(){requestAnimationFrame(fit)}).observe(document.body||d)}catch(e){setInterval(fit,500)}' +
+  'addEventListener("resize",fit);addEventListener("load",fit);fit();' +
+  // the editor's first click on a diagram, passed through (see the node view's cover)
+  'addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;' +
+  'if(el.focus)try{el.focus({preventScroll:true})}catch(x){}' +
+  '["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};' +
+  'el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script>'
 const BASE_CSS = '<style>html,body{margin:0;background:transparent}body{font-family:system-ui,-apple-system,sans-serif;color:#27323f}svg,img,canvas{max-width:100%}</style>'
 
 // A fragment (a lone <svg>, a <div> + <script>) gets a minimal page around it; a whole page
@@ -50,8 +62,9 @@ export const looksLikeHtmlDoc = (t) => /^\s*(<!doctype html|<html[\s>]|<svg[\s>]
 export const HtmlEmbed = Node.create({
   name: 'htmlEmbed',
   group: 'block',
-  atom: true,
-  draggable: true,
+  content: 'inline*', // the caption, rich text like a picture's
+  isolating: true,
+  draggable: false, // the cover is the drag handle, so dragging across caption text selects it
   selectable: true,
 
   addAttributes() {
@@ -61,8 +74,10 @@ export const HtmlEmbed = Node.create({
       width: { default: 100, parseHTML: (el) => clampW(el.getAttribute('data-w')), renderHTML: (a) => (a.width < 100 ? { 'data-w': String(a.width) } : {}) },
     }
   },
-  parseHTML() { return [{ tag: 'div.html-embed' }] },
-  renderHTML({ HTMLAttributes }) { return ['div', { class: 'html-embed', ...HTMLAttributes }] },
+  parseHTML() {
+    return [{ tag: 'div.html-embed', contentElement: (el) => el.querySelector(':scope > figcaption') || document.createElement('figcaption') }]
+  },
+  renderHTML({ HTMLAttributes }) { return ['div', { class: 'html-embed', ...HTMLAttributes }, ['figcaption', {}, 0]] },
 
   addCommands() {
     return {
@@ -91,7 +106,32 @@ export const HtmlEmbed = Node.create({
       const grip = document.createElement('div') // drag to make it smaller or bigger
       grip.className = 'he-resize'
       grip.title = 'Drag to resize'
-      dom.append(frame, shield, edit, grip)
+      const box = document.createElement('div') // the diagram itself; the caption sits below it
+      box.className = 'he-box'
+      box.setAttribute('contenteditable', 'false')
+      box.append(frame, shield, edit, grip)
+      const caption = document.createElement('figcaption')
+      dom.append(box, caption)
+
+      // The first click on a diagram selects the block AND reaches the diagram (a play
+      // button, a slider), so it never feels dead; once selected the cover is gone.
+      const selectSelf = () => {
+        const pos = typeof getPos === 'function' ? getPos() : null
+        if (typeof pos === 'number') editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)))
+      }
+      shield.addEventListener('mousedown', (e) => { if (e.button === 0) e.stopPropagation() })
+      shield.addEventListener('click', (e) => {
+        const r = frame.getBoundingClientRect()
+        selectSelf()
+        editor.view.focus()
+        if (frame.contentWindow) frame.contentWindow.postMessage({ embedClick: [e.clientX - r.left, e.clientY - r.top] }, '*')
+      })
+      // dragging the cover moves the block (ProseMirror moves the selected node)
+      shield.draggable = true
+      shield.addEventListener('dragstart', (e) => {
+        if (!editor.isEditable || dom.classList.contains('resizing') || !e.dataTransfer) { e.preventDefault(); return }
+        selectSelf()
+      })
       const setW = (w) => { dom.style.width = w + '%' }
       setW(cur.attrs.width)
 
@@ -101,9 +141,9 @@ export const HtmlEmbed = Node.create({
         e.preventDefault(); e.stopPropagation()
         grip.setPointerCapture(e.pointerId)
         let w = cur.attrs.width
-        const box = dom.getBoundingClientRect()
-        const mid = box.left + box.width / 2 // it's centred in the column
-        const colW = box.width / (w / 100)
+        const bx = dom.getBoundingClientRect()
+        const mid = bx.left + bx.width / 2 // it's centred in the column
+        const colW = bx.width / (w / 100)
         dom.classList.add('resizing')
         const move = (ev) => {
           w = clampW((2 * (ev.clientX - mid) / colW) * 100)
@@ -150,8 +190,11 @@ export const HtmlEmbed = Node.create({
         },
         selectNode() { dom.classList.add('selected') },
         deselectNode() { dom.classList.remove('selected') },
-        stopEvent(e) { return e.target === edit || e.target === grip },
-        ignoreMutation() { return true },
+        contentDOM: caption,
+        // ProseMirror handles the caption; the diagram box is ours (its cover only lets
+        // ProseMirror see a drag, so the block can be moved)
+        stopEvent(e) { return box.contains(e.target) && !(e.target === shield && /^drag|^drop/.test(e.type)) },
+        ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
         destroy() { window.removeEventListener('message', onMsg) },
       }
     }
@@ -253,6 +296,8 @@ export async function extractEmbeds(root, prefix, files, mediaPrefix) {
     const slot = document.createElement('div')
     slot.setAttribute('data-embed', mediaPrefix + name)
     if (el.hasAttribute('data-w')) slot.setAttribute('data-w', String(clampW(el.getAttribute('data-w'))))
+    const cap = el.querySelector(':scope > figcaption')
+    if (cap) slot.appendChild(cap) // the caption rides along (and is sanitised with the rest)
     el.replaceWith(slot)
   }
 }
@@ -272,6 +317,8 @@ export function embedsForPublish(root) {
     f.setAttribute('loading', 'lazy')
     f.setAttribute('title', 'Diagram')
     fig.appendChild(f)
+    const cap = slot.querySelector(':scope > figcaption')
+    if (cap && cap.textContent.trim()) fig.appendChild(cap)
     slot.replaceWith(fig)
   })
 }

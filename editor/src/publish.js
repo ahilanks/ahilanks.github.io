@@ -414,7 +414,7 @@ async function substackHtml(slug) {
   main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .home, .end-home, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
   const base = site + '/writings/' + slug + '.html'
   // diagrams can't run on Substack: a link to see them on the site
-  main.querySelectorAll('figure.embed').forEach((f) => { f.outerHTML = '<p><em><a href="' + base + '">Interactive diagram: see it on the site</a></em></p>' })
+  main.querySelectorAll('figure.embed').forEach((f) => { const c = f.querySelector('figcaption'); f.outerHTML = '<p><em><a href="' + base + '">Interactive diagram: see it on the site</a></em></p>' + (c ? '<p><em>' + c.innerHTML + '</em></p>' : '') })
   main.querySelectorAll('img[src]').forEach((img) => { img.src = new URL(img.getAttribute('src'), base).href })
   main.querySelectorAll('a[href]').forEach((a) => {
     const h = a.getAttribute('href')

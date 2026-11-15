@@ -1197,8 +1197,11 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 
 /* HTML diagrams (nodes/embed.js) */
 .html-embed-view { position: relative; margin: 1.6rem 0; border-radius: 6px; }
+.html-embed-view .he-box { position: relative; }
+.html-embed-view > figcaption { margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted); text-align: center; outline: none; }
+.html-embed-view > figcaption:empty::before, .html-embed-view > figcaption:has(> br.ProseMirror-trailingBreak:only-child)::before { content: "Write a caption…"; color: var(--faint); pointer-events: none; }
 .html-embed-view iframe { display: block; width: 100%; height: 320px; border: 0; }
-.html-embed-view .he-shield { position: absolute; inset: 0; cursor: pointer; }
+.html-embed-view .he-shield { position: absolute; inset: 0; cursor: default; }
 .html-embed-view.selected { outline: 2px solid var(--link); outline-offset: 4px; }
 .html-embed-view.selected .he-shield { display: none; }
 .html-embed-view .he-edit { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: 0; transition: opacity 0.12s; border: 1px solid var(--line); background: var(--bg-soft); color: var(--text); border-radius: 7px; padding: 0.22rem 0.55rem; font-size: 0.75rem; cursor: pointer; }

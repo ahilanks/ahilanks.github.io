@@ -182,5 +182,5 @@ input[type=range]{flex:1;accent-color:var(--ink);height:24px;margin:0}
   }
 })();
 </script>
-<script>(function(){var last=0;function s(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(s).observe(document.documentElement)}catch(e){setInterval(s,500)}addEventListener("load",s);s()})()</script></body>
+<script>(function(){var d=document.documentElement,last=0,busy=0;function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(function(){requestAnimationFrame(fit)}).observe(document.body||d)}catch(e){setInterval(fit,500)}addEventListener("resize",fit);addEventListener("load",fit);fit()})()</script></body>
 </html>

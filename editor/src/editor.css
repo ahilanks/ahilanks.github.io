@@ -148,8 +148,8 @@ body.vk-open .surface { padding-bottom: 50vh; }
 
 [contenteditable] { outline: none; }
 
-.doc-title { font-size: 1.6rem; line-height: 1.18; font-weight: 700; text-align: left; margin: 0 0 0.8rem; letter-spacing: -0.01em; }
-.doc-subtitle { font-size: 1.3rem; line-height: 1.4; color: var(--muted); text-align: left; font-weight: 400; margin: 0 0 1.6rem; }
+.doc-title { font-size: 1.6rem; line-height: 1.18; font-weight: 700; text-align: left; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+.doc-subtitle { font-size: 1.3rem; line-height: 1.4; color: var(--muted); text-align: left; font-weight: 400; margin: 0 0 1.2rem; }
 
 .doc-body { font-size: 1.12rem; }
 .doc-body > * { margin: 0 0 1.25rem; }
@@ -163,15 +163,15 @@ body.poem .doc-body-pm > p:empty, body.poem .collapsible-body > p:empty { line-h
 .doc-body p.small { font-size: 0.85em; margin-bottom: 1rem; }
 /* headings sit close to the text they introduce: tight line-height (no extra leading under
    them) and a top margin several times the bottom one */
-.doc-body h2 { font-size: 1.7rem; font-weight: 700; line-height: 1.25; margin: 2.6rem 0 0.45rem; letter-spacing: -0.01em; }
+.doc-body h2 { font-size: 1.7rem; font-weight: 700; line-height: 1.25; margin: 2rem 0 0.45rem; letter-spacing: -0.01em; }
 /* every main section after the first opens with a rule, so readers see where one ends */
-.doc-body h2 ~ h2 { margin-top: 3rem; padding-top: 2.2rem; border-top: 1px solid rgba(39, 50, 63, 0.15); }
-.doc-body h3 { font-size: 1.32rem; font-weight: 600; line-height: 1.3; margin: 2.2rem 0 0.35rem; }
+.doc-body h2 ~ h2 { margin-top: 2.2rem; padding-top: 1.6rem; border-top: 1px solid rgba(39, 50, 63, 0.15); }
+.doc-body h3 { font-size: 1.32rem; font-weight: 600; line-height: 1.3; margin: 1.6rem 0 0.35rem; }
 .doc-body h4 { font-size: 1.12rem; font-weight: 700; line-height: 1.35; margin: 1.8rem 0 0.3rem; }
 /* Not force-italic: quotes are set off by the border/size/color, and italic stays a
    real mark you control (so italicizing text inside a quote actually shows and the
    toolbar button reads correctly). */
-.doc-body blockquote { margin: 1.5rem 0; padding: 0.2rem 0 0.2rem 1.2rem; color: var(--text); font-size: 1.18rem; position: relative; }
+.doc-body blockquote { margin: 1.2rem 0; padding: 0.2rem 0 0.2rem 1.2rem; color: var(--text); font-size: 1.18rem; position: relative; }
 /* the accent bar is a pseudo-element inset from top/bottom, so it's a little shorter than the quote */
 .doc-body blockquote::before { content: ""; position: absolute; left: 0; top: 0.4rem; bottom: 0.4rem; width: 3px; border-radius: 2px; background: var(--accent); }
 /* collapsible section (nodes/collapsible.js): the chevron hangs at the left edge, the title
@@ -961,7 +961,7 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 
   .surface { margin: 1.4rem auto 0; padding: 0 1.1rem var(--end-gap); }
   .doc-title { font-size: 1.45rem; }
-  .doc-subtitle { font-size: 1.15rem; margin-bottom: 1.3rem; }
+  .doc-subtitle { font-size: 1.15rem; margin-bottom: 1rem; }
   .doc-body { font-size: 1.05rem; }
   .surface.font-serif .doc-body { font-size: 1.12rem; }
   .doc-body h2 { font-size: 1.5rem; }

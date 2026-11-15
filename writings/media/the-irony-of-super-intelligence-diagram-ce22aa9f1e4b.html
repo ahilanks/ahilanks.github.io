@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><style>html,body{margin:0;background:transparent}body{font-family:system-ui,-apple-system,sans-serif;color:#27323f}svg,img,canvas{max-width:100%}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Octagon Pattern</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&display=swap" rel="stylesheet">
+<style>
+/* layout: three sketched scenes in a row, one curve beneath, one quiet control line */
+:root{
+  --ink:#26231f;
+  --faint:rgba(38,35,31,.32);
+  --accent:#d4572a;
+  --gap:clamp(12px,3vw,36px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--ink:#ebe7df;--faint:rgba(235,231,223,.34);--accent:#ff8a5c;color-scheme:dark}
+}
+:root[data-theme="dark"]{--ink:#ebe7df;--faint:rgba(235,231,223,.34);--accent:#ff8a5c;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent}
+body{padding:24px 16px;color:var(--ink)}
+main{max-width:900px;margin:0 auto;display:grid;gap:var(--gap)}
+.scenes{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:var(--gap)}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.ink,.acc,.faint{fill:none;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.ink{stroke:var(--ink);stroke-width:1.7}
+.acc{stroke:var(--accent);stroke-width:1.7}
+.faint{stroke:var(--faint);stroke-width:1.2}
+.thick{stroke-width:2.4}
+.dot{fill:var(--ink);stroke:none}
+.lbl{font-family:'Caveat','Segoe Print','Bradley Hand',cursive;font-size:20px;fill:var(--ink);opacity:.85}
+@media (max-width:520px){.lbl{font-size:32px}}
+.controls{display:flex;align-items:center;gap:16px;max-width:520px;width:100%;margin:0 auto}
+button{width:38px;height:38px;flex:none;border-radius:50%;border:1.5px solid var(--ink);background:transparent;color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+button svg{width:14px;height:14px}
+input[type=range]{flex:1;accent-color:var(--ink);height:24px;margin:0}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="sk" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence class="turb" type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="sk2" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence class="turb" type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="4.5" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+<main>
+  <div class="scenes" id="scenes"></div>
+  <svg id="curve" viewBox="0 0 720 150" role="img" aria-label="A curve that rises to a peak in the middle and falls again, with a small robot riding along it"></svg>
+  <div class="controls">
+    <button id="play" aria-label="Pause"><svg viewBox="0 0 14 14" aria-hidden="true"><path id="icon" fill="currentColor" d="M2 1h3.5v12H2zM8.5 1H12v12H8.5z"/></svg></button>
+    <input type="range" id="scrub" min="0" max="200" step="1" value="0" aria-label="Scrub through the story">
+  </div>
+</main>
+<script>
+(function(){
+  function n(v){return Math.round(v*10)/10;}
+  function fig(h){
+    var t=-h,w=n(-h*0.4);
+    return '<circle class="ink" cx="0" cy="'+(t+7)+'" r="7"/>'+
+      '<path class="ink" d="M-6,'+(t+4)+' Q-1,'+(t-3)+' 6,'+(t+3)+'"/>'+
+      '<circle class="dot" cx="-2.5" cy="'+(t+7.5)+'" r=".9"/><circle class="dot" cx="2.5" cy="'+(t+7.5)+'" r=".9"/>'+
+      '<path class="ink" d="M-6,'+(t+16)+' L6,'+(t+16)+' L8,'+w+' L-8,'+w+' Z"/>'+
+      '<path class="ink" d="M-6,'+(t+18)+' L-13,'+(t+33)+' M6,'+(t+18)+' L13,'+(t+33)+' M-4,'+w+' L-6,0 M4,'+w+' L6,0"/>';
+  }
+  var robot='<rect class="ink" x="-12" y="-50" width="24" height="19" rx="5"/>'+
+    '<circle class="dot" cx="-5" cy="-41" r="1.5"/><circle class="dot" cx="5" cy="-41" r="1.5"/>'+
+    '<path class="ink" d="M-4,-36 L4,-36 M0,-50 L0,-56 M0,-31 L0,-29"/><circle class="ink" cx="0" cy="-58" r="2"/>'+
+    '<rect class="ink" x="-10" y="-29" width="20" height="17" rx="3"/><circle class="ink" cx="0" cy="-21" r="2.5"/>'+
+    '<path class="ink" d="M-10,-25 L-16,-15 M10,-25 L16,-15 M-5,-12 L-5,0 M5,-12 L5,0 M-8,0 L-3,0 M3,0 L8,0"/>'+
+    '<path class="faint" d="M-7,-15 L-3,-19 M-3,-14 L2,-19 M2,-14 L7,-19"/>';
+  var hunter=fig(48)+'<path class="ink" d="M14,0 L14,-54 M11,-50 L14,-58 L17,-50"/>';
+  var bison='<path class="ink" d="M-26,-12 Q-29,-36 -8,-40 Q8,-42 14,-30 Q22,-32 27,-26 Q30,-20 24,-15 Q18,-12 14,-16 Q10,-10 -26,-12 Z"/>'+
+    '<path class="ink" d="M-20,-12 L-21,0 M-12,-11 L-12,0 M6,-13 L6,0 M13,-14 L14,0 M22,-29 Q27,-34 24,-38 M-27,-22 Q-33,-18 -31,-9 M22,-14 L21,-8"/>'+
+    '<circle class="dot" cx="22.5" cy="-23" r="1.1"/>'+
+    '<path class="faint" d="M-18,-30 L-12,-37 M-13,-26 L-4,-37 M-7,-23 L3,-36 M0,-21 L8,-32"/>';
+  var car='<path class="acc" d="M-15,-5 L-15,-10 Q-14,-12 -9,-12 L-5,-18 L6,-18 L10,-12 L14,-11 Q16,-10 15,-5 Z M-3,-16 L-5,-12 L7,-12 L5,-16 Z"/>'+
+    '<circle class="acc" cx="-8" cy="-4" r="4"/><circle class="acc" cx="8" cy="-4" r="4"/>';
+  var land='<path class="acc" d="M-16,0 Q0,-5 16,0 M-9,-2 l-3,-9 M-9,-2 l0,-12 M-9,-2 l3,-9 M0,-3 l-3,-10 M0,-3 l0,-13 M0,-3 l3,-10 M9,-2 l-3,-9 M9,-2 l0,-12 M9,-2 l3,-9"/>';
+  var earth='<circle class="acc" cx="0" cy="-13" r="13"/>'+
+    '<path class="acc" d="M-8,-18 q4,-5 8,-1 q2,4 -3,6 q-6,0 -5,-5 M2,-9 q4,-2 6,1 q-1,4 -5,3 q-2,-2 -1,-4 M-11,-8 q3,1 3,4"/>';
+  var wheat='M0,0 L0,-22 M0,-22 l-3,4 M0,-22 l3,4 M0,-17 l-3,4 M0,-17 l3,4 M0,-12 l-3,4 M0,-12 l3,4';
+  function at(x,y,s,inner){return '<g transform="translate('+x+','+y+') scale('+s+')">'+inner+'</g>';}
+  var rays='';for(var i=0;i<8;i++){var a=i*Math.PI/4;rays+='M'+n(214+10*Math.cos(a))+','+n(30+10*Math.sin(a))+' L'+n(214+14*Math.cos(a))+','+n(30+14*Math.sin(a))+' ';}
+  function star(x,y){return 'M'+(x-3)+','+y+' L'+(x+3)+','+y+' M'+x+','+(y-3)+' L'+x+','+(y+3)+' ';}
+  var scenes=[
+    {label:'Two brothers and one toy car',strong:fig(48),weak:fig(40),res:car,
+     far:'<path class="faint" d="M150,72 L232,72 M158,72 L158,80 M224,72 L224,80"/>'+at(172,72,.8,car)+
+         '<path class="acc" d="M196,72 L196,63 L214,63 L214,72 Z M199,63 L199,60 L203,60 L203,63 M207,63 L207,60 L211,60 L211,63 M200,60 L200,51 L218,51 L218,60"/>'+
+         '<circle class="acc" cx="226" cy="66" r="5"/>'},
+    {label:'A hunter and a bison on one plain',strong:hunter,weak:bison,res:land,
+     far:'<path class="faint" d="M146,74 Q190,60 234,74"/>'+
+         '<path class="acc" transform="translate(163,69)" d="'+wheat+'"/><path class="acc" transform="translate(176,66)" d="'+wheat+'"/><path class="acc" transform="translate(189,65)" d="'+wheat+'"/>'+
+         '<circle class="acc" cx="214" cy="30" r="6.5"/><path class="acc" d="'+rays+'"/>'},
+    {label:'A robot and a person on one planet',strong:robot,weak:fig(46),res:earth,
+     far:'<circle class="acc" cx="178" cy="44" r="10"/><ellipse class="acc" cx="178" cy="44" rx="18" ry="5" transform="rotate(-20 178 44)"/>'+
+         '<circle class="acc" cx="216" cy="26" r="6"/><path class="acc" d="M211,24 q5,3 10,1"/>'+
+         '<path class="acc" d="M228,58 a5,5 0 1 0 3,8 a4,4 0 1 1 -3,-8"/>'+
+         '<path class="acc" d="'+star(150,26)+star(197,16)+star(234,42)+star(156,66)+'"/>'}
+  ];
+  var holder=document.getElementById('scenes'),refs=[];
+  scenes.forEach(function(s,i){
+    var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 240 190');svg.setAttribute('role','img');svg.setAttribute('aria-label',s.label);
+    svg.innerHTML='<g filter="url(#sk)"><g id="c'+i+'">'+
+      '<path class="faint" d="M14,171 L226,171"/>'+
+      '<g class="far" opacity="0">'+s.far+'</g>'+
+      '<g class="weak">'+s.weak+'</g><g class="res">'+s.res+'</g><g class="strong">'+s.strong+'</g>'+
+      '</g></g><use href="#c'+i+'" filter="url(#sk2)" opacity=".28"/>';
+    holder.appendChild(svg);
+    refs.push({far:svg.querySelector('.far'),weak:svg.querySelector('.weak'),res:svg.querySelector('.res'),strong:svg.querySelector('.strong')});
+  });
+
+  var X0=30,X1=690,Y0=118,Y1=22;
+  function P(x){return 1/(1+Math.exp(-(x-0.3)*12));}
+  function N(x){return 1/(1+Math.exp((x-0.6)*10));}
+  var hmax=0,peak=0,x;
+  for(i=0;i<=200;i++){x=i/200;if(P(x)*N(x)>hmax){hmax=P(x)*N(x);peak=x;}}
+  function H(x){return P(x)*N(x)/hmax;}
+  function px(x){return X0+x*(X1-X0);}
+  function py(v){return Y0-v*(Y0-Y1);}
+  var d='';for(i=0;i<=100;i++){x=i/100;d+=(i?'L':'M')+n(px(x))+' '+n(py(H(x)));}
+  var lo=null,hi=null;for(i=0;i<=200;i++){x=i/200;if(H(x)>=0.5){if(lo===null)lo=x;hi=x;}}
+  var hatch='';for(var hx=px(lo)+4;hx<px(hi)-6;hx+=20){var tx=(hx+6-X0)/(X1-X0);hatch+='M'+n(hx)+','+(Y0-3)+' L'+n(hx+6)+','+n(py(H(tx))+5)+' ';}
+  var curve=document.getElementById('curve');
+  curve.innerHTML='<g filter="url(#sk)"><g id="cc">'+
+    '<path class="faint" d="M'+X0+','+Y0+' L'+X1+','+Y0+' M'+X1+','+Y0+' l-8,-4 M'+X1+','+Y0+' l-8,4 M'+X0+','+Y0+' L'+X0+',26"/>'+
+    '<path class="acc" style="stroke-width:1.1" d="'+hatch+'"/>'+
+    '<path class="ink thick" d="'+d+'"/>'+
+    '<g id="rider">'+robot+'</g></g></g><use href="#cc" filter="url(#sk2)" opacity=".28"/>'+
+    '<text class="lbl" x="'+(X0+10)+'" y="34">harm</text><text class="lbl" x="'+X1+'" y="142" text-anchor="end">intelligence gap</text>'+
+    '<text class="lbl" style="fill:var(--accent);opacity:1" x="'+n((px(lo)+px(hi))/2)+'" y="142" text-anchor="middle">danger zone</text>';
+  var rider=document.getElementById('rider');
+
+  function ss(a,b,x){var k=Math.max(0,Math.min(1,(x-a)/(b-a)));return k*k*(3-2*k);}
+  function mix(a,b,k){return a+(b-a)*k;}
+  var t=0,scrub=document.getElementById('scrub');
+  function set(v){
+    t=v;scrub.value=Math.round(v*100);
+    var a=ss(0.15,1,v),b=ss(1.25,2,v),f=ss(1,1.45,v);
+    refs.forEach(function(r){
+      r.strong.setAttribute('transform','translate('+n(mix(190,198,b))+',170) scale('+(mix(1,1.4,a)+0.08*b).toFixed(3)+')');
+      r.res.setAttribute('transform','translate('+n(mix(mix(120,150,a),97,b))+',170)');
+      r.weak.setAttribute('transform','translate(50,170) scale('+mix(mix(1,0.8,a),1,b).toFixed(3)+')');
+      r.weak.setAttribute('opacity',mix(mix(1,0.3,a),1,b).toFixed(2));
+      r.far.setAttribute('opacity',f.toFixed(2));
+      r.far.setAttribute('transform','translate(0,'+n(6*(1-f))+')');
+    });
+    var gx=v<1?mix(0.03,peak,v):mix(peak,0.97,v-1);
+    rider.setAttribute('transform','translate('+n(px(gx))+','+n(py(H(gx))-3)+') scale(.42)');
+  }
+
+  var raf=null,last=null,hold=0,playing=false,btn=document.getElementById('play'),icon=document.getElementById('icon');
+  function label(){
+    btn.setAttribute('aria-label',playing?'Pause':'Play');
+    icon.setAttribute('d',playing?'M2 1h3.5v12H2zM8.5 1H12v12H8.5z':'M3 1l9.5 6L3 13z');
+  }
+  function tick(ts){
+    if(last===null)last=ts;
+    var dt=Math.min(0.1,(ts-last)/1000);last=ts;
+    if(t>=2){hold+=dt;if(hold>2){hold=0;set(0);}}
+    else{set(Math.min(2,t+dt/3.4));}
+    raf=requestAnimationFrame(tick);
+  }
+  function start(){playing=true;last=null;label();raf=requestAnimationFrame(tick);}
+  function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=null;label();}
+  btn.addEventListener('click',function(){if(playing)stop();else{if(t>=2)set(0);start();}});
+  scrub.addEventListener('input',function(){stop();set(scrub.value/100);});
+
+  var still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  set(0);
+  if(still){label();}
+  else{
+    start();
+    var turbs=document.querySelectorAll('.turb'),seed=0;
+    setInterval(function(){seed=(seed+1)%4;turbs[0].setAttribute('seed',3+seed);turbs[1].setAttribute('seed',11+seed);},220);
+  }
+})();
+</script>
+<script>(function(){var last=0;function s(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(s).observe(document.documentElement)}catch(e){setInterval(s,500)}addEventListener("load",s);s()})()</script></body>
+</html>

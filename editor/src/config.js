@@ -5,6 +5,14 @@ export const CONFIG = {
   // Public origin of the site — used to build shareable links (private draft previews).
   siteUrl: 'https://ahilanks.github.io',
 
+  // The byline on every published article: the name opens a tiny row of these links.
+  author: {
+    name: 'Ahilan Karuppusami',
+    x: 'https://x.com/ahilanks101',
+    site: 'https://ahilanks.github.io',
+    substack: 'https://ahilanks.substack.com',
+  },
+
   // Writing font for the surface + published article.
   // "serif" (Newsreader) | "sans" (Inter) | "mono" (JetBrains Mono)
   font: 'serif',

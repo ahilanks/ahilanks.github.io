@@ -17,6 +17,17 @@
       h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }
       .subtitle { text-align:left; font-size:1.3rem; line-height:1.35; color:var(--muted); margin:0 0 0.2rem; }
       @media (max-width:560px) { .subtitle { font-size:1.15rem; } }
+      .by { position:relative; display:inline-flex; }
+      .by-name { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+      .by-name:hover, .by.open .by-name { color:var(--text-color); }
+      .by-links { position:absolute; left:-0.35rem; top:calc(100% + 0.3rem); z-index:5; display:flex; gap:0.1rem; padding:0.15rem; background:var(--bg-color); border:1px solid rgba(39,50,63,0.12); border-radius:9px; box-shadow:0 4px 14px rgba(39,50,63,0.08); opacity:0; visibility:hidden; transform:translateY(-3px); transition:opacity 0.15s, transform 0.15s, visibility 0s 0.15s; }
+      .by:hover .by-links, .by.open .by-links { opacity:1; visibility:visible; transform:none; transition:opacity 0.15s, transform 0.15s; }
+      .by-links a { display:flex; padding:0.3rem; color:#9ca3af; border-radius:6px; }
+      .by::after { content:""; position:absolute; left:0; right:0; top:100%; height:0.4rem; }
+      @media (pointer: coarse) { .by-links a { padding:0.45rem; } .by-links svg { width:16px; height:16px; } }
+      .by-links a:hover { color:var(--text-color); }
+      .by-links svg { width:14px; height:14px; fill:currentColor; }
+      .by-links svg[fill=none] { fill:none; }
       .meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.4em; text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 0.8rem; } .meta + figure { margin-top:0.8rem; }
       .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }
       .math-block .katex-display { margin:0; }
@@ -121,7 +132,7 @@
     <main class="container">
       <h1>Before and After Handover</h1>
       <p class="subtitle">a collection of brief thoughts on digital intelligence</p>
-      <div class="meta"><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
+      <div class="meta"><span class="by"><button type="button" class="by-name" aria-expanded="false">Ahilan Karuppusami</button><span class="by-links"><a href="https://x.com/ahilanks101" target="_blank" rel="noopener" title="X" aria-label="X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 1.2h3.7l-8 9.2L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.3l13.3 17.3z"/></svg></a><a href="https://ahilanks.github.io" title="Website" aria-label="Website"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.6 3.9 5.8 3.9 9.5s-1.3 6.9-3.9 9.5c-2.6-2.6-3.9-5.8-3.9-9.5S9.4 5.1 12 2.5z"/></svg></a><a href="https://ahilanks.substack.com" target="_blank" rel="noopener" title="Substack" aria-label="Substack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/></svg></a></span></span><span aria-hidden="true">·</span><span>Nov 13, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="1" data-date="2026-11-13T22:06:29.886Z"><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
       <figure class="img-block"><img src="media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""><figcaption><a target="_blank" rel="noopener" href="https://x.com/doganuraldesign/status/2101561517971750950">source</a></figcaption></figure><h2 id="sec-self-governance">Self-Governance</h2><p class="poem-date">Nov 12, 2026</p><p>Across the world</p><p>from <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose <a target="_blank" rel="noopener" href="https://ourworldindata.org/the-rise-of-electoral-democracy">heads of representation</a>.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now before us— stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p class="poem-date">Nov 13, 2026</p><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p><p></p>
       <p class="end-home"><a href="../writings.html">← All writings</a></p>
     </main>
@@ -300,6 +311,19 @@
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
     .then(function (j) { manifest = j; summarize() })
     .catch(function () { manifest = null; summarize() })
+})();</script>
+    <script>(function bylineToggle() {
+  var by = document.querySelector('.by')
+  if (!by) return
+  var btn = by.querySelector('.by-name')
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    var open = by.classList.toggle('open')
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+  })
+  document.addEventListener('click', function (e) {
+    if (!by.contains(e.target)) { by.classList.remove('open'); btn.setAttribute('aria-expanded', 'false') }
+  })
 })();</script>
   </body>
 </html>

@@ -1189,6 +1189,48 @@ function longDateTime(iso) {
 // Build a full standalone article that matches the published site's aesthetic.
 // `version` ({ n, date }) adds the provenance widget; `draft` marks an unlisted preview
 // (noindex, no widget, relative paths one level deeper via `pathPrefix`).
+// The byline: the author's name at the start of the date line. Hover (or tap, on a phone)
+// and a small row of icon links drops below it: X, the website, Substack.
+const BY_ICONS = {
+  x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 1.2h3.7l-8 9.2L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.3l13.3 17.3z"/></svg>',
+  site: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.6 3.9 5.8 3.9 9.5s-1.3 6.9-3.9 9.5c-2.6-2.6-3.9-5.8-3.9-9.5S9.4 5.1 12 2.5z"/></svg>',
+  substack: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/></svg>',
+}
+function bylineHtml() {
+  const a = CONFIG.author
+  if (!a || !a.name) return ''
+  const link = (k, label) => a[k] ? '<a href="' + escapeHtml(a[k]) + '"' + (k === 'site' ? '' : ' target="_blank" rel="noopener"') + ' title="' + label + '" aria-label="' + label + '">' + BY_ICONS[k] + '</a>' : ''
+  return '<span class="by"><button type="button" class="by-name" aria-expanded="false">' + escapeHtml(a.name) + '</button>' +
+    '<span class="by-links">' + link('x', 'X') + link('site', 'Website') + link('substack', 'Substack') + '</span></span><span aria-hidden="true">·</span>'
+}
+const BY_CSS = [
+  '.by { position:relative; display:inline-flex; }',
+  '.by-name { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }',
+  '.by-name:hover, .by.open .by-name { color:var(--text-color); }',
+  '.by-links { position:absolute; left:-0.35rem; top:calc(100% + 0.3rem); z-index:5; display:flex; gap:0.1rem; padding:0.15rem; background:var(--bg-color); border:1px solid rgba(39,50,63,0.12); border-radius:9px; box-shadow:0 4px 14px rgba(39,50,63,0.08); opacity:0; visibility:hidden; transform:translateY(-3px); transition:opacity 0.15s, transform 0.15s, visibility 0s 0.15s; }',
+  '.by:hover .by-links, .by.open .by-links { opacity:1; visibility:visible; transform:none; transition:opacity 0.15s, transform 0.15s; }',
+  '.by-links a { display:flex; padding:0.3rem; color:#9ca3af; border-radius:6px; }',
+  '.by::after { content:""; position:absolute; left:0; right:0; top:100%; height:0.4rem; }', // hover bridge to the links
+  '@media (pointer: coarse) { .by-links a { padding:0.45rem; } .by-links svg { width:16px; height:16px; } }',
+  '.by-links a:hover { color:var(--text-color); }',
+  '.by-links svg { width:14px; height:14px; fill:currentColor; }',
+  '.by-links svg[fill=none] { fill:none; }',
+].join('\n')
+// Runs INSIDE the published article: a tap toggles the links (phones have no hover).
+function bylineToggle() {
+  var by = document.querySelector('.by')
+  if (!by) return
+  var btn = by.querySelector('.by-name')
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    var open = by.classList.toggle('open')
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+  })
+  document.addEventListener('click', function (e) {
+    if (!by.contains(e.target)) { by.classList.remove('open'); btn.setAttribute('aria-expanded', 'false') }
+  })
+}
+
 function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, style, bodyHtml, footHtml, toc, slug, version, draft }) {
   const draftCreated = new Date().toISOString() // when this draft link was (re)generated
   const title = escapeHtml(titleText)
@@ -1307,6 +1349,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }',
     '      .subtitle { text-align:left; font-size:1.3rem; line-height:1.35; color:var(--muted); margin:0 0 0.2rem; }',
     '      @media (max-width:560px) { .subtitle { font-size:1.15rem; } }',
+    BY_CSS.split('\n').map((l) => '      ' + l).join('\n'),
     '      .meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.4em; text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 0.8rem; } .meta + figure { margin-top:0.8rem; }',
     '      .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }',
     '      .math-block .katex-display { margin:0; }',
@@ -1471,7 +1514,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     version ? '' : provHtml, // a draft's label
     '      <h1>' + title + '</h1>',
     subtitle ? '      <p class="subtitle">' + subtitle + '</p>' : '',
-    '      <div class="meta"><span>' + escapeHtml(dateStr) + ' · ' + minutes + ' min</span>' + (version ? provHtml : '') + '</div>',
+    '      <div class="meta">' + bylineHtml() + '<span>' + escapeHtml(dateStr) + ' · ' + minutes + ' min</span>' + (version ? provHtml : '') + '</div>',
     '      ' + bodyHtml,
     footHtml,
     version ? '      <p class="end-home"><a href="../writings.html">← All writings</a></p>' : '',
@@ -1480,6 +1523,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     tocScript,
     hasToc ? '    <script>(' + tocFade.toString() + ')();</script>' : '',
     provScript,
+    CONFIG.author && CONFIG.author.name ? '    <script>(' + bylineToggle.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnTrip.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnPeek.toString() + ')();</script>' : '',
     footHtml ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ',' + JSON.stringify(fnMargin ? 'side' : 'below') + ');</script>' : '',

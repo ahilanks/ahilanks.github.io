@@ -1483,7 +1483,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     version ? '      .home:hover { color:var(--text-color); }' : '',
     version ? '      .toc.quiet ~ .home { opacity:0; transition:opacity 1.6s ease-in; }' : '',
     version ? '      .toc.quiet ~ .home:hover, .toc.quiet ~ .home:focus { opacity:1; transition:opacity 0.2s ease-out; }' : '',
-    version ? '      .home-arr { display:none; } @media (max-width:1060px) { .home { position:static; display:flex; align-items:center; justify-content:center; width:2.5rem; height:2.5rem; padding:0; margin:0.9rem 0 0 max(-0.6rem, calc((100% - 820px) / 2 - 0.6rem)); border-radius:50%; color:var(--text-color); -webkit-tap-highlight-color:transparent; } .home:active { background:rgba(39,50,63,0.08); } .toc.quiet ~ .home { opacity:1; } .home-txt { display:none; } .home-arr { display:block; width:24px; height:24px; } .home + .container { margin-top:0.3rem; } }' : '',
+    version ? '      .home-arr, .home-all { display:none; } @media (max-width:1060px) { .home { position:static; display:flex; align-items:center; gap:0.2rem; width:fit-content; height:2.5rem; padding:0 0.7rem 0 0.25rem; margin:0.9rem 0 0 max(-0.45rem, calc((100% - 820px) / 2 - 0.45rem)); border-radius:1.25rem; font-family:system-ui, sans-serif; font-size:0.95rem; font-weight:600; letter-spacing:0; text-transform:none; color:var(--text-color); -webkit-tap-highlight-color:transparent; } .home:active { background:rgba(39,50,63,0.08); } .toc.quiet ~ .home { opacity:1; } .home-txt { display:none; } .home-arr { display:block; width:22px; height:22px; } .home-all { display:inline; } .home + .container { margin-top:0.3rem; } }' : '',
     hasToc ? '      .toc { position:fixed; top:' + (version ? '3.9rem' : '2.2rem') + '; left:2rem; width:220px; max-height:calc(100vh - ' + (version ? '6.2rem' : '4.5rem') + '); overflow-y:auto; scrollbar-width:none; }' : '',
     hasToc ? '      .toc::-webkit-scrollbar { display:none; }' : '',
     hasToc ? '      .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }' : '',
@@ -1505,7 +1505,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '  <body' + (looks.kind === 'poem' ? ' class="poem"' : '') + (styleKey(looks) ? ' data-style="' + escapeHtml(styleKey(looks)) + '"' : '') + '>',
     tocHtml,
     // a quiet way home: in the left margin above Contents (wide screens)
-    version ? '    <a class="home" href="../writings.html" aria-label="All writings"><span class="home-txt">← Writings</span><svg class="home-arr" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>' : '',
+    version ? '    <a class="home" href="../writings.html" aria-label="All writings"><span class="home-txt">← Writings</span><svg class="home-arr" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="home-all">All writings</span></a>' : '',
     '    <main class="container">',
     // Unlisted drafts are shared out of context, so no back-link to the writings index.
     version ? '' : provHtml, // a draft's label

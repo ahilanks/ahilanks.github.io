@@ -25,8 +25,30 @@
       "confirmed": "2026-11-14T00:57:55Z",
       "verifiedVia": "https://blockstream.info/api",
       "verifiedAt": "2026-11-14T00:57:55Z"
+    },
+    {
+      "n": 2,
+      "file": "before-and-after-handover.v2.html",
+      "sha256": "2afbde3b88c2dc162dad1d13e5e615619a71a79be6113a38dc994cd323fa51f3",
+      "contentSha256": "a519f3b4ca1c4c1e2269eda5ac2054f3d088982c1f2f17325ffb7d591a7b7ce1",
+      "date": "2026-11-15T08:45:11.924Z",
+      "title": "Before and After Handover",
+      "words": 129,
+      "ots": "v2.ots",
+      "status": "pending",
+      "submitted": "2026-11-15T08:45:17Z",
+      "calendars": [
+        "https://a.pool.opentimestamps.org",
+        "https://b.pool.opentimestamps.org",
+        "https://a.pool.eternitywall.com",
+        "https://ots.btc.catallaxy.com"
+      ],
+      "block": null,
+      "blockHash": null,
+      "blockTime": null,
+      "verified": false
     }
   ],
   "title": "Before and After Handover",
-  "updated": "2026-11-14T00:57:55Z"
+  "updated": "2026-11-15T08:45:17Z"
 }

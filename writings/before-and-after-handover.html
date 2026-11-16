@@ -73,23 +73,24 @@
       .fn-flash { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); border-radius:3px; }
       .fn-flash.fn-flash-fade { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); transition:background-color 1.2s ease-out, box-shadow 1.2s ease-out; }
       .prov { display:contents; }
-      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }
+      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; margin-left:0; padding:0.15rem 0.25rem; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }
       .prov-line:focus:not(:focus-visible) { outline:none; }
-      .prov-line:hover .prov-text { color:var(--text-color); }
+      .prov-line:hover { color:var(--text-color); }
       .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }
-      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }
-      .prov-line { margin-left:0; } .prov-text:empty, .meta .prov-dot { display:none; }
+      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; }
+      .prov-text:empty, .meta .prov-dot, .prov-top .prov-dot { display:none; }
       .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }
       .prov.open .prov-caret { transform:rotate(180deg); }
-      .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }
-      .prov-current:hover { text-decoration:underline; }
-      .prov-panel { flex-basis:100%; margin:0.3rem 0 0; font-size:0.85rem; } @media (max-width:560px) { .prov-panel { font-size:0.74rem; } }
-      .prov-links { margin:0; } .prov-panel a { color:var(--muted); } .prov-panel a:hover { color:var(--text-color); }
-      .prov-list { list-style:none; margin:0 0 0.3rem; padding:0; }
-      .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }
-      .prov-vlink:hover { text-decoration:underline; }
+      .prov-panel { flex-basis:100%; display:flex; flex-direction:column; gap:0.05rem; margin:0.2rem 0 0; font-size:0.85rem; line-height:1.55; }
+      .prov-panel[hidden] { display:none; }
+      @media (max-width:560px) { .prov-panel { font-size:0.8rem; } }
+      .prov-vers { display:flex; flex-wrap:wrap; column-gap:0.4rem; }
+      .prov-vers b { font-weight:600; color:var(--text-color); }
+      .prov-vers a { text-decoration:none; } .prov-vers a:hover { text-decoration:underline; }
       .prov a { color:var(--muted); }
       .prov a:hover { color:var(--text-color); }
+      .prov-top { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.15rem; margin:0 0 0.6rem; font-size:0.95rem; color:var(--muted); }
+      .prov-current { color:var(--text-color); text-decoration:none; } .prov-current:hover { text-decoration:underline; }
       .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }
       .draft-note::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.5rem; vertical-align:middle; position:relative; top:-1px; }
       .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }
@@ -134,6 +135,61 @@
       <div class="meta"><span class="by"><button type="button" class="by-name" aria-expanded="false">Ahilan Karuppusami</button><span class="by-links"><a href="https://x.com/ahilanks101" target="_blank" rel="noopener" title="X" aria-label="X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 1.2h3.7l-8 9.2L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.3l13.3 17.3z"/></svg></a><a href="https://ahilanks.github.io" title="Website" aria-label="Website"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.6 3.9 5.8 3.9 9.5s-1.3 6.9-3.9 9.5c-2.6-2.6-3.9-5.8-3.9-9.5S9.4 5.1 12 2.5z"/></svg></a><a href="https://ahilanks.substack.com" target="_blank" rel="noopener" title="Substack" aria-label="Substack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/></svg></a></span></span><span aria-hidden="true">·</span><span>Nov 15, 26 · 1 min</span><span class="prov" id="prov" data-slug="before-and-after-handover" data-v="2" data-date="2026-11-15T08:45:11.924Z"><button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button><span class="prov-panel" hidden></span></span></div>
       <figure class="img-block"><img src="media/before-and-after-handover-c4c16bc12f8b.jpg" alt=""><figcaption><a target="_blank" rel="noopener" href="https://x.com/doganuraldesign/status/2101561517971750950">source</a></figcaption></figure><p class="small"><em>Note: Organized roughly chronologically.</em></p><h2 id="sec-probabilities">Probabilities</h2><p class="poem-date">Nov 15, 2026</p><p>When distributions are <a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=YEUclZdj_Sc">modeled</a> perfectly,</p><p><a target="_blank" rel="noopener" href="https://www.merriam-webster.com/dictionary/contrarian">thoughts outside</a> are the only scarcity left.</p><h2 id="sec-self-governance">Self-Governance</h2><p class="poem-date">Nov 12, 2026</p><p>Across the world</p><p>from <a target="_blank" rel="noopener" href="https://www.britannica.com/event/Reign-of-Terror">guillotined</a> monarchies,</p><p>rose <a target="_blank" rel="noopener" href="https://ourworldindata.org/the-rise-of-electoral-democracy">heads of representation</a>.</p><p></p><p>As more hands signed the <a target="_blank" rel="noopener" href="https://oll.libertyfund.org/publications/reading-room/2023-10-31-temnick-thomas-hobbes-leviathan">contract</a>,</p><p>good or bad,</p><p>fate was tied to the many.</p><p></p><p>Every vote in history had borders.</p><p>Every one could be tried again.</p><p></p><p>But now before us— stands a<em> </em><a target="_blank" rel="noopener" href="https://www.astralcodexten.com/p/against-against-handover?hide_intro_popup=true">decision</a></p><p>heavier than all the hands ever raised.</p><p></p><p>It will reach every shore</p><p>and the stars past them.</p><p>It may be the last ballot we ever cast.</p><p></p><p>Will we leave it to the few?</p><h2 id="sec-sibling-rivalry">Sibling Rivalry</h2><p class="poem-date">Nov 13, 2026</p><p>I’ve always been the older brother.</p><p>All that we shared was mine.</p><p></p><p>Now, so late in life:</p><p>It seems I will be getting an older brother,</p><p>along with all of humanity.</p><p></p><p>Will you share with me?</p><h2 id="sec-time">Time</h2><p class="poem-date">Nov 15, 2026</p><p>My forefathers gave it to fields,</p><p>and my father to desks.</p><p></p><p>I wonder what will remain to spend it on,</p><p>but <a target="_blank" rel="noopener" href="https://iainbanks.co.uk/banks-notes-games/">games</a>— within this one.</p><p></p><p></p><p></p><p></p>
     </main>
+    <script>(function provOld(has) {
+  var root = document.getElementById('prov')
+  var main = document.querySelector('main.container')
+  var q = /[?&]v=(\d+)/.exec(location.search)
+  if (!root || !main || !q) return
+  var n = parseInt(q[1], 10)
+  var latestN = parseInt(root.getAttribute('data-v') || '0', 10)
+  var slug = root.getAttribute('data-slug')
+  if (!(n >= 1 && n < latestN)) return
+  var file = slug + '.v' + n + '.html'
+  var html = null
+  try {
+    var x = new XMLHttpRequest()
+    x.open('GET', file, false) // sync on purpose: the text must be in place before the scripts below run
+    x.send()
+    if (x.status === 200) html = x.responseText
+  } catch (e) {}
+  if (!html) return
+  var doc = new DOMParser().parseFromString(html, 'text/html')
+  var om = doc.querySelector('main.container')
+  if (!om) { location.replace(file); return }
+  var need = {
+    toc: !!doc.querySelector('nav.toc'), fn: !!om.querySelector('ol.footnotes'), sliders: !!om.querySelector('[data-levels]'),
+    details: !!om.querySelector('details'), video: !!om.querySelector('video'), embed: !!om.querySelector('figure.embed'),
+    canvas: !!om.querySelector('.canvas-item'),
+  }
+  for (var k in need) if (need[k] && has.indexOf(k) < 0) { location.replace(file); return }
+
+  var oh1 = om.querySelector('h1'), osub = om.querySelector('.subtitle'), ometa = om.querySelector('.meta')
+  var lh1 = main.querySelector('h1'), lsub = main.querySelector('.subtitle'), lmeta = main.querySelector('.meta')
+  if (!oh1 || !lh1 || !lmeta) { location.replace(file); return }
+  lh1.innerHTML = oh1.innerHTML
+  if (lsub && osub) lsub.innerHTML = osub.innerHTML
+  else if (lsub) lsub.parentNode.removeChild(lsub)
+  else if (osub) lh1.parentNode.insertBefore(document.importNode(osub, true), lh1.nextSibling)
+  // the date line keeps the byline; the date and reading time are the old version's
+  var oprov = doc.getElementById('prov')
+  var when = new Date(oprov && oprov.getAttribute('data-date'))
+  var mins = /(\d+)\s*min/.exec(ometa ? ometa.textContent : '')
+  var spans = lmeta.querySelectorAll(':scope > span')
+  for (var s = 0; s < spans.length; s++) {
+    if (/\d+ min$/.test(spans[s].textContent) && !isNaN(when)) {
+      spans[s].textContent = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) + (mins ? ' · ' + mins[1] + ' min' : '')
+    }
+  }
+  // the text: everything after the old date line
+  while (lmeta.nextSibling) main.removeChild(lmeta.nextSibling)
+  for (var nd = (ometa || osub || oh1).nextSibling; nd; nd = nd.nextSibling) main.appendChild(document.importNode(nd, true))
+  // Contents
+  var ltoc = document.querySelector('nav.toc'), otoc = doc.querySelector('nav.toc')
+  if (ltoc && otoc) ltoc.innerHTML = otoc.innerHTML
+  else if (ltoc) ltoc.parentNode.removeChild(ltoc)
+  if (doc.title) document.title = doc.title + ' (v' + n + ')'
+  root.setAttribute('data-view', String(n))
+})(["toc"]);</script>
     <script>
       (function () {
         var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));
@@ -218,11 +274,10 @@
   var root = document.getElementById('prov')
   if (!root) return
   var slug = root.getAttribute('data-slug')
-  var here = parseInt(root.getAttribute('data-v') || '0', 10)
-  var m = (location.pathname || '').match(/\.v(\d+)\.html$/)
-  var viewingOld = !!m // a frozen copy (…/<slug>.v<N>.html) rather than the live page
+  var latestN = parseInt(root.getAttribute('data-v') || '0', 10)
+  var view = parseInt(root.getAttribute('data-view') || '0', 10) || latestN
+  var old = view < latestN
   var line = root.querySelector('.prov-line')
-  var text = root.querySelector('.prov-text')
   var dot = root.querySelector('.prov-dot')
   var panel = root.querySelector('.prov-panel')
   var manifest = null
@@ -233,68 +288,57 @@
     var d = new Date(iso); if (isNaN(d)) return String(iso || '')
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
-  function dayTime(iso) {
-    var d = new Date(iso); if (isNaN(d)) return String(iso || '')
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) + ', ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  function short(iso) {
+    var d = new Date(iso); if (isNaN(d)) return ''
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
-  function utc(sec) {
-    var d = new Date(sec * 1000)
-    return d.toUTCString().replace(/:\d\d GMT$/, ' UTC').replace(/^\w+, /, '')
-  }
-  function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
-  function statusOf(v) {
-    if (v.status === 'verified') return { k: 'ok', s: 'Bitcoin block ' + num(v.block) + ' · mined ' + utc(v.blockTime) }
-    if (v.status === 'confirmed') return { k: 'ok', s: 'Bitcoin block ' + num(v.block) + ' · header check pending' }
-    if (v.status === 'invalid') return { k: 'bad', s: 'proof does not match block ' + num(v.block) }
-    return { k: 'wait', s: 'awaiting Bitcoin confirmation · submitted ' + dayTime(v.submitted || v.date) }
-  }
-
-  function summarize() {
+  function verOf(n) {
     var vs = manifest && manifest.versions ? manifest.versions : []
-    var latest = vs.length ? vs[vs.length - 1] : null
-    var mine = null
-    for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
-    var parts = []
-    if (viewingOld && latest && here < latest.n) {
-      parts.push('an earlier version')
-      dot.className = 'prov-dot old'
-    } else {
-      // the status itself is in the panel; the line keeps just its coloured dot
-      var st = mine ? statusOf(mine) : null
-      dot.className = 'prov-dot' + (st ? ' ' + st.k : '')
-    }
-    text.textContent = parts.join(' · ')
-    if (viewingOld && latest && here < latest.n) {
-      var cur = document.createElement('a')
-      cur.className = 'prov-current'
-      cur.href = slug + '.html'
-      cur.textContent = 'read the current version →'
-      root.insertBefore(cur, panel)
-    }
+    for (var i = 0; i < vs.length; i++) if (vs[i].n === n) return vs[i]
+    return null
+  }
+  function kind(v) { return !v ? '' : v.status === 'verified' || v.status === 'confirmed' ? 'ok' : v.status === 'invalid' ? 'bad' : 'wait' }
+
+  if (old) {
+    // above the title: the way back to the current text, this version's details folded under it
+    var top = document.createElement('div')
+    top.className = 'prov-top'
+    var cur = document.createElement('a')
+    cur.className = 'prov-current'
+    cur.href = slug + '.html'
+    cur.textContent = 'Read the current version →'
+    top.appendChild(cur)
+    top.appendChild(root)
+    var h1 = document.querySelector('main.container h1')
+    if (h1) h1.parentNode.insertBefore(top, h1)
+    line.setAttribute('title', 'About this version')
+    line.setAttribute('aria-label', 'About this version')
   }
 
-  // Minimal on purpose: the proof file(s) and where to check them. Readers who care can.
   function render() {
     var vs = manifest && manifest.versions ? manifest.versions.slice().reverse() : []
+    var me = verOf(view)
     var h = ''
+    if (old) h += '<span class="prov-row">You’re reading v' + view + ' of ' + latestN + (me ? ', from ' + esc(day(me.date)) : '') + '.</span>'
     if (vs.length > 1) {
-      h += '<ol class="prov-list">'
+      h += '<span class="prov-row prov-vers">'
       for (var i = 0; i < vs.length; i++) {
         var v = vs[i]
-        h += '<li><a class="prov-vlink" href="' + esc(i === 0 ? slug + '.html' : v.file) + '">v' + v.n + '</a> · ' + esc(day(v.date)) +
-          ' · <a href="proofs/' + esc(slug) + '/' + esc(v.ots) + '" download>proof</a></li>'
+        var label = 'v' + v.n + ' <span class="prov-d">' + esc(short(v.date)) + '</span>'
+        var href = v.n === latestN ? slug + '.html' : slug + '.html?v=' + v.n
+        h += (i ? '<span aria-hidden="true">·</span>' : '') +
+          (v.n === view ? '<b aria-current="page">' + label + '</b>' : '<a href="' + esc(href) + '">' + label + '</a>')
       }
-      h += '</ol>'
+      h += '</span>'
     }
-    var cur = vs.length ? vs[0] : null
-    var mine = null
-    for (var k = 0; k < vs.length; k++) if (vs[k].n === here) mine = vs[k]
-    var st = mine ? statusOf(mine) : null
-    var said = !st ? 'Timestamped in Bitcoin' : st.k === 'ok' ? 'Timestamped in Bitcoin' : st.k === 'bad' ? 'Bitcoin timestamp invalid' : 'Bitcoin timestamp pending'
-    h += '<p class="prov-links">' + said + ' with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
-      (cur && vs.length === 1 ? ' · <a href="proofs/' + esc(slug) + '/' + esc(cur.ots) + '" download>proof</a>' : '') + '</p>'
-    panel.innerHTML = h
+    var k = kind(me)
+    h += '<span class="prov-row"><a href="https://opentimestamps.org" rel="noopener" target="_blank" title="How to verify">' +
+      (k === 'bad' ? 'Timestamp invalid' : k === 'wait' ? 'Timestamp pending' : 'Timestamped in Bitcoin') + '</a>'
+    if (me) {
+      h += ' · <a href="' + esc(me.file) + '" title="The exact file the timestamp covers">file</a>' +
+        ' · <a href="proofs/' + esc(slug) + '/' + esc(me.ots) + '" download title="OpenTimestamps proof">proof</a>'
+    }
+    panel.innerHTML = h + '</span>'
   }
 
   line.addEventListener('click', function () {
@@ -302,13 +346,18 @@
     panel.hidden = !opened
     line.setAttribute('aria-expanded', opened ? 'true' : 'false')
     root.classList.toggle('open', opened)
-    if (opened && !panel.innerHTML) render()
+    if (opened) render()
   })
 
   fetch('proofs/' + slug + '/manifest.json', { cache: 'no-store' })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
-    .then(function (j) { manifest = j; summarize() })
-    .catch(function () { manifest = null; summarize() })
+    .then(function (j) {
+      manifest = j
+      var k = kind(verOf(view))
+      dot.className = 'prov-dot' + (k ? ' ' + k : '')
+      if (opened) render()
+    })
+    .catch(function () {})
 })();</script>
     <script>(function bylineToggle() {
   var by = document.querySelector('.by')

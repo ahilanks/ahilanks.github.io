@@ -1046,20 +1046,20 @@ function vidPlay() {
 /* ------------------------------------------------------ provenance widget (page) */
 // Runs INSIDE the published article (embedded via provWidget.toString(), so keep it
 // self-contained: no imports, no closures over this module, no "</script>" literals).
-// Reads writings/proofs/<slug>/manifest.json at runtime and renders, above the title:
-//   ● v3 · Sep 6, 2026 · timestamped in Bitcoin ▾
-// Expanding lists every version (click → opens that frozen file), each proof's status,
-// the SHA-256 fingerprint, a live in-browser re-hash of the frozen file, the .ots proof
-// and how to verify independently. Old version pages announce they are superseded.
+// A small caret at the end of the date line opens two short lines, whatever the number of
+// versions:
+//   v3 Nov 20 · v2 Nov 15 · v1 Nov 13      (the one on screen in bold; the others open it)
+//   Timestamped in Bitcoin · file · proof
+// On an older version (?v=N, put in place by provOld) the line above the title reads
+// "Read the current version →", and its caret adds "You're reading v1 of 3, from …".
 function provWidget() {
   var root = document.getElementById('prov')
   if (!root) return
   var slug = root.getAttribute('data-slug')
-  var here = parseInt(root.getAttribute('data-v') || '0', 10)
-  var m = (location.pathname || '').match(/\.v(\d+)\.html$/)
-  var viewingOld = !!m // a frozen copy (…/<slug>.v<N>.html) rather than the live page
+  var latestN = parseInt(root.getAttribute('data-v') || '0', 10)
+  var view = parseInt(root.getAttribute('data-view') || '0', 10) || latestN
+  var old = view < latestN
   var line = root.querySelector('.prov-line')
-  var text = root.querySelector('.prov-text')
   var dot = root.querySelector('.prov-dot')
   var panel = root.querySelector('.prov-panel')
   var manifest = null
@@ -1070,68 +1070,57 @@ function provWidget() {
     var d = new Date(iso); if (isNaN(d)) return String(iso || '')
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
-  function dayTime(iso) {
-    var d = new Date(iso); if (isNaN(d)) return String(iso || '')
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) + ', ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  function short(iso) {
+    var d = new Date(iso); if (isNaN(d)) return ''
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
-  function utc(sec) {
-    var d = new Date(sec * 1000)
-    return d.toUTCString().replace(/:\d\d GMT$/, ' UTC').replace(/^\w+, /, '')
-  }
-  function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
-  function statusOf(v) {
-    if (v.status === 'verified') return { k: 'ok', s: 'Bitcoin block ' + num(v.block) + ' · mined ' + utc(v.blockTime) }
-    if (v.status === 'confirmed') return { k: 'ok', s: 'Bitcoin block ' + num(v.block) + ' · header check pending' }
-    if (v.status === 'invalid') return { k: 'bad', s: 'proof does not match block ' + num(v.block) }
-    return { k: 'wait', s: 'awaiting Bitcoin confirmation · submitted ' + dayTime(v.submitted || v.date) }
-  }
-
-  function summarize() {
+  function verOf(n) {
     var vs = manifest && manifest.versions ? manifest.versions : []
-    var latest = vs.length ? vs[vs.length - 1] : null
-    var mine = null
-    for (var i = 0; i < vs.length; i++) if (vs[i].n === here) mine = vs[i]
-    var parts = []
-    if (viewingOld && latest && here < latest.n) {
-      parts.push('an earlier version')
-      dot.className = 'prov-dot old'
-    } else {
-      // the status itself is in the panel; the line keeps just its coloured dot
-      var st = mine ? statusOf(mine) : null
-      dot.className = 'prov-dot' + (st ? ' ' + st.k : '')
-    }
-    text.textContent = parts.join(' · ')
-    if (viewingOld && latest && here < latest.n) {
-      var cur = document.createElement('a')
-      cur.className = 'prov-current'
-      cur.href = slug + '.html'
-      cur.textContent = 'read the current version →'
-      root.insertBefore(cur, panel)
-    }
+    for (var i = 0; i < vs.length; i++) if (vs[i].n === n) return vs[i]
+    return null
+  }
+  function kind(v) { return !v ? '' : v.status === 'verified' || v.status === 'confirmed' ? 'ok' : v.status === 'invalid' ? 'bad' : 'wait' }
+
+  if (old) {
+    // above the title: the way back to the current text, this version's details folded under it
+    var top = document.createElement('div')
+    top.className = 'prov-top'
+    var cur = document.createElement('a')
+    cur.className = 'prov-current'
+    cur.href = slug + '.html'
+    cur.textContent = 'Read the current version →'
+    top.appendChild(cur)
+    top.appendChild(root)
+    var h1 = document.querySelector('main.container h1')
+    if (h1) h1.parentNode.insertBefore(top, h1)
+    line.setAttribute('title', 'About this version')
+    line.setAttribute('aria-label', 'About this version')
   }
 
-  // Minimal on purpose: the proof file(s) and where to check them. Readers who care can.
   function render() {
     var vs = manifest && manifest.versions ? manifest.versions.slice().reverse() : []
+    var me = verOf(view)
     var h = ''
+    if (old) h += '<span class="prov-row">You’re reading v' + view + ' of ' + latestN + (me ? ', from ' + esc(day(me.date)) : '') + '.</span>'
     if (vs.length > 1) {
-      h += '<ol class="prov-list">'
+      h += '<span class="prov-row prov-vers">'
       for (var i = 0; i < vs.length; i++) {
         var v = vs[i]
-        h += '<li><a class="prov-vlink" href="' + esc(i === 0 ? slug + '.html' : v.file) + '">v' + v.n + '</a> · ' + esc(day(v.date)) +
-          ' · <a href="proofs/' + esc(slug) + '/' + esc(v.ots) + '" download>proof</a></li>'
+        var label = 'v' + v.n + ' <span class="prov-d">' + esc(short(v.date)) + '</span>'
+        var href = v.n === latestN ? slug + '.html' : slug + '.html?v=' + v.n
+        h += (i ? '<span aria-hidden="true">·</span>' : '') +
+          (v.n === view ? '<b aria-current="page">' + label + '</b>' : '<a href="' + esc(href) + '">' + label + '</a>')
       }
-      h += '</ol>'
+      h += '</span>'
     }
-    var cur = vs.length ? vs[0] : null
-    var mine = null
-    for (var k = 0; k < vs.length; k++) if (vs[k].n === here) mine = vs[k]
-    var st = mine ? statusOf(mine) : null
-    var said = !st ? 'Timestamped in Bitcoin' : st.k === 'ok' ? 'Timestamped in Bitcoin' : st.k === 'bad' ? 'Bitcoin timestamp invalid' : 'Bitcoin timestamp pending'
-    h += '<p class="prov-links">' + said + ' with <a href="https://opentimestamps.org" rel="noopener" target="_blank">OpenTimestamps</a>' +
-      (cur && vs.length === 1 ? ' · <a href="proofs/' + esc(slug) + '/' + esc(cur.ots) + '" download>proof</a>' : '') + '</p>'
-    panel.innerHTML = h
+    var k = kind(me)
+    h += '<span class="prov-row"><a href="https://opentimestamps.org" rel="noopener" target="_blank" title="How to verify">' +
+      (k === 'bad' ? 'Timestamp invalid' : k === 'wait' ? 'Timestamp pending' : 'Timestamped in Bitcoin') + '</a>'
+    if (me) {
+      h += ' · <a href="' + esc(me.file) + '" title="The exact file the timestamp covers">file</a>' +
+        ' · <a href="proofs/' + esc(slug) + '/' + esc(me.ots) + '" download title="OpenTimestamps proof">proof</a>'
+    }
+    panel.innerHTML = h + '</span>'
   }
 
   line.addEventListener('click', function () {
@@ -1139,34 +1128,102 @@ function provWidget() {
     panel.hidden = !opened
     line.setAttribute('aria-expanded', opened ? 'true' : 'false')
     root.classList.toggle('open', opened)
-    if (opened && !panel.innerHTML) render()
+    if (opened) render()
   })
 
   fetch('proofs/' + slug + '/manifest.json', { cache: 'no-store' })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
-    .then(function (j) { manifest = j; summarize() })
-    .catch(function () { manifest = null; summarize() })
+    .then(function (j) {
+      manifest = j
+      var k = kind(verOf(view))
+      dot.className = 'prov-dot' + (k ? ' ' + k : '')
+      if (opened) render()
+    })
+    .catch(function () {})
+}
+
+// Runs INSIDE the published article, just after the text and before the page's other
+// scripts. ?v=N shows an older version here, in the current layout: its text is read from
+// the frozen copy (<slug>.vN.html, which stays byte-for-byte what was timestamped) and put
+// in place of the current text before Contents, footnotes, maths etc. start up. If the old
+// text needs something this page doesn't carry (`has`: footnotes, sliders…), it opens the
+// frozen copy itself instead.
+function provOld(has) {
+  var root = document.getElementById('prov')
+  var main = document.querySelector('main.container')
+  var q = /[?&]v=(\d+)/.exec(location.search)
+  if (!root || !main || !q) return
+  var n = parseInt(q[1], 10)
+  var latestN = parseInt(root.getAttribute('data-v') || '0', 10)
+  var slug = root.getAttribute('data-slug')
+  if (!(n >= 1 && n < latestN)) return
+  var file = slug + '.v' + n + '.html'
+  var html = null
+  try {
+    var x = new XMLHttpRequest()
+    x.open('GET', file, false) // sync on purpose: the text must be in place before the scripts below run
+    x.send()
+    if (x.status === 200) html = x.responseText
+  } catch (e) {}
+  if (!html) return
+  var doc = new DOMParser().parseFromString(html, 'text/html')
+  var om = doc.querySelector('main.container')
+  if (!om) { location.replace(file); return }
+  var need = {
+    toc: !!doc.querySelector('nav.toc'), fn: !!om.querySelector('ol.footnotes'), sliders: !!om.querySelector('[data-levels]'),
+    details: !!om.querySelector('details'), video: !!om.querySelector('video'), embed: !!om.querySelector('figure.embed'),
+    canvas: !!om.querySelector('.canvas-item'),
+  }
+  for (var k in need) if (need[k] && has.indexOf(k) < 0) { location.replace(file); return }
+
+  var oh1 = om.querySelector('h1'), osub = om.querySelector('.subtitle'), ometa = om.querySelector('.meta')
+  var lh1 = main.querySelector('h1'), lsub = main.querySelector('.subtitle'), lmeta = main.querySelector('.meta')
+  if (!oh1 || !lh1 || !lmeta) { location.replace(file); return }
+  lh1.innerHTML = oh1.innerHTML
+  if (lsub && osub) lsub.innerHTML = osub.innerHTML
+  else if (lsub) lsub.parentNode.removeChild(lsub)
+  else if (osub) lh1.parentNode.insertBefore(document.importNode(osub, true), lh1.nextSibling)
+  // the date line keeps the byline; the date and reading time are the old version's
+  var oprov = doc.getElementById('prov')
+  var when = new Date(oprov && oprov.getAttribute('data-date'))
+  var mins = /(\d+)\s*min/.exec(ometa ? ometa.textContent : '')
+  var spans = lmeta.querySelectorAll(':scope > span')
+  for (var s = 0; s < spans.length; s++) {
+    if (/\d+ min$/.test(spans[s].textContent) && !isNaN(when)) {
+      spans[s].textContent = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) + (mins ? ' · ' + mins[1] + ' min' : '')
+    }
+  }
+  // the text: everything after the old date line
+  while (lmeta.nextSibling) main.removeChild(lmeta.nextSibling)
+  for (var nd = (ometa || osub || oh1).nextSibling; nd; nd = nd.nextSibling) main.appendChild(document.importNode(nd, true))
+  // Contents
+  var ltoc = document.querySelector('nav.toc'), otoc = doc.querySelector('nav.toc')
+  if (ltoc && otoc) ltoc.innerHTML = otoc.innerHTML
+  else if (ltoc) ltoc.parentNode.removeChild(ltoc)
+  if (doc.title) document.title = doc.title + ' (v' + n + ')'
+  root.setAttribute('data-view', String(n))
 }
 
 const PROV_CSS = [
   '      .prov { display:contents; }',
-  '      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }',
+  '      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; margin-left:0; padding:0.15rem 0.25rem; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }',
   '      .prov-line:focus:not(:focus-visible) { outline:none; }',
-  '      .prov-line:hover .prov-text { color:var(--text-color); }',
+  '      .prov-line:hover { color:var(--text-color); }',
   '      .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }',
-  '      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; } .prov-dot.old { background:#9aa1ab; }',
-  '      .prov-line { margin-left:0; } .prov-text:empty, .meta .prov-dot { display:none; }',
+  '      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; }',
+  '      .prov-text:empty, .meta .prov-dot, .prov-top .prov-dot { display:none; }',
   '      .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }',
   '      .prov.open .prov-caret { transform:rotate(180deg); }',
-  '      .prov-current { flex-basis:100%; color:var(--text-color); text-decoration:none; }',
-  '      .prov-current:hover { text-decoration:underline; }',
-  '      .prov-panel { flex-basis:100%; margin:0.3rem 0 0; font-size:0.85rem; } @media (max-width:560px) { .prov-panel { font-size:0.74rem; } }',
-  '      .prov-links { margin:0; } .prov-panel a { color:var(--muted); } .prov-panel a:hover { color:var(--text-color); }',
-  '      .prov-list { list-style:none; margin:0 0 0.3rem; padding:0; }',
-  '      .prov-vlink { color:var(--text-color); font-weight:600; text-decoration:none; }',
-  '      .prov-vlink:hover { text-decoration:underline; }',
+  '      .prov-panel { flex-basis:100%; display:flex; flex-direction:column; gap:0.05rem; margin:0.2rem 0 0; font-size:0.85rem; line-height:1.55; }',
+  '      .prov-panel[hidden] { display:none; }',
+  '      @media (max-width:560px) { .prov-panel { font-size:0.8rem; } }',
+  '      .prov-vers { display:flex; flex-wrap:wrap; column-gap:0.4rem; }',
+  '      .prov-vers b { font-weight:600; color:var(--text-color); }',
+  '      .prov-vers a { text-decoration:none; } .prov-vers a:hover { text-decoration:underline; }',
   '      .prov a { color:var(--muted); }',
   '      .prov a:hover { color:var(--text-color); }',
+  '      .prov-top { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.15rem; margin:0 0 0.6rem; font-size:0.95rem; color:var(--muted); }',
+  '      .prov-current { color:var(--text-color); text-decoration:none; } .prov-current:hover { text-decoration:underline; }',
   // Draft pages have no "← Writings" back-link, so the note sits at the top with the
   // container's (tighter) top margin instead of being pulled up under the link.
   // Deep brick red on the cream page: unmistakably "not the published article", still quiet.
@@ -1515,6 +1572,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      ' + bodyHtml,
     footHtml,
     '    </main>',
+    // ?v=N: an older version's text, swapped in before the scripts below start
+    version ? '    <script>(' + provOld.toString() + ')(' + JSON.stringify([hasToc && 'toc', footHtml && 'fn', hasSliders && 'sliders', hasCollapsibles && 'details', hasVideo && 'video', hasEmbed && 'embed', bodyHtml.includes('canvas-item') && 'canvas'].filter(Boolean)) + ');</script>' : '',
     footHtml ? '    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>' : '',
     tocScript,
     hasToc ? '    <script>(' + tocFade.toString() + ')();</script>' : '',

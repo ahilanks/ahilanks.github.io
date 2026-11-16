@@ -32,7 +32,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 // PRIVATE: a draft snapshot also carries `notes` (the editor's sticky note) and comments.
 // Neither may ever reach a published page or draft link — build only from title,
 // subtitle, body and the footnote list.
-import { CONFIG } from './config.js'
+import { CONFIG, LS } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
 import { levelsFor } from './equation-levels.js'
 import { CANVAS_CSS, canvasForPublish, canvasPlace } from './nodes/canvas.js'
@@ -1756,6 +1756,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   ].filter((l) => l !== '').join('\n')
 }
 
+const TECH_MARK = '<span class="post-tech" tabindex="0" data-tip="technical" aria-label="technical">*</span>'
+
 // Insert a new <li> into writings.html's post list (or fail loudly if the layout is missing).
 // Returns true when the index changed (the new text is queued on `sink`).
 async function updateWritingsIndex(sink, post) {
@@ -1766,10 +1768,16 @@ async function updateWritingsIndex(sink, post) {
   const liId = 'post-' + post.slug
   const sub = (post.subtitle || '').trim()
   const subHtml = sub ? '<p class="post-sub">' + escapeHtml(sub) + '</p>' : ''
+  // technical pieces: a faint * after the title, "technical" on hover/tap (nothing on the article)
+  const tech = post.technical ? TECH_MARK : ''
   if (text.includes('id="' + liId + '"')) {
-    // already listed: keep its subtitle line in step with the article's
-    const re = new RegExp('(<li class="post" id="' + liId + '">[\\s\\S]*?</a\\s*>)(\\s*<p class="post-sub">[\\s\\S]*?</p>)?(?=\\s*<p class="post-meta">)')
-    const next = text.replace(re, (m, head) => head + (subHtml ? '\n            ' + subHtml : ''))
+    // already listed: keep its subtitle line and * in step with the article's
+    const li0 = text.indexOf('<li class="post" id="' + liId + '">')
+    const li1 = text.indexOf('</li>', li0)
+    let item = text.slice(li0, li1).replace(TECH_MARK, '')
+    const re = /^([\s\S]*?<\/a\s*>)(\s*<p class="post-sub">[\s\S]*?<\/p>)?(?=\s*<p class="post-meta">)/
+    item = item.replace(re, (m, head) => head + tech + (subHtml ? '\n            ' + subHtml : ''))
+    const next = text.slice(0, li0) + item + text.slice(li1)
     if (next === text) return false
     await sink.add('writings.html', next)
     return true
@@ -1782,7 +1790,7 @@ async function updateWritingsIndex(sink, post) {
     '\n        <li class="post" id="' + liId + '">\n' +
     '          <a class="post-thumb" href="writings/' + post.slug + '.html">' + thumbInner + '</a>\n' +
     '          <div class="post-info">\n' +
-    '            <a class="post-title" href="writings/' + post.slug + '.html">' + escapeHtml(post.title) + '</a>\n' +
+    '            <a class="post-title" href="writings/' + post.slug + '.html">' + escapeHtml(post.title) + '</a>' + tech + '\n' +
     (subHtml ? '            ' + subHtml + '\n' : '') +
     '            <p class="post-meta">' + escapeHtml(post.date) + ' · ' + post.minutes + ' min</p>\n' +
     '          </div>\n' +
@@ -1901,6 +1909,20 @@ export function setupPublish({ editor, currentSnapshot }) {
     }
   }
 
+  // Technical? As the writings list has it now; for a piece not listed yet, whether its draft
+  // sits in the drafts menu's Technical folder.
+  async function seedTechnical(slug, id) {
+    const box = $('pubTechnical')
+    let inFolder = false
+    try { inFolder = ((JSON.parse(localStorage.getItem(LS.layout) || '{}').order || {}).technical || []).includes(id) } catch (e) {}
+    box.checked = inFolder
+    try {
+      const t = await fetch('/writings.html', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : ''))
+      const at = t.indexOf('<li class="post" id="post-' + slug + '">')
+      if (at >= 0) box.checked = t.slice(at, t.indexOf('</li>', at)).includes('class="post-tech"')
+    } catch (e) {}
+  }
+
   function openPublish() {
     const snap = currentSnapshot()
     const titleText = htmlToText(snap.title)
@@ -1917,6 +1939,7 @@ export function setupPublish({ editor, currentSnapshot }) {
       : ''
     setMode('draft')
     showVersionInfo(slugify(titleText))
+    seedTechnical(slugify(titleText), snap.id)
     $('publishOverlay').classList.remove('hidden')
   }
   const closePublish = () => { if (!busy) $('publishOverlay').classList.add('hidden') }
@@ -2045,7 +2068,7 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       // 4) update the writings.html index list
       if ($('pubUpdateList').checked) {
-        await updateWritingsIndex(sink, { slug, title: titleText, subtitle: subtitleText, date: dateStr, minutes, thumb: thumbPath })
+        await updateWritingsIndex(sink, { slug, title: titleText, subtitle: subtitleText, date: dateStr, minutes, thumb: thumbPath, technical: $('pubTechnical').checked })
       }
 
       const written = await sink.flush()

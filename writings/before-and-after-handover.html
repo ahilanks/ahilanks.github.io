@@ -204,19 +204,25 @@
           if (d === 1) sub = m;
           meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });
           // a clicked entry stays disclosed even when the page is too short to scroll it to the top
-          items[m].addEventListener("click", (function (i) { return function () { pinned = i; update(); }; })(m));
+          // and it stays the highlighted one until the reader scrolls on their own
+          items[m].addEventListener("click", (function (i) { return function () { pinned = i; chosen = i; update(); }; })(m));
         }
-        var pinned = -1;
+        var pinned = -1, chosen = -1;
+        ["wheel", "touchmove", "keydown"].forEach(function (t) { addEventListener(t, function () { chosen = -1; }, { passive: true }); });
         var ticking = false;
         function update() {
           ticking = false;
+          // over the last screenful of scrolling the reading line slides from near the top down to the
+          // bottom edge, so sections near the end (whose headings can never reach the top) still get
+          // their turn, and at the very end the last heading on screen is the active one
+          var range = document.documentElement.scrollHeight - innerHeight, left = range - scrollY;
+          var line = 110 + Math.max(0, innerHeight - 110) * Math.max(0, Math.min(1, 1 - left / Math.max(1, Math.min(innerHeight, range))));
           var active = 0;
           for (var i = 0; i < items.length; i++) {
             var h = document.getElementById(items[i].getAttribute("href").slice(1));
-            if (h && h.getBoundingClientRect().top <= 110) active = i;
+            if (h && h.getBoundingClientRect().top <= line - 4) active = i;
           }
-          // scrolled to the end: the last section is the one being read, even if its heading cannot reach the top
-          if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) active = items.length - 1;
+          if (chosen >= 0) active = chosen;
           // subs show only inside an open section, sub-subs only inside an open
           // sub-section — open = being read (scroll) or last clicked (pinned)
           var secs = [meta[active].sec], subs = [meta[active].sub];
@@ -231,6 +237,8 @@
         }
         addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
         addEventListener("load", update);
+        addEventListener("resize", update);
+        if (window.ResizeObserver) new ResizeObserver(function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }).observe(document.body);
         update();
       })();
     </script>

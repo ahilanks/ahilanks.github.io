@@ -1471,19 +1471,25 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       '          if (d === 1) sub = m;\n' +
       '          meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });\n' +
       '          // a clicked entry stays disclosed even when the page is too short to scroll it to the top\n' +
-      '          items[m].addEventListener("click", (function (i) { return function () { pinned = i; update(); }; })(m));\n' +
+      '          // and it stays the highlighted one until the reader scrolls on their own\n' +
+      '          items[m].addEventListener("click", (function (i) { return function () { pinned = i; chosen = i; update(); }; })(m));\n' +
       '        }\n' +
-      '        var pinned = -1;\n' +
+      '        var pinned = -1, chosen = -1;\n' +
+      '        ["wheel", "touchmove", "keydown"].forEach(function (t) { addEventListener(t, function () { chosen = -1; }, { passive: true }); });\n' +
       '        var ticking = false;\n' +
       '        function update() {\n' +
       '          ticking = false;\n' +
+      '          // over the last screenful of scrolling the reading line slides from near the top down to the\n' +
+      '          // bottom edge, so sections near the end (whose headings can never reach the top) still get\n' +
+      '          // their turn, and at the very end the last heading on screen is the active one\n' +
+      '          var range = document.documentElement.scrollHeight - innerHeight, left = range - scrollY;\n' +
+      '          var line = 110 + Math.max(0, innerHeight - 110) * Math.max(0, Math.min(1, 1 - left / Math.max(1, Math.min(innerHeight, range))));\n' +
       '          var active = 0;\n' +
       '          for (var i = 0; i < items.length; i++) {\n' +
       '            var h = document.getElementById(items[i].getAttribute("href").slice(1));\n' +
-      '            if (h && h.getBoundingClientRect().top <= 110) active = i;\n' +
+      '            if (h && h.getBoundingClientRect().top <= line - 4) active = i;\n' +
       '          }\n' +
-      '          // scrolled to the end: the last section is the one being read, even if its heading cannot reach the top\n' +
-      '          if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) active = items.length - 1;\n' +
+      '          if (chosen >= 0) active = chosen;\n' +
       '          // subs show only inside an open section, sub-subs only inside an open\n' +
       '          // sub-section — open = being read (scroll) or last clicked (pinned)\n' +
       '          var secs = [meta[active].sec], subs = [meta[active].sub];\n' +
@@ -1498,6 +1504,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       '        }\n' +
       '        addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });\n' +
       '        addEventListener("load", update);\n' + // re-check once KaTeX/images have shifted the layout
+      '        addEventListener("resize", update);\n' +
+      '        if (window.ResizeObserver) new ResizeObserver(function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }).observe(document.body);\n' + // diagrams/pictures sizing in late
       '        update();\n' +
       '      })();\n' +
       '    </script>'

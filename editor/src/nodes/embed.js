@@ -39,6 +39,50 @@ const RESIZE = '<script>(function(){var d=document.documentElement,last=0,busy=0
   'if(el.focus)try{el.focus({preventScroll:true})}catch(x){}' +
   '["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};' +
   'el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script>'
+// Runs inside the frame (embedded via toString, so self-contained). Diagrams sit straight on
+// the page: a page-sized light, neutral background — the page itself, a wrapping "card",
+// a full-size rect behind an SVG — is taken away with its border and shadow. Colour that
+// means something stays: tinted or dark backgrounds, and anything smaller than the diagram.
+function bareBg() {
+  function plain(c) { // light and grey-ish (white, off-white, light grey)
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || '')
+    if (!m) return false
+    var r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4]
+    if (a === 0) return false
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 26
+  }
+  function run() {
+    var body = document.body
+    if (!body) return
+    var root = document.documentElement
+    var W = Math.max(root.scrollWidth, 1), H = Math.max(root.scrollHeight, 1)
+    var els = [root, body].concat(Array.prototype.slice.call(body.querySelectorAll('div,section,main,article,figure,header,svg,canvas,rect')))
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i]
+      var big = el === root || el === body
+      if (!big) {
+        var r = el.getBoundingClientRect()
+        big = r.width >= W * 0.85 && r.height >= H * 0.6
+      }
+      if (!big) continue
+      if (el.tagName.toLowerCase() === 'rect') {
+        if (plain(getComputedStyle(el).fill)) el.style.setProperty('fill', 'transparent', 'important')
+        continue
+      }
+      var cs = getComputedStyle(el)
+      if (plain(cs.backgroundColor) && (cs.backgroundImage === 'none' || !cs.backgroundImage)) {
+        el.style.setProperty('background-color', 'transparent', 'important')
+        el.style.setProperty('box-shadow', 'none', 'important')
+        if (el !== root && el !== body) el.style.setProperty('border-color', 'transparent', 'important')
+      }
+    }
+  }
+  run()
+  addEventListener('DOMContentLoaded', run)
+  addEventListener('load', function () { run(); setTimeout(run, 400) })
+}
+const BARE = '<script>(' + bareBg.toString() + ')()</script>'
+
 const BASE_CSS = '<style>html,body{margin:0;background:transparent}body{font-family:system-ui,-apple-system,sans-serif;color:#27323f}svg,img,canvas{max-width:100%}</style>'
 
 // A fragment (a lone <svg>, a <div> + <script>) gets a minimal page around it; a whole page
@@ -50,10 +94,10 @@ export function embedDoc(html) {
     let doc = /<head[\s>]/i.test(src)
       ? src.replace(/<head(\s[^>]*)?>/i, (m) => m + '<meta charset="utf-8">' + BASE_CSS)
       : src.replace(/<html(\s[^>]*)?>/i, (m) => m + '<head><meta charset="utf-8">' + BASE_CSS + '</head>')
-    return /<\/body>/i.test(doc) ? doc.replace(/<\/body>(?![\s\S]*<\/body>)/i, RESIZE + '</body>') : doc + RESIZE
+    return /<\/body>/i.test(doc) ? doc.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => BARE + RESIZE + '</body>') : doc + BARE + RESIZE
   }
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    BASE_CSS + '<style>body>svg{display:block;margin:0 auto;height:auto}</style></head><body>' + src + RESIZE + '</body></html>'
+    BASE_CSS + '<style>body>svg{display:block;margin:0 auto;height:auto}</style></head><body>' + src + BARE + RESIZE + '</body></html>'
 }
 
 // Text that is plainly a diagram rather than prose to paste.

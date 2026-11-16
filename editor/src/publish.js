@@ -2003,6 +2003,7 @@ export function setupPublish({ editor, currentSnapshot }) {
         await sitePush(written, 'Draft preview: ' + titleText)
         setMsg(msg, 'Live in a minute.', 'ok')
         toast('Draft link pushed')
+        if (window.__drafts && snap.id) window.__drafts.markOutbound(snap.id) // first draft link: into the Outbound folder
         return
       }
 

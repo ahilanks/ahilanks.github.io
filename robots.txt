@@ -1,8 +1,9 @@
-# All crawlers, including AI crawlers and AI tools, may read the site.
-# Don't add a separate group for a named bot: a bot that matches its own group
-# ignores this one, and would lose the draft rule below.
+# All crawlers, including AI crawlers and AI tools, may read everything on the site:
+# published articles and draft previews (/writings/p/) alike.
+# Draft previews still carry <meta name="robots" content="noindex">, which keeps them out of
+# search results without stopping anyone, human or bot, from reading a link they're given.
+# Don't add a separate group for a named bot: a bot that matches its own group ignores this one.
 User-agent: *
-# Private draft previews are unlisted: keep them out of search engines and AI tools.
-Disallow: /writings/p/
+Allow: /
 
 Sitemap: https://ahilanks.github.io/sitemap.xml

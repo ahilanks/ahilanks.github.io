@@ -675,9 +675,11 @@ function fnPeek() {
 // Runs INSIDE the published article (embedded via fnSide.toString(), like fnTrip), on every page
 // with footnotes. `start` is the writer's choice ('side' or 'below'); a settings icon lets the
 // reader change it, remembered in their browser. With room beside the column, each note moves to the right
-// margin with its first line on the same baseline as its marker, pushed down when the note
-// above runs long. Without room, or without JavaScript, or in print, the notes simply stay
-// at the bottom — this only ever adds the fn-side class and the notes' positions.
+// margin with its first line on the same baseline as its marker. A note fills the space down
+// to the next one and, if it's longer, stops on a whole line with "…"; hovering it, or
+// clicking its marker in the text, slides it open over the notes below, and it slides shut
+// again when the reader moves on. Without room, or without JavaScript, or in print, the
+// notes simply stay at the bottom — this only ever adds the fn-side class, positions and caps.
 function fnSide(minWidth, start) {
   var list = document.querySelector('ol.footnotes')
   var main = list && list.closest('.container')
@@ -702,28 +704,81 @@ function fnSide(minWidth, start) {
     document.body.classList.toggle('fn-side', on)
     if (!on) {
       main.style.minHeight = ''
-      items.forEach(function (li) { li.style.top = '' })
+      items.forEach(function (li) { li.style.top = ''; li.style.maxHeight = ''; li.classList.remove('fn-clip', 'fn-open') })
       return
     }
     var top0 = main.getBoundingClientRect().top
-    var y = -Infinity
+    var prev = -Infinity
+    var tops = []
     items.forEach(function (li) {
+      var lineH = parseFloat(getComputedStyle(li).lineHeight) || 20
       var sup = document.getElementById(li.id.replace('fn-', 'fnref-'))
       var back = li.querySelector('.fn-back')
-      var at = y
+      // at least one line of the note above stays visible
+      var at = prev === -Infinity ? 0 : prev + lineH + GAP
       if (sup && back) {
         var own = baseline(back, back.firstChild) - li.getBoundingClientRect().top
         // a marker folded inside a collapsible section: level with that section's title
         var shut = null
         for (var d = sup.closest('details'); d; d = d.parentElement.closest('details')) if (!d.open) shut = d.querySelector('summary')
-        at = Math.max((shut ? baseline(shut, shut.firstChild) : baseline(sup.parentNode, sup)) - top0 - own, y)
+        at = Math.max((shut ? baseline(shut, shut.firstChild) : baseline(sup.parentNode, sup)) - top0 - own, prev === -Infinity ? -Infinity : at)
       }
       li.style.top = at + 'px'
-      y = at + li.offsetHeight + GAP
+      tops.push(at)
+      prev = at
+    })
+    // each note fills the space down to the next; longer ones stop on a whole line with "…"
+    var end = 0
+    items.forEach(function (li, i) {
+      var lineH = parseFloat(getComputedStyle(li).lineHeight) || 20
+      var full = li.scrollHeight
+      var room = i + 1 < items.length ? tops[i + 1] - tops[i] - GAP : Infinity
+      var cap = full > room + 1 ? lastLine(li, room) || lineH : 0
+      li.dataset.full = full
+      li.dataset.cap = cap
+      li.classList.toggle('fn-clip', !!cap)
+      li.style.maxHeight = cap ? (li.classList.contains('fn-open') ? full : cap) + 'px' : ''
+      end = Math.max(end, tops[i] + full)
     })
     // long notes can outrun the text: keep them inside the page
-    main.style.minHeight = y > 0 ? y + 'px' : ''
+    main.style.minHeight = end > 0 ? end + GAP + 'px' : ''
   }
+  // the bottom of the last whole line of `li` that ends within `room` (paragraph gaps make a
+  // plain multiple of the line height land mid-line)
+  function lastLine(li, room) {
+    var r = document.createRange()
+    r.selectNodeContents(li)
+    var top = li.getBoundingClientRect().top
+    var rects = r.getClientRects()
+    var best = 0
+    for (var k = 0; k < rects.length; k++) {
+      var b = rects[k].bottom - top
+      if (rects[k].height > 0 && b <= room + 0.5 && b > best) best = b
+    }
+    return Math.ceil(best)
+  }
+  // open a cut-off note to its full length (smoothly, over the notes below), or close it
+  function openNote(li, on) {
+    if (!li || !li.classList.contains('fn-clip')) { if (li && !on) li.classList.remove('fn-open'); return }
+    li.classList.toggle('fn-open', on)
+    li.style.maxHeight = (on ? li.dataset.full : li.dataset.cap) + 'px'
+  }
+  var pinned = null // opened from its marker: stays open until the reader moves on
+  items.forEach(function (li) {
+    li.addEventListener('mouseenter', function () { if (document.body.classList.contains('fn-side')) openNote(li, true) })
+    li.addEventListener('mouseleave', function () { if (pinned === li) pinned = null; openNote(li, false) })
+  })
+  document.addEventListener('click', function (e) {
+    if (!document.body.classList.contains('fn-side')) return
+    var a = e.target.closest && e.target.closest('a[href^="#fn-"]')
+    var li = a && document.getElementById(a.getAttribute('href').slice(1))
+    if (pinned && pinned !== li && !pinned.contains(e.target)) { openNote(pinned, false); pinned = null }
+    if (li && items.indexOf(li) >= 0) { pinned = li; pinnedY = window.scrollY; openNote(li, true) }
+  })
+  var pinnedY = 0
+  window.addEventListener('scroll', function () {
+    if (pinned && Math.abs(window.scrollY - pinnedY) > window.innerHeight * 0.5) { openNote(pinned, false); pinned = null }
+  }, { passive: true })
   function soon() {
     if (queued) return
     queued = true
@@ -1495,7 +1550,12 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
     footHtml ? '        body.fn-side .fn-divider { display:none; }' : '',
     footHtml ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
-    footHtml ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); transition:color 0.15s; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); overflow:hidden; background:var(--bg-color); transition:color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }' : '',
+    // a cut-off note: "…" at the end of its last whole line, fading the words under it
+    footHtml ? '        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; bottom:0; padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.2s; pointer-events:none; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-open { z-index:3; box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-open::after { opacity:0; }' : '',
+    footHtml ? '        @media (prefers-reduced-motion: reduce) { body.fn-side ol.footnotes li { transition:color 0.15s; } }' : '',
     footHtml ? '        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }' : '',
     footHtml ? '        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }' : '',
     footHtml ? '        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }' : '',

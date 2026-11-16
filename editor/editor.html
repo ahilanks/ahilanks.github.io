@@ -219,9 +219,8 @@
 
     <div class="popover hidden" id="diagramPop">
       <div class="dg-describe">
-        <label>Describe a diagram. Claude draws it in the site's style, after the cursor's paragraph.</label>
-        <textarea id="diagramPrompt" rows="3" placeholder="e.g. harm against the intelligence gap: a hump-shaped curve, the middle shaded as the danger zone" spellcheck="true"></textarea>
-        <div class="row"><span class="dg-status">Keep writing while it draws; follow along in the chat.</span><button class="pop-btn" id="diagramGenerate">Draw it</button></div>
+        <textarea id="diagramPrompt" rows="3" placeholder="Describe a diagram" spellcheck="true"></textarea>
+        <div class="row"><span class="dg-status"></span><button class="pop-btn" id="diagramGenerate">Draw it</button></div>
       </div>
       <details class="dg-paste" id="diagramPaste">
         <summary>Paste HTML or open a file</summary>
@@ -238,7 +237,7 @@
       <div class="dgc-list" id="dgChatList"></div>
       <div class="dgc-att" id="dgChatAtt" hidden></div>
       <div class="dgc-foot">
-        <textarea id="dgChatInput" rows="2" placeholder="Message Claude about this diagram… (paste pictures too)" spellcheck="true"></textarea>
+        <textarea id="dgChatInput" rows="2" placeholder="Message Claude" spellcheck="true"></textarea>
         <button class="pop-btn" id="dgChatSend" type="button">Send</button>
       </div>
     </aside>

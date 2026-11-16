@@ -309,17 +309,17 @@ function render() {
   const hit = panelId && findById(ed, panelId)
   const mine = [...jobs.values()].filter((j) => j.did === panelId)
   const sig = hit ? panelId + '|' + hit.node.attrs.chat + '|' + hit.node.attrs.html.length + '|' + mine.map((j) => j.id + j.status).join(',') : 'none'
-  if (sig === lastSig && list.childElementCount) return
+  if (sig === lastSig) return
   lastSig = sig
   clearInterval(tick)
   if (!hit) {
-    list.innerHTML = '<p class="dgc-empty">Select a diagram and click <b>Chat</b> to talk to Claude about it.</p>'
+    list.innerHTML = ''
     return
   }
   const chat = parseChat(hit.node.attrs.chat)
   const current = hit.node.attrs.html
   const byId = new Map(mine.map((j) => [j.id, j]))
-  let h = chat.length || mine.length ? '' : '<p class="dgc-empty">Ask for a change, like “smaller labels” or “make the danger zone orange”, or paste a screenshot. Each change can be undone with ⌘Z.</p>'
+  let h = ''
   chat.forEach((m, i) => {
     const cls = m.r === 'u' ? 'dgc-you' : m.r === 'e' ? 'dgc-err' : 'dgc-claude'
     const job = m.r === 'u' && m.j ? byId.get(m.j) : null

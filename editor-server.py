@@ -37,6 +37,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # Cryptographic timestamping of published versions (provenance.py). Optional: if the
 # `opentimestamps` package is missing the drafts server still runs, publish just can't stamp.
+import diagram_ai  # Claude-made diagrams (/api/diagram)
 try:
     import provenance
 except Exception as _e:  # pragma: no cover
@@ -1467,6 +1468,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json({"ok": True, "entry": entry})
             except Exception as e:
                 return self._send_json({"ok": False, "error": str(e)}, 400)
+        if path == "/api/diagram":       # make or change a diagram with Claude (diagram_ai.py)
+            body = self._read_json()
+            if body is None:
+                return self.send_error(400, "bad json")
+            code, out = diagram_ai.make_diagram(str(body.get("prompt") or ""), str(body.get("html") or ""), str(body.get("context") or ""))
+            return self._send_json(out, code)
         if path == "/api/publish":       # write site files (see write_publish_files)
             body = self._read_json()
             if body is None:

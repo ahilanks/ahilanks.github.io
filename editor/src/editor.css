@@ -1207,6 +1207,18 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 .html-embed-view .he-edit { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: 0; transition: opacity 0.12s; border: 1px solid var(--line); background: var(--bg-soft); color: var(--text); border-radius: 7px; padding: 0.22rem 0.55rem; font-size: 0.75rem; cursor: pointer; }
 .html-embed-view:hover .he-edit, .html-embed-view.selected .he-edit { opacity: 1; }
 #diagramPop { width: 440px; max-width: calc(100vw - 20px); }
+#diagramAsk { width: 360px; max-width: calc(100vw - 20px); }
+#diagramPop .row, #diagramAsk .row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.dg-status { flex: 1; font-size: 0.75rem; color: var(--muted); }
+.dg-paste { margin-top: 0.7rem; }
+.dg-paste summary { font-size: 0.75rem; color: var(--muted); cursor: pointer; margin-bottom: 0.35rem; }
+#diagramPop.edit-mode .dg-describe { display: none; }
+#diagramPop.edit-mode .dg-paste summary { display: none; }
+.html-embed-view .he-ask { right: 5.85rem; }
+#diagramPop #diagramPrompt, #diagramAsk textarea { font-family: inherit; font-size: 0.88rem; line-height: 1.45; white-space: normal; min-height: 0; }
+.html-embed-view .he-working { display: none; position: absolute; inset: 0; z-index: 3; align-items: center; justify-content: center; font: 500 0.82rem system-ui, sans-serif; color: var(--text); background: rgba(241, 235, 223, 0.72); border-radius: 6px; }
+.html-embed-view.working .he-working { display: flex; }
+.html-embed-view.working iframe { filter: blur(1px); }
 #diagramPop textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; line-height: 1.4; min-height: 160px; white-space: pre; }
 .html-embed-view { margin-left: auto; margin-right: auto; }
 .html-embed-view .he-resize { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; z-index: 2; border-radius: 50%; background: var(--bg-soft); border: 2px solid var(--link); cursor: nwse-resize; opacity: 0; transition: opacity 0.12s; touch-action: none; }

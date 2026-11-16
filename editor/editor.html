@@ -218,13 +218,25 @@
     </div>
 
     <div class="popover hidden" id="diagramPop">
-      <label>HTML diagram — an SVG, a chart, or a whole page (scripts run sandboxed)</label>
-      <textarea id="diagramInput" rows="9" placeholder="<svg …>…</svg>  or  <!DOCTYPE html>…" spellcheck="false"></textarea>
-      <input type="file" id="diagramFile" accept=".html,.htm,.svg,text/html,image/svg+xml" hidden />
-      <div class="row">
-        <button class="pop-btn ghost grow" id="diagramUpload">Open a file…</button>
-        <button class="pop-btn grow" id="diagramInsert">Insert</button>
+      <div class="dg-describe">
+        <label>Describe a diagram. Claude draws it in the site's style, after the cursor's paragraph.</label>
+        <textarea id="diagramPrompt" rows="3" placeholder="e.g. harm against the intelligence gap: a hump-shaped curve, the middle shaded as the danger zone" spellcheck="true"></textarea>
+        <div class="row"><span class="dg-status" id="diagramStatus"></span><button class="pop-btn" id="diagramGenerate">Draw it</button></div>
       </div>
+      <details class="dg-paste" id="diagramPaste">
+        <summary>Paste HTML or open a file</summary>
+        <textarea id="diagramInput" rows="9" placeholder="<svg …>…</svg>  or  <!DOCTYPE html>…" spellcheck="false"></textarea>
+        <input type="file" id="diagramFile" accept=".html,.htm,.svg,text/html,image/svg+xml" hidden />
+        <div class="row">
+          <button class="pop-btn ghost grow" id="diagramUpload">Open a file…</button>
+          <button class="pop-btn grow" id="diagramInsert">Insert</button>
+        </div>
+      </details>
+    </div>
+    <div class="popover hidden" id="diagramAsk">
+      <label>What should change?</label>
+      <textarea id="diagramAskInput" rows="2" placeholder="e.g. smaller labels, slow the animation, make the danger zone orange" spellcheck="true"></textarea>
+      <div class="row"><span class="dg-status" id="diagramAskStatus"></span><button class="pop-btn" id="diagramAskGo">Change it</button></div>
     </div>
 
     <!-- ===================== FLOATING: describe the open equation in words (ai-math.js) ===================== -->

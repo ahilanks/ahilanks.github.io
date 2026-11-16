@@ -19,7 +19,7 @@
 
 import { Node, NodeSelection } from '../../vendor/lib.bundle.js'
 import { $, toast } from '../dom.js'
-import { openChat, ensureId, isPending, pendingSince, generateInto } from './diagram-chat.js'
+import { openChat, ensureId, isPending, pendingSince, startNewDiagram } from './diagram-chat.js'
 
 const clampW = (v) => Math.max(20, Math.min(100, Math.round(parseFloat(v) || 100)))
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
@@ -305,56 +305,22 @@ function openDiagramPop(editor, { html = '', anchor, pos = null } = {}) {
   pop.style.top = Math.min(r.bottom + 8, window.innerHeight - pop.offsetHeight - 10) + 'px'
   input.value = html
   if (pos != null || !$('diagramPrompt')) input.focus()
-  else { $('diagramPrompt').focus(); $('diagramStatus').textContent = generating ? $('diagramStatus').textContent : '' }
+  else $('diagramPrompt').focus()
 }
 
 /* ------------------------------------------- Claude: describe a new diagram */
-// Runs in the background: keep writing. The diagram lands after the paragraph the cursor
-// was in (followed through any edits since); its conversation continues in the side panel
-// (diagram-chat.js) via the diagram's Chat button.
-function ticker(el, label) {
-  const t0 = Date.now()
-  const tick = () => { el.textContent = label + ' ' + Math.round((Date.now() - t0) / 1000) + 's' }
-  tick()
-  const id = setInterval(tick, 1000)
-  return () => clearInterval(id)
-}
-
-function trackPos(editor, pos) {
-  const ref = { pos }
-  const onTr = ({ transaction }) => { ref.pos = transaction.mapping.map(ref.pos) }
-  editor.on('transaction', onTr)
-  ref.stop = () => editor.off('transaction', onTr)
-  return ref
-}
-
-let generating = false
+// It goes in at once as a placeholder after the cursor's paragraph and Claude draws it in
+// the background (diagram-chat.js); the chat panel opens on it, showing Claude's thinking.
 async function generate(editor) {
-  const ta = $('diagramPrompt'), status = $('diagramStatus'), go = $('diagramGenerate')
+  const ta = $('diagramPrompt')
   const prompt = ta.value.trim()
-  if (!prompt || generating) return
-  generating = true
-  go.disabled = true
-  const at = trackPos(editor, editor.state.selection.to)
-  const stop = ticker(status, 'Claude is drawing… keep writing,')
-  // the popover can close; the answer still lands
+  if (!prompt) return
   const pop = $('diagramPop')
-  if (pop.contains(document.activeElement)) editor.view.focus()
   pop.classList.add('hidden')
-  toast('Claude is drawing your diagram · keep writing')
-  try {
-    await generateInto(editor, at, prompt)
-    ta.value = ''
-    toast('Diagram added · click Chat on it to change it · ⌘Z to undo')
-  } catch (e) {
-    toast(e.message)
-  } finally {
-    stop()
-    at.stop()
-    generating = false
-    go.disabled = false
-    status.textContent = ''
-  }
+  ta.value = ''
+  const at = editor.state.selection.to
+  editor.view.focus()
+  await startNewDiagram(editor, at, prompt)
 }
 
 function commit(html) {

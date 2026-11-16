@@ -21,3 +21,6 @@ drafts/
 # OS
 .DS_Store
 **/.DS_Store
+
+# Claude diagram answers waiting to be applied to a draft (diagram_ai.py)
+.diagram-jobs/

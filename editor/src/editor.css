@@ -1241,8 +1241,23 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 .dgc-foot textarea { flex: 1; resize: none; font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.55rem; background: var(--bg); color: var(--text); outline: none; }
 .dgc-foot textarea:focus { border-color: var(--link); }
 body.dg-chat-open .notes { display: none; }
-/* with room, the page slides left so the panel never covers the text or the diagram */
-@media (min-width: 1000px) { body.dg-chat-open .scroll { padding-right: 372px; box-sizing: border-box; } }
+.dgc-think { margin: 0 0 0.3rem; }
+.dgc-think summary { font-size: 0.72rem; color: var(--muted); cursor: pointer; list-style: none; }
+.dgc-think summary::before { content: "▸ "; }
+.dgc-think[open] summary::before { content: "▾ "; }
+.dgc-think-t { white-space: pre-wrap; font-size: 0.76rem; line-height: 1.45; color: var(--muted); max-height: 11rem; overflow-y: auto; border-left: 2px solid var(--line); padding: 0.15rem 0 0.15rem 0.6rem; margin-top: 0.25rem; }
+.dgc-prog { white-space: pre-wrap; padding: 0.2rem 0; }
+.dgc-live .dgc-prog { color: var(--text); }
+.dgc-q { color: #b7791f; }
+.dgc-imgs { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: flex-end; margin-bottom: 0.25rem; }
+.dgc-img { max-width: 120px; max-height: 90px; border-radius: 7px; border: 1px solid var(--line); object-fit: cover; }
+.dgc-att { display: flex; gap: 0.4rem; flex-wrap: wrap; padding: 0.5rem 0.9rem 0; border-top: 1px solid var(--line); }
+.dgc-att[hidden] { display: none; }
+.dgc-att + .dgc-foot { border-top: 0; }
+.dgc-att-i { position: relative; }
+.dgc-att-i img { width: 56px; height: 56px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); display: block; }
+.dgc-att-i button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--text); color: #fff; font-size: 0.75rem; line-height: 18px; padding: 0; cursor: pointer; }
+.dg-chat.dgc-drop { outline: 2px dashed var(--link); outline-offset: -6px; }
 
 #diagramPop textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; line-height: 1.4; min-height: 160px; white-space: pre; }
 .html-embed-view { margin-left: auto; margin-right: auto; }

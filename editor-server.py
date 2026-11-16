@@ -1362,6 +1362,30 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/editor.html":
             self.path = self.path.replace("/editor.html", "/editor/editor.html", 1)
             return super().do_GET()
+        if path == "/api/diagram/jobs":  # Claude answers still running or not yet in their draft
+            return self._send_json(diagram_ai.open_jobs())
+        m = re.match(r"^/api/diagram/jobs/([0-9a-f]{12})/events$", path)
+        if m:                            # live: Claude's thinking and answer as they stream
+            q = parse_qs(urlparse(self.path).query)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            def write(ev):
+                try:
+                    self.wfile.write((json.dumps(ev) + "\n").encode("utf-8"))
+                    self.wfile.flush()
+                    return True
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    return False  # the page went away; the job carries on
+            try:
+                start = int((q.get("from") or ["0"])[0])
+            except ValueError:
+                start = 0
+            diagram_ai.stream_events(m.group(1), start, write)
+            return
         if path == "/api/drafts":
             with LOCK:
                 store = load_store()
@@ -1468,12 +1492,15 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json({"ok": True, "entry": entry})
             except Exception as e:
                 return self._send_json({"ok": False, "error": str(e)}, 400)
-        if path == "/api/diagram":       # make or change a diagram with Claude (diagram_ai.py)
+        if path == "/api/diagram/jobs":  # ask Claude about a diagram: a background job (diagram_ai.py)
             body = self._read_json()
             if body is None:
                 return self.send_error(400, "bad json")
-            code, out = diagram_ai.make_diagram(str(body.get("prompt") or ""), str(body.get("html") or ""), str(body.get("context") or ""),
-                                               body.get("history") if isinstance(body.get("history"), list) else None)
+            code, out = diagram_ai.submit(body)
+            return self._send_json(out, code)
+        m = re.match(r"^/api/diagram/jobs/([0-9a-f]{12})/applied$", path)
+        if m:
+            code, out = diagram_ai.applied(m.group(1))
             return self._send_json(out, code)
         if path == "/api/publish":       # write site files (see write_publish_files)
             body = self._read_json()

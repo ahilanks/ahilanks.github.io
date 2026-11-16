@@ -307,5 +307,29 @@
         </li>
       </ul>
     </main>
+    <script>
+      // A head start: when a reader points at (or touches) an article, fetch the page and its
+      // first picture, so they're there by the time it opens. The newest one warms up once
+      // this page has settled.
+      (function () {
+        var done = {}
+        function warm(a) {
+          var h = a && a.getAttribute('href')
+          if (!h || done[h] || !/^writings\/[\w-]+\.html$/.test(h)) return
+          done[h] = 1
+          fetch(h).then(function (r) { return r.text() }).then(function (t) {
+            var m = /<img[^>]+src="([^"]+)"/.exec(t)
+            if (m) new Image().src = new URL(m[1], new URL(h, location.href)).href
+          }).catch(function () {})
+        }
+        function near(e) { warm(e.target.closest && e.target.closest('a[href^="writings/"]')) }
+        document.addEventListener('pointerover', near)
+        document.addEventListener('touchstart', near, { passive: true })
+        document.addEventListener('focusin', near)
+        addEventListener('load', function () {
+          (window.requestIdleCallback || setTimeout)(function () { warm(document.querySelector('.post a[href^="writings/"]')) })
+        })
+      })()
+    </script>
   </body>
 </html>

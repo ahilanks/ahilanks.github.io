@@ -119,10 +119,12 @@
         body.fn-side .fn-divider { display:none; }
         body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }
         body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); overflow:hidden; background:var(--bg-color); transition:color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }
-        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; bottom:0; padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.2s; pointer-events:none; }
-        body.fn-side ol.footnotes li.fn-open { z-index:3; box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }
-        body.fn-side ol.footnotes li.fn-open::after { opacity:0; }
+        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; top:var(--fn-ell, 0); padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.15s; pointer-events:none; }
+        body.fn-side ol.footnotes li.fn-open, body.fn-side ol.footnotes li.fn-closing { z-index:3; }
+        body.fn-side ol.footnotes li.fn-open { box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }
+        body.fn-side ol.footnotes li.fn-open::after, body.fn-side ol.footnotes li.fn-closing::after { opacity:0; }
         @media (prefers-reduced-motion: reduce) { body.fn-side ol.footnotes li { transition:color 0.15s; } }
+        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }
         body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }
         body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }
         body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }
@@ -526,6 +528,7 @@
       li.dataset.full = full
       li.dataset.cap = cap
       li.classList.toggle('fn-clip', !!cap)
+      if (cap) li.style.setProperty('--fn-ell', (cap - lineH) + 'px') // "…" sits on the last shown line
       li.style.maxHeight = cap ? (li.classList.contains('fn-open') ? full : cap) + 'px' : ''
       end = Math.max(end, tops[i] + full)
     })
@@ -547,10 +550,21 @@
     return Math.ceil(best)
   }
   // open a cut-off note to its full length (smoothly, over the notes below), or close it
+  // While a note slides, it stays on top (closing too, so it never slides under the notes
+  // below), and nothing is re-measured until it has settled.
+  var moving = 0
   function openNote(li, on) {
     if (!li || !li.classList.contains('fn-clip')) { if (li && !on) li.classList.remove('fn-open'); return }
+    if (on === li.classList.contains('fn-open')) return
+    clearTimeout(li._fnT)
+    if (!li._fnMoving) { li._fnMoving = true; moving++ }
     li.classList.toggle('fn-open', on)
+    li.classList.toggle('fn-closing', !on)
     li.style.maxHeight = (on ? li.dataset.full : li.dataset.cap) + 'px'
+    li._fnT = setTimeout(function () {
+      li.classList.remove('fn-closing')
+      if (li._fnMoving) { li._fnMoving = false; moving--; soon() }
+    }, 420)
   }
   var pinned = null // opened from its marker: stays open until the reader moves on
   items.forEach(function (li) {
@@ -569,7 +583,7 @@
     if (pinned && Math.abs(window.scrollY - pinnedY) > window.innerHeight * 0.5) { openNote(pinned, false); pinned = null }
   }, { passive: true })
   function soon() {
-    if (queued) return
+    if (queued || moving > 0) return
     queued = true
     requestAnimationFrame(place)
   }

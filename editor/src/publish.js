@@ -99,7 +99,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy', 'data-embed'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt', 'width', 'height', 'style'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy', 'data-embed'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -121,6 +121,9 @@ function sanitizeNode(root) {
     if (tag === 'IMG') {
       const src = el.getAttribute('src') || ''
       if (!/^(https?:|data:image\/|media\/|\.\.?\/|\/)/i.test(src)) el.removeAttribute('src')
+      // only the blurred stand-in that extractDataImages sets (see optimizeImage)
+      if (el.hasAttribute('style') && !LQIP_STYLE.test(el.getAttribute('style'))) el.removeAttribute('style')
+      for (const d of ['width', 'height']) if (el.hasAttribute(d) && !/^\d{1,5}$/.test(el.getAttribute(d))) el.removeAttribute(d)
     }
     if (tag === 'VIDEO') {
       const src = el.getAttribute('src') || ''
@@ -249,6 +252,12 @@ function bodyToPublishHtml(clone, { sliders = true, poemDates = false } = {}) {
     f.removeAttribute('contenteditable')
   })
   sanitizeNode(clone) // strip anything unsafe before it reaches the public page
+  // the first picture is wanted at once; the rest load as the reader nears them
+  clone.querySelectorAll('img').forEach((img, i) => {
+    img.setAttribute('decoding', 'async')
+    if (i === 0) img.setAttribute('fetchpriority', 'high')
+    else img.setAttribute('loading', 'lazy')
+  })
   canvasForPublish(clone) // canvas boxes: saved geometry → inline styles
   embedsForPublish(clone) // diagram slots → sandboxed frames
   // resized figures: convert the validated data-w (kept through sanitise) into an inline width
@@ -310,6 +319,51 @@ function bodyToPublishHtml(clone, { sliders = true, poemDates = false } = {}) {
 // image an older frozen version still references (and identical images are written once).
 // Images the editor stored as files on the local server (GIFs: figures.js → /api/gif) are
 // copied out the same way.
+// Pictures are published at the size the page can show — the 820px column at 2x for retina —
+// and recompressed (a 4096px photo straight off the web is ~2 MB; this makes it ~200 KB).
+// Each also gets its width/height (so the page keeps its place while it loads) and a tiny
+// blurred copy as its background, seen until the real picture arrives. No animation.
+const IMG_MAX_W = 1640
+const LQIP_STYLE = /^background:#[0-9a-f]{6} url\(data:image\/jpeg;base64,[A-Za-z0-9+\/=]+\) center\/cover no-repeat$/
+function canvasOf(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c }
+async function optimizeImage(blob, ext, maxW = IMG_MAX_W) {
+  let bmp
+  try { bmp = await createImageBitmap(blob) } catch (e) { return { blob, ext } }
+  const w0 = bmp.width, h0 = bmp.height
+  if (ext === 'gif' || ext === 'svg' || !w0 || !h0) return { blob, ext, w: w0, h: h0 } // animated / vector: as is
+  const k = Math.min(1, maxW / w0)
+  const w = Math.round(w0 * k), h = Math.round(h0 * k)
+  // transparency? (a PNG with a see-through background stays a PNG, without a stand-in)
+  const probe = canvasOf(48, Math.max(1, Math.round(48 * h0 / w0)))
+  const pg = probe.getContext('2d', { willReadFrequently: true })
+  pg.drawImage(bmp, 0, 0, probe.width, probe.height)
+  const px = pg.getImageData(0, 0, probe.width, probe.height).data
+  let alpha = false
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 250) { alpha = true; break }
+  let out = blob, outExt = ext
+  if (k < 1 || blob.size > 350 * 1024) {
+    const c = canvasOf(w, h)
+    const g = c.getContext('2d')
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(bmp, 0, 0, w, h)
+    const type = alpha ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
+    const b = await new Promise((r) => c.toBlob(r, type, 0.84))
+    if (b && (b.size < blob.size || k < 1)) { out = b; outExt = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg' }
+  }
+  let lqip = ''
+  if (!alpha) {
+    const t = canvasOf(32, Math.max(1, Math.round(32 * h / w)))
+    const tg = t.getContext('2d')
+    tg.drawImage(bmp, 0, 0, t.width, t.height)
+    const d = tg.getImageData(0, 0, t.width, t.height).data // its average colour, under the blur
+    let r = 0, gg = 0, bb = 0, n = 0
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; bb += d[i + 2]; n++ }
+    const hex = (v) => Math.round(v / n).toString(16).padStart(2, '0')
+    lqip = 'background:#' + hex(r) + hex(gg) + hex(bb) + ' url(' + t.toDataURL('image/jpeg', 0.5) + ') center/cover no-repeat'
+  }
+  return { blob: out, ext: outExt, w, h, lqip }
+}
+
 async function extractDataImages(root, prefix, files, mediaPrefix) {
   for (const img of Array.from(root.querySelectorAll('img'))) {
     const src = img.getAttribute('src') || ''
@@ -321,6 +375,13 @@ async function extractDataImages(root, prefix, files, mediaPrefix) {
       ext = src.split('.').pop().toLowerCase()
       blob = await fetchDraftMedia(src)
     } else continue
+    const o = await optimizeImage(blob, ext)
+    blob = o.blob
+    ext = o.ext
+    if (img.closest('figure.img-block')) { // canvas pictures size themselves
+      if (o.w && o.h) { img.setAttribute('width', String(o.w)); img.setAttribute('height', String(o.h)) }
+      if (o.lqip) img.setAttribute('style', o.lqip)
+    }
     const hash = (await sha256Hex(await blob.arrayBuffer())).slice(0, 12)
     const name = prefix + '-' + hash + '.' + ext
     if (!files.some((f) => f.name === name)) files.push({ name, blob })
@@ -737,6 +798,7 @@ function fnSide(minWidth, start) {
       li.dataset.full = full
       li.dataset.cap = cap
       li.classList.toggle('fn-clip', !!cap)
+      if (cap) li.style.setProperty('--fn-ell', (cap - lineH) + 'px') // "…" sits on the last shown line
       li.style.maxHeight = cap ? (li.classList.contains('fn-open') ? full : cap) + 'px' : ''
       end = Math.max(end, tops[i] + full)
     })
@@ -758,10 +820,21 @@ function fnSide(minWidth, start) {
     return Math.ceil(best)
   }
   // open a cut-off note to its full length (smoothly, over the notes below), or close it
+  // While a note slides, it stays on top (closing too, so it never slides under the notes
+  // below), and nothing is re-measured until it has settled.
+  var moving = 0
   function openNote(li, on) {
     if (!li || !li.classList.contains('fn-clip')) { if (li && !on) li.classList.remove('fn-open'); return }
+    if (on === li.classList.contains('fn-open')) return
+    clearTimeout(li._fnT)
+    if (!li._fnMoving) { li._fnMoving = true; moving++ }
     li.classList.toggle('fn-open', on)
+    li.classList.toggle('fn-closing', !on)
     li.style.maxHeight = (on ? li.dataset.full : li.dataset.cap) + 'px'
+    li._fnT = setTimeout(function () {
+      li.classList.remove('fn-closing')
+      if (li._fnMoving) { li._fnMoving = false; moving--; soon() }
+    }, 420)
   }
   var pinned = null // opened from its marker: stays open until the reader moves on
   items.forEach(function (li) {
@@ -780,7 +853,7 @@ function fnSide(minWidth, start) {
     if (pinned && Math.abs(window.scrollY - pinnedY) > window.innerHeight * 0.5) { openNote(pinned, false); pinned = null }
   }, { passive: true })
   function soon() {
-    if (queued) return
+    if (queued || moving > 0) return
     queued = true
     requestAnimationFrame(place)
   }
@@ -1488,6 +1561,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      a { color:var(--text-color); text-decoration:underline; text-decoration-skip-ink:none; }',
     '      figure { margin:1.8rem auto; text-align:center; }',
     '      figure img, figure video { max-width:100%; border-radius:10px; }',
+    '      figure img { height:auto; }', // width/height attributes keep its place while it loads
     '      figure[style] img, figure[style] video { width:100%; }',
     '      figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:inline-block; vertical-align:top; width:calc(50% - 0.6rem) !important; margin:1.8rem 0 !important; }',
     '      figure[data-pair]:has(+ figure) { margin-right:1.2rem !important; }',
@@ -1552,9 +1626,10 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
     footHtml ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); overflow:hidden; background:var(--bg-color); transition:color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }' : '',
     // a cut-off note: "…" at the end of its last whole line, fading the words under it
-    footHtml ? '        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; bottom:0; padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.2s; pointer-events:none; }' : '',
-    footHtml ? '        body.fn-side ol.footnotes li.fn-open { z-index:3; box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }' : '',
-    footHtml ? '        body.fn-side ol.footnotes li.fn-open::after { opacity:0; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; top:var(--fn-ell, 0); padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.15s; pointer-events:none; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-open, body.fn-side ol.footnotes li.fn-closing { z-index:3; }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-open { box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }' : '',
+    footHtml ? '        body.fn-side ol.footnotes li.fn-open::after, body.fn-side ol.footnotes li.fn-closing::after { opacity:0; }' : '',
     footHtml ? '        @media (prefers-reduced-motion: reduce) { body.fn-side ol.footnotes li { transition:color 0.15s; } }' : '',
     footHtml ? '        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }' : '',
     footHtml ? '        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }' : '',
@@ -1841,8 +1916,10 @@ export function setupPublish({ editor, currentSnapshot }) {
   async function writeThumb(sink, slug) {
     if (!pendingThumb) return ''
     if (pendingThumb.dataUrl) {
-      const name = slug + '-thumb.' + pendingThumb.ext
-      await sink.add('media/' + name, dataUrlToBlob(pendingThumb.dataUrl))
+      // the list shows it at 120px wide: 480px is plenty, even on retina
+      const o = await optimizeImage(dataUrlToBlob(pendingThumb.dataUrl), pendingThumb.ext, 480)
+      const name = slug + '-thumb.' + o.ext
+      await sink.add('media/' + name, o.blob)
       return 'media/' + name
     }
     const p = pendingThumb.path || ''

@@ -848,6 +848,25 @@ function fnSide(minWidth, start) {
     if (pinned && pinned !== li && !pinned.contains(e.target)) { openNote(pinned, false); pinned = null }
     if (li && items.indexOf(li) >= 0) { pinned = li; pinnedY = window.scrollY; openNote(li, true) }
   })
+  // resting on a marker in the text for half a second opens its note too; moving off closes it
+  // (unless the pointer went on to the note itself)
+  var peekT = 0, peek = null
+  document.addEventListener('mouseover', function (e) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    if (!sup || !document.body.classList.contains('fn-side')) return
+    var li = document.getElementById(sup.id.replace('fnref-', 'fn-'))
+    if (!li) return
+    clearTimeout(peekT)
+    peekT = setTimeout(function () { peek = li; openNote(li, true) }, 500)
+  })
+  document.addEventListener('mouseout', function (e) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    if (!sup || (e.relatedTarget && sup.contains(e.relatedTarget))) return
+    clearTimeout(peekT)
+    var li = peek
+    peek = null
+    if (li) setTimeout(function () { if (!li.matches(':hover') && pinned !== li) openNote(li, false) }, 250)
+  })
   var pinnedY = 0
   window.addEventListener('scroll', function () {
     if (pinned && Math.abs(window.scrollY - pinnedY) > window.innerHeight * 0.5) { openNote(pinned, false); pinned = null }

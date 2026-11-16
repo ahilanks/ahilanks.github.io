@@ -420,6 +420,15 @@ ol.fn-list li.fn-orphan .fn-num:hover::after { color: var(--text); }
 .surface.fn-side ol.fn-list li:not(.fn-orphan):hover, .surface.fn-side ol.fn-list li:not(.fn-orphan):focus-within { color: var(--text); }
 .surface.fn-side ol.fn-list li:not(.fn-orphan) .fn-num, .surface.fn-side ol.fn-list li:not(.fn-orphan) .fn-body a { color: inherit; }
 .surface.fn-side ol.fn-list li.fn-orphan { flex-wrap: wrap; }
+/* a note longer than its room stops on a whole line with "…" and slides open while you're on
+   it (footnote.js fitNote / setNoteOpen) — over the cards below, never under them */
+.surface.fn-side ol.fn-list li.fn-clip { overflow: hidden; }
+.surface.fn-side ol.fn-list li, .surface.fn-side ol.fn-list li:not(.fn-orphan) { background: var(--bg); transition: color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }
+.surface.fn-side ol.fn-list li.fn-clip::after { content: "…"; position: absolute; right: 0; top: var(--fn-ell, 0); left: auto; width: auto; height: auto; padding-left: 3em; line-height: inherit; color: inherit; background: linear-gradient(to right, rgba(241, 235, 223, 0), var(--bg) 55%); transition: opacity 0.15s; pointer-events: none; }
+.surface.fn-side ol.fn-list li.fn-open, .surface.fn-side ol.fn-list li.fn-closing { z-index: 3; }
+.surface.fn-side ol.fn-list li.fn-open { box-shadow: 0 14px 18px -12px rgba(39, 50, 63, 0.18); color: var(--text); }
+.surface.fn-side ol.fn-list li.fn-open::after, .surface.fn-side ol.fn-list li.fn-closing::after { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .surface.fn-side ol.fn-list li { transition: color 0.15s; } }
 /* a note or comment card running past the end of the text keeps the same gap below it */
 .surface.fn-side ol.fn-list li:last-child::after, .cmt-card::after {
   content: ""; position: absolute; top: 100%; left: 0; width: 1px; height: var(--end-gap); pointer-events: none;

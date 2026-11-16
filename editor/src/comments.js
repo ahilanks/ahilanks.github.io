@@ -372,25 +372,30 @@ export function setupComments(editor, scheduleSave) {
       // below the previous; the active card then claims its exact spot and shoves the
       // ones above it up instead.
       entries.forEach((e) => { e.card.hidden = false })
+      // a card that can fold (a margin note, footnote.js) only needs one line of room; it
+      // fills whatever it gets down to the next card
+      const hOf = (e) => (e.fold ? Math.min(e.fold, e.card.scrollHeight) : e.card.offsetHeight)
       let y = -Infinity
-      entries.forEach((e) => { e.y = Math.max(e.top, y); y = e.y + e.card.offsetHeight + GAP })
+      entries.forEach((e) => { e.y = Math.max(e.top, y); y = e.y + hOf(e) + GAP })
       const ai = entries.findIndex((e) => e.active)
       if (ai >= 0) {
         entries[ai].y = entries[ai].top
         let limit = entries[ai].top
         for (let i = ai - 1; i >= 0; i--) {
           const e = entries[i]
-          e.y = Math.min(e.y, limit - GAP - e.card.offsetHeight)
+          e.y = Math.min(e.y, limit - GAP - hOf(e))
           limit = e.y
         }
-        y = entries[ai].top + entries[ai].card.offsetHeight + GAP
+        y = entries[ai].top + hOf(entries[ai]) + GAP
         for (let i = ai + 1; i < entries.length; i++) {
           const e = entries[i]
           e.y = Math.max(e.top, y)
-          y = e.y + e.card.offsetHeight + GAP
+          y = e.y + hOf(e) + GAP
         }
       }
       entries.forEach((e) => { e.card.style.top = e.y + 'px'; e.card.style.left = '' })
+      const byY = entries.slice().sort((a, b) => a.y - b.y)
+      byY.forEach((e, i) => { if (e.fit) e.fit(i + 1 < byY.length ? byY[i + 1].y - e.y - GAP : Infinity) })
     } else {
       // only the active comment, tucked under the text it refers to
       entries.forEach((e) => {

@@ -381,6 +381,30 @@ export function setupFootnoteMargin(editor, comments) {
     hot.textContent = ref ? '.surface.fn-side #fnList li[data-fn="' + CSS.escape(ref.dataset.fn) + '"] { color: var(--text); }' : ''
   })
   editor.view.dom.addEventListener('mouseleave', () => { hot.textContent = '' })
+  // a cut-off note opens while you're on it (hover, or editing it) and closes after
+  const list = $('fnList')
+  const sync = (li) => { if (li) setNoteOpen(li, !!li._peek || li.matches(':hover') || li.contains(document.activeElement)) }
+  // resting on a marker in the text for half a second opens its note too
+  let peekT = 0
+  editor.view.dom.addEventListener('mouseover', (e) => {
+    const ref = e.target.closest && e.target.closest('.fn-ref')
+    if (!ref || !inMargin()) return
+    const li = list.querySelector('li[data-fn="' + CSS.escape(ref.dataset.fn) + '"]')
+    if (!li) return
+    clearTimeout(peekT)
+    peekT = setTimeout(() => { li._peek = true; sync(li) }, 500)
+  })
+  editor.view.dom.addEventListener('mouseout', (e) => {
+    const ref = e.target.closest && e.target.closest('.fn-ref')
+    if (!ref || (e.relatedTarget && ref.contains(e.relatedTarget))) return
+    clearTimeout(peekT)
+    const li = list.querySelector('li[data-fn="' + CSS.escape(ref.dataset.fn) + '"]')
+    if (li && li._peek) { li._peek = false; setTimeout(() => sync(li), 250) }
+  })
+  list.addEventListener('mouseover', (e) => sync(e.target.closest && e.target.closest('li')))
+  list.addEventListener('mouseout', (e) => { const li = e.target.closest && e.target.closest('li'); if (li && !li.contains(e.relatedTarget)) setTimeout(() => sync(li), 0) })
+  list.addEventListener('focusin', (e) => sync(e.target.closest && e.target.closest('li')))
+  list.addEventListener('focusout', (e) => { const li = e.target.closest && e.target.closest('li'); if (li) setTimeout(() => sync(li), 0) })
   comments.addSource({
     deactivate() {},
     entries(sRect) {
@@ -391,11 +415,60 @@ export function setupFootnoteMargin(editor, comments) {
       return Array.from($('fnList').children).filter((li) => li.getClientRects().length).map((li) => {
         const ref = !li.classList.contains('fn-orphan') && editor.view.dom.querySelector(`.fn-ref[data-fn="${li.dataset.fn}"]`)
         const r = ref ? visibleRect(ref) : null
-        return { card: li, active: false, top: r ? r.top - sRect.top : end, bottom: r ? r.bottom - sRect.top : end, left: 0 }
+        return { card: li, active: false, top: r ? r.top - sRect.top : end, bottom: r ? r.bottom - sRect.top : end, left: 0,
+          fold: noteLineH(li), fit: (room) => fitNote(li, room) }
       })
     },
   })
   syncMargin()
+}
+
+/* A margin note fills the room down to the next card and, if it's longer, stops on a whole
+ * line with "…" (CSS); the shared layout gives it one line's worth of room to work with
+ * (`fold`), then hands it the room it got (`fit`). Open, it slides to full length over the
+ * cards below. None of this is saved: footnotesHTML() strips it. */
+function noteLineH(li) {
+  const cs = getComputedStyle(li)
+  return parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.45 || 20
+}
+// the bottom of the last whole line of `li` that ends within `room`
+function lastLine(li, room) {
+  const r = document.createRange()
+  r.selectNodeContents(li)
+  const top = li.getBoundingClientRect().top
+  let best = 0
+  for (const b of r.getClientRects()) {
+    const y = b.bottom - top
+    if (b.height > 0 && y <= room + 0.5 && y > best) best = y
+  }
+  return Math.ceil(best)
+}
+function fitNote(li, room) {
+  const full = li.scrollHeight
+  const lineH = noteLineH(li)
+  const cap = Number.isFinite(room) && full > room + 1 ? lastLine(li, room) || lineH : 0
+  li._full = full
+  li._cap = cap
+  li.classList.toggle('fn-clip', !!cap)
+  if (!cap) { li.style.maxHeight = ''; li.classList.remove('fn-open', 'fn-closing'); return }
+  li.style.setProperty('--fn-ell', (cap - lineH) + 'px')
+  if (li.classList.contains('fn-open')) { if (li.style.maxHeight !== 'none') li.style.maxHeight = full + 'px' }
+  else li.style.maxHeight = cap + 'px'
+}
+function setNoteOpen(li, on) {
+  if (!li.classList.contains('fn-clip') || on === li.classList.contains('fn-open')) return
+  clearTimeout(li._fnT)
+  li.classList.toggle('fn-open', on)
+  li.classList.toggle('fn-closing', !on)
+  if (on) {
+    li.style.maxHeight = li.scrollHeight + 'px'
+    // settled open: no ceiling, so typing in it never runs out of room
+    li._fnT = setTimeout(() => { if (li.classList.contains('fn-open')) li.style.maxHeight = 'none' }, 420)
+  } else {
+    if (li.style.maxHeight === 'none') { li.style.maxHeight = li.scrollHeight + 'px'; void li.offsetHeight } // slide from where it is
+    li.style.maxHeight = li._cap + 'px'
+    li._fnT = setTimeout(() => li.classList.remove('fn-closing'), 420)
+  }
 }
 
 // Caret just after footnote `id`'s marker in the text → the marker's element, or null.
@@ -755,7 +828,15 @@ function setupPeek(editor) {
 // (nor is a margin note's position, set by the layout)
 export function footnotesHTML() {
   const l = $('fnList')
-  return l ? l.innerHTML.replaceAll('class="cmt cmt-on"', 'class="cmt"').replace(/(<li\b[^>]*?) style="top:[^"]*"/g, '$1') : ''
+  if (!l) return ''
+  const c = l.cloneNode(true)
+  c.querySelectorAll(':scope > li').forEach((li) => {
+    li.removeAttribute('style')
+    li.classList.remove('fn-clip', 'fn-open', 'fn-closing', 'fn-flash', 'fn-flash-fade')
+    if (!li.classList.length) li.removeAttribute('class')
+  })
+  c.querySelectorAll('[style=""]').forEach((el) => el.removeAttribute('style'))
+  return c.innerHTML.replaceAll('class="cmt cmt-on"', 'class="cmt"')
 }
 export function loadFootnotesHTML(html, editor) {
   const l = $('fnList'); if (!l) return

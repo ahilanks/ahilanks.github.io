@@ -451,7 +451,7 @@ async function buildFootnotesHtml(fnListEl, slug, mediaPrefix, bodyHtml) {
     wrap.appendChild(bodyClone)
   })
   await extractDataImages(wrap, slug + '-fn', files, mediaPrefix)
-  let html = '\n      <hr class="fn-divider" />\n      <ol class="footnotes">\n'
+  let html = '\n      <hr class="fn-divider" />\n      <div class="fn-label">Footnotes</div>\n      <ol class="footnotes">\n'
   Array.from(wrap.children).forEach((bodyClone, idx) => {
     const n = idx + 1 // index order matches the re-numbered body refs above
     // The note's number is its link back to the marker (no trailing ↩ glyph).
@@ -472,7 +472,7 @@ async function substackHtml(slug) {
   if (!r.ok) throw new Error('Publish it first: Substack needs the images online.')
   const page = new DOMParser().parseFromString(await r.text(), 'text/html')
   const main = page.querySelector('main') || page.body
-  main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .home, .end-home, .fn-divider, .fn-back, .canvas-item, button').forEach((el) => el.remove())
+  main.querySelectorAll('script, style, nav, h1, .subtitle, .meta, .prov, .draft-note, .back, .home, .end-home, .fn-divider, .fn-label, .fn-back, .canvas-item, button').forEach((el) => el.remove())
   const base = site + '/writings/' + slug + '.html'
   // diagrams can't run on Substack: a link to see them on the site
   main.querySelectorAll('figure.embed').forEach((f) => { const c = f.querySelector('figcaption'); f.outerHTML = '<p><em><a href="' + base + '">Interactive diagram: see it on the site</a></em></p>' + (c ? '<p><em>' + c.innerHTML + '</em></p>' : '') })
@@ -1617,6 +1617,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }',
     '      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }',
     '      .fn-divider { width:100%; margin:3rem 0 1.2rem; }',
+    '      .fn-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.9rem 2px; }',
     '      ol.footnotes { font-size:0.92rem; line-height:1.5; color:var(--text-color); list-style:none; padding-left:0; }',
     '      ol.footnotes li { display:flex; gap:0.5rem; margin-bottom:0.7rem; }',
     '      ol.footnotes .fn-text { flex:1; min-width:0; }',
@@ -1649,7 +1650,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     ...(version || draft ? PROV_CSS : []),
     footHtml ? '      @media screen {' : '',
     footHtml ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
-    footHtml ? '        body.fn-side .fn-divider { display:none; }' : '',
+    footHtml ? '        body.fn-side .fn-divider, body.fn-side .fn-label { display:none; }' : '',
     footHtml ? '        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }' : '',
     footHtml ? '        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); overflow:hidden; background:var(--bg-color); transition:color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }' : '',
     // a cut-off note: "…" at the end of its last whole line, fading the words under it

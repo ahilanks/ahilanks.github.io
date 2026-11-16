@@ -1207,18 +1207,43 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 .html-embed-view .he-edit { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: 0; transition: opacity 0.12s; border: 1px solid var(--line); background: var(--bg-soft); color: var(--text); border-radius: 7px; padding: 0.22rem 0.55rem; font-size: 0.75rem; cursor: pointer; }
 .html-embed-view:hover .he-edit, .html-embed-view.selected .he-edit { opacity: 1; }
 #diagramPop { width: 440px; max-width: calc(100vw - 20px); }
-#diagramAsk { width: 360px; max-width: calc(100vw - 20px); }
-#diagramPop .row, #diagramAsk .row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+#diagramPop .row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 .dg-status { flex: 1; font-size: 0.75rem; color: var(--muted); }
 .dg-paste { margin-top: 0.7rem; }
 .dg-paste summary { font-size: 0.75rem; color: var(--muted); cursor: pointer; margin-bottom: 0.35rem; }
 #diagramPop.edit-mode .dg-describe { display: none; }
 #diagramPop.edit-mode .dg-paste summary { display: none; }
+#diagramPop #diagramPrompt { font-family: inherit; font-size: 0.88rem; line-height: 1.45; white-space: normal; min-height: 0; }
+.html-embed-view .he-working { display: none; position: absolute; top: 6px; left: 6px; z-index: 2; pointer-events: none; font: 500 0.72rem system-ui, sans-serif; color: var(--muted); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 7px; padding: 0.2rem 0.5rem; }
+.html-embed-view.working .he-working { display: block; }
 .html-embed-view .he-ask { right: 5.85rem; }
-#diagramPop #diagramPrompt, #diagramAsk textarea { font-family: inherit; font-size: 0.88rem; line-height: 1.45; white-space: normal; min-height: 0; }
-.html-embed-view .he-working { display: none; position: absolute; inset: 0; z-index: 3; align-items: center; justify-content: center; font: 500 0.82rem system-ui, sans-serif; color: var(--text); background: rgba(241, 235, 223, 0.72); border-radius: 6px; }
-.html-embed-view.working .he-working { display: flex; }
-.html-embed-view.working iframe { filter: blur(1px); }
+
+/* Diagram chat (nodes/diagram-chat.js): a drawer on the right */
+.dg-chat { position: fixed; z-index: 43; top: 64px; right: 16px; bottom: 16px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(39, 50, 63, 0.12); font: 0.85rem/1.45 system-ui, -apple-system, sans-serif; color: var(--text); }
+.dg-chat[hidden] { display: none; }
+.dgc-head { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.9rem 0.5rem; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.dgc-close { background: none; border: none; font-size: 1.2rem; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 0.1rem; }
+.dgc-list { flex: 1; overflow-y: auto; padding: 0.2rem 0.9rem 0.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.dgc-empty { color: var(--muted); margin: 0.4rem 0; }
+.dgc-msg { max-width: 92%; }
+.dgc-text { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.45rem 0.65rem; border-radius: 10px; }
+.dgc-you { align-self: flex-end; }
+.dgc-you .dgc-text { background: rgba(39, 50, 63, 0.08); }
+.dgc-claude .dgc-text { padding-left: 0; padding-right: 0; }
+.dgc-err .dgc-text { color: #9a2f2f; padding-left: 0; }
+.dgc-wait .dgc-text { color: var(--muted); font-style: italic; }
+.dgc-meta { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+.dgc-you .dgc-meta { text-align: right; }
+.dgc-restore { background: none; border: none; padding: 0; font: inherit; color: var(--link); cursor: pointer; }
+.dgc-restore:hover { text-decoration: underline; }
+.dgc-cur { color: #4a9a5a; }
+.dgc-foot { display: flex; gap: 0.5rem; align-items: flex-end; padding: 0.6rem 0.9rem 0.8rem; border-top: 1px solid var(--line); }
+.dgc-foot textarea { flex: 1; resize: none; font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.55rem; background: var(--bg); color: var(--text); outline: none; }
+.dgc-foot textarea:focus { border-color: var(--link); }
+body.dg-chat-open .notes { display: none; }
+/* with room, the page slides left so the panel never covers the text or the diagram */
+@media (min-width: 1000px) { body.dg-chat-open .scroll { padding-right: 372px; box-sizing: border-box; } }
+
 #diagramPop textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; line-height: 1.4; min-height: 160px; white-space: pre; }
 .html-embed-view { margin-left: auto; margin-right: auto; }
 .html-embed-view .he-resize { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; z-index: 2; border-radius: 50%; background: var(--bg-soft); border: 2px solid var(--link); cursor: nwse-resize; opacity: 0; transition: opacity 0.12s; touch-action: none; }

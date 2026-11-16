@@ -1,7 +1,8 @@
 """diagram_ai.py — make or change an article diagram with Claude (used by editor-server.py).
 
-POST /api/diagram {"prompt": "...", "html": "<current diagram, to change it>", "context": "..."}
-  -> {"ok": true, "html": "<!DOCTYPE html>…", "caption": "…"}
+POST /api/diagram {"prompt": "...", "html": "<current diagram, to change it>", "context": "...",
+                   "history": [{"role": "user"|"assistant", "text": "..."}]}
+  -> {"ok": true, "html": "<!DOCTYPE html>…" or "" (a reply without a change), "caption": "…", "note": "…"}
 
 Claude Opus 5.5 at medium effort, with the site's house style in the system prompt so every
 diagram sits on the page the same way (no background, the article's ink and accent, thin
@@ -31,7 +32,11 @@ Rules for every diagram:
 - Self-contained: inline CSS, inline SVG, plain JavaScript. No external scripts, images, fonts or network requests.
 - Accurate: labels and shapes must match what the text says. Don't invent data; if the figure is illustrative, keep it qualitative (no fake numbers on axes).
 
-Answer with the complete HTML document in one ```html code block, then one line starting with "CAPTION:" giving a short caption for under the figure (one sentence, plain, no "Figure 1"). Nothing else."""
+How to answer:
+- A new diagram: the complete HTML document in one ```html code block, then a line "CAPTION: …" (one plain sentence for under the figure, no "Figure 1"), then a line "NOTE: …" (one sentence on what you drew).
+- A change to the current diagram: the whole updated document in one ```html code block, then "NOTE: …" saying in one or two plain sentences what you changed.
+- If the writer only asks a question, or the request would make the diagram worse or wrong, don't send code: answer with just "NOTE: …" (two or three sentences at most), and suggest what you would do instead.
+Nothing else outside these parts."""
 
 CHANGE_NOTE = "This is the current diagram. Change it as asked, keep everything else as it is, and return the whole updated document."
 
@@ -51,7 +56,7 @@ def _api_key():
     return ""
 
 
-def make_diagram(prompt, html="", context=""):
+def make_diagram(prompt, html="", context="", history=None):
     """Returns (status, payload) for the JSON response."""
     prompt = (prompt or "").strip()
     if not prompt:
@@ -67,6 +72,10 @@ def make_diagram(prompt, html="", context=""):
     parts = []
     if context.strip():
         parts.append("Where it goes in the article (for meaning; don't copy it into the figure):\n<article_excerpt>\n" + context.strip()[:6000] + "\n</article_excerpt>")
+    turns = [h for h in (history or []) if isinstance(h, dict) and str(h.get("text") or "").strip()][-12:]
+    if turns:
+        parts.append("The conversation about this diagram so far:\n<conversation>\n" + "\n".join(
+            ("Writer: " if h.get("role") == "user" else "You: ") + str(h.get("text"))[:1500] for h in turns) + "\n</conversation>")
     if html.strip():
         parts.append(CHANGE_NOTE + "\n<current_diagram>\n" + html.strip()[:120000] + "\n</current_diagram>")
         parts.append("Change: " + prompt)
@@ -96,10 +105,19 @@ def make_diagram(prompt, html="", context=""):
 
     if msg.stop_reason == "refusal":
         return 422, {"ok": False, "error": "Claude declined this one; try wording it differently."}
+    if msg.stop_reason == "max_tokens":
+        return 502, {"ok": False, "error": "Claude's answer was cut off; try a simpler request."}
     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     m = re.search(r"```(?:html)?\s*\n(.*?)```", text, re.S)
-    doc = (m.group(1) if m else text).strip()
-    if msg.stop_reason == "max_tokens" or not re.search(r"<(svg|html|div|canvas)[\s>]", doc, re.I):
+    rest = text[m.end():] if m else text
+    cap = re.search(r"^\s*CAPTION:\s*(.+)$", rest, re.M)
+    note = re.search(r"^\s*NOTE:\s*(.+(?:\n(?!\s*(?:CAPTION|NOTE):).+)*)", rest, re.M)
+    note_text = note.group(1).strip() if note else ""
+    doc = m.group(1).strip() if m else ""
+    if doc and not re.search(r"<(svg|html|div|canvas)[\s>]", doc, re.I):
+        doc = ""
+    if not doc:
+        if html.strip() and note_text:  # a reply without a change
+            return 200, {"ok": True, "html": "", "caption": "", "note": note_text, "model": msg.model}
         return 502, {"ok": False, "error": "Claude's answer didn't contain a usable diagram; try again."}
-    cap = re.search(r"^\s*CAPTION:\s*(.+)$", text[m.end():] if m else "", re.M)
-    return 200, {"ok": True, "html": doc, "caption": cap.group(1).strip() if cap else "", "model": msg.model}
+    return 200, {"ok": True, "html": doc, "caption": cap.group(1).strip() if cap else "", "note": note_text, "model": msg.model}

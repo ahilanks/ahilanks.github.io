@@ -12,6 +12,7 @@ import { SectionFocus, setupSectionFocus } from './focus.js'
 import { Figure } from './nodes/figure.js'
 import { Collapsible } from './nodes/collapsible.js'
 import { Canvas, activeCanvas, canvasToDoc } from './nodes/canvas.js'
+import { setupDiagramChat } from './nodes/diagram-chat.js'
 import { HtmlEmbed, setupEmbeds } from './nodes/embed.js'
 import { BlockDrag, setupBlockDrag } from './block-drag.js'
 import { SmartTypography } from './typography.js'
@@ -531,6 +532,7 @@ window.__closed = setupClosedList([comments.closedSource, window.__suggest.close
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor, { getDocId })
 setupEmbeds(editor)
+setupDiagramChat(editor)
 
 // Links: ⌘K / toolbar / bubble link popover + hover URL preview chip.
 setupLinks(editor)

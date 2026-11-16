@@ -19,6 +19,7 @@
 
 import { Node, NodeSelection } from '../../vendor/lib.bundle.js'
 import { $, toast } from '../dom.js'
+import { openChat, ensureId, isPending, pendingSince, generateInto } from './diagram-chat.js'
 
 const clampW = (v) => Math.max(20, Math.min(100, Math.round(parseFloat(v) || 100)))
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
@@ -121,6 +122,10 @@ export const HtmlEmbed = Node.create({
     return {
       html: { default: '', parseHTML: (el) => el.getAttribute('data-html') || '', renderHTML: (a) => ({ 'data-html': a.html }) },
       // width as a % of the column (centred); 100 = full width
+      // its conversation with Claude (diagram-chat.js): an id, and the messages as JSON;
+      // both stay in the draft and are never published
+      did: { default: '', parseHTML: (el) => el.getAttribute('data-did') || '', renderHTML: (a) => (a.did ? { 'data-did': a.did } : {}) },
+      chat: { default: '', parseHTML: (el) => el.getAttribute('data-chat') || '', renderHTML: (a) => (a.chat ? { 'data-chat': a.chat } : {}) },
       width: { default: 100, parseHTML: (el) => clampW(el.getAttribute('data-w')), renderHTML: (a) => (a.width < 100 ? { 'data-w': String(a.width) } : {}) },
     }
   },
@@ -156,7 +161,8 @@ export const HtmlEmbed = Node.create({
       const ask = document.createElement('button') // "Change…": say what to change, Claude redraws it
       ask.type = 'button'
       ask.className = 'he-edit he-ask'
-      ask.textContent = 'Change…'
+      ask.textContent = 'Chat'
+      ask.title = 'Talk to Claude about this diagram'
       const working = document.createElement('div')
       working.className = 'he-working'
       const grip = document.createElement('div') // drag to make it smaller or bigger
@@ -237,8 +243,25 @@ export const HtmlEmbed = Node.create({
       ask.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() })
       ask.addEventListener('click', (e) => {
         e.preventDefault()
-        openAsk(editor, { anchor: ask, html: cur.attrs.html, view: { dom, working, getPos } })
+        const pos = typeof getPos === 'function' ? getPos() : null
+        const id = pos == null ? null : ensureId(editor, pos)
+        if (id) openChat(editor, id)
       })
+      // while Claude works on it: a small tag in the corner; the diagram stays usable
+      let wtick = 0
+      const showWorking = () => {
+        const on = !!cur.attrs.did && isPending(cur.attrs.did)
+        dom.classList.toggle('working', on)
+        clearInterval(wtick)
+        if (on) {
+          const t0 = pendingSince(cur.attrs.did)
+          const upd = () => { working.textContent = 'Claude is working… ' + Math.round((Date.now() - t0) / 1000) + 's' }
+          upd()
+          wtick = setInterval(upd, 1000)
+        }
+      }
+      window.addEventListener('diagram-pending', showWorking)
+      showWorking()
 
       return {
         dom,
@@ -257,7 +280,7 @@ export const HtmlEmbed = Node.create({
         // ProseMirror see a drag, so the block can be moved)
         stopEvent(e) { return box.contains(e.target) && !(e.target === shield && /^drag|^drop/.test(e.type)) },
         ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
-        destroy() { window.removeEventListener('message', onMsg) },
+        destroy() { window.removeEventListener('message', onMsg); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
       }
     }
   },
@@ -285,30 +308,10 @@ function openDiagramPop(editor, { html = '', anchor, pos = null } = {}) {
   else { $('diagramPrompt').focus(); $('diagramStatus').textContent = generating ? $('diagramStatus').textContent : '' }
 }
 
-/* ------------------------------------------- Claude: describe a diagram, or change one */
-// The editor server (diagram_ai.py) asks Claude Opus 5.5 with the site's house style.
-// Both run in the background: keep writing; a new diagram lands where the cursor was
-// (followed through any edits since), a change replaces the diagram in one ⌘Z-able step.
-
-// The article text around `pos`, so the diagram fits what it illustrates.
-function contextAround(editor, pos) {
-  const doc = editor.state.doc
-  const before = doc.textBetween(Math.max(0, pos - 2500), pos, '\n\n')
-  const after = doc.textBetween(pos, Math.min(doc.content.size, pos + 1000), '\n\n')
-  return (before + '\n\n[the diagram goes here]\n\n' + after).trim()
-}
-
-async function askClaude(body) {
-  let res
-  try {
-    res = await fetch('/api/diagram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  } catch (e) { throw new Error('The editor server isn\'t reachable.') }
-  let out = null
-  try { out = await res.json() } catch (e) {}
-  if (!out || !out.ok) throw new Error((out && out.error) || 'Something went wrong (' + res.status + ').')
-  return out
-}
-
+/* ------------------------------------------- Claude: describe a new diagram */
+// Runs in the background: keep writing. The diagram lands after the paragraph the cursor
+// was in (followed through any edits since); its conversation continues in the side panel
+// (diagram-chat.js) via the diagram's Chat button.
 function ticker(el, label) {
   const t0 = Date.now()
   const tick = () => { el.textContent = label + ' ' + Math.round((Date.now() - t0) / 1000) + 's' }
@@ -317,7 +320,6 @@ function ticker(el, label) {
   return () => clearInterval(id)
 }
 
-// A position that follows later edits (so a slow answer still lands in the right place).
 function trackPos(editor, pos) {
   const ref = { pos }
   const onTr = ({ transaction }) => { ref.pos = transaction.mapping.map(ref.pos) }
@@ -334,74 +336,24 @@ async function generate(editor) {
   generating = true
   go.disabled = true
   const at = trackPos(editor, editor.state.selection.to)
-  const stop = ticker(status, 'Claude is drawing…')
+  const stop = ticker(status, 'Claude is drawing… keep writing,')
+  // the popover can close; the answer still lands
+  const pop = $('diagramPop')
+  if (pop.contains(document.activeElement)) editor.view.focus()
+  pop.classList.add('hidden')
+  toast('Claude is drawing your diagram · keep writing')
   try {
-    const out = await askClaude({ prompt, context: contextAround(editor, at.pos) })
-    const $p = editor.state.doc.resolve(Math.min(at.pos, editor.state.doc.content.size))
-    const pos = $p.depth ? $p.after(1) : at.pos // after the paragraph the cursor was in
-    const node = { type: 'htmlEmbed', attrs: { html: out.html }, content: out.caption ? [{ type: 'text', text: out.caption }] : [] }
-    editor.chain().insertContentAt(pos, node).run()
+    await generateInto(editor, at, prompt)
     ta.value = ''
-    const pop = $('diagramPop')
-    if (pop.contains(document.activeElement)) editor.view.focus()
-    pop.classList.add('hidden')
-    toast('Diagram added · select it and use Change… to adjust · ⌘Z to undo')
+    toast('Diagram added · click Chat on it to change it · ⌘Z to undo')
   } catch (e) {
     toast(e.message)
-    status.textContent = e.message
   } finally {
     stop()
     at.stop()
     generating = false
     go.disabled = false
-    if (status.textContent.startsWith('Claude is')) status.textContent = ''
-  }
-}
-
-let askFor = null // { editor, html, view }
-function openAsk(editor, { anchor, html, view }) {
-  const pop = $('diagramAsk'), input = $('diagramAskInput')
-  if (!pop || !input) return
-  askFor = { editor, html, view }
-  pop.classList.remove('hidden')
-  const r = anchor.getBoundingClientRect()
-  const w = pop.offsetWidth || 360
-  const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth
-  pop.style.left = Math.max(w / 2 + 10, Math.min(r.left + r.width / 2, vw - w / 2 - 10)) + 'px'
-  pop.style.top = Math.min(r.bottom + 8, window.innerHeight - pop.offsetHeight - 10) + 'px'
-  $('diagramAskStatus').textContent = ''
-  input.focus()
-}
-
-async function change() {
-  const input = $('diagramAskInput')
-  const prompt = input.value.trim()
-  if (!askFor || !prompt) return
-  const { editor, html, view } = askFor
-  $('diagramAsk').classList.add('hidden')
-  input.value = ''
-  editor.view.focus() // back to writing while Claude works (and ⌘Z reaches the editor)
-  if (view.dom.classList.contains('working')) return
-  view.dom.classList.add('working')
-  const stop = ticker(view.working, 'Claude is changing it…')
-  try {
-    const p0 = typeof view.getPos === 'function' ? view.getPos() : null
-    const out = await askClaude({ prompt, html, context: p0 == null ? '' : contextAround(editor, p0) })
-    // find the diagram again (the view may have been rebuilt while Claude worked)
-    let pos = typeof view.getPos === 'function' ? view.getPos() : null
-    let n = pos == null ? null : editor.state.doc.nodeAt(pos)
-    if (!n || n.type.name !== 'htmlEmbed' || n.attrs.html !== html) {
-      pos = null
-      editor.state.doc.descendants((nd, p) => { if (pos == null && nd.type.name === 'htmlEmbed' && nd.attrs.html === html) pos = p; return pos == null })
-    }
-    if (pos == null) throw new Error('That diagram changed or was removed while Claude worked, so the change was dropped.')
-    editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, 'html', out.html))
-    toast('Diagram changed · ⌘Z to undo')
-  } catch (e) {
-    toast(e.message)
-  } finally {
-    stop()
-    view.dom.classList.remove('working')
+    status.textContent = ''
   }
 }
 
@@ -445,16 +397,7 @@ export function setupEmbeds(editor) {
       else if (e.key === 'Escape') { e.preventDefault(); close(); editor.commands.focus() }
     })
   }
-  const askPop = $('diagramAsk'), askInput = $('diagramAskInput')
-  if (askPop && askInput) {
-    const closeAsk = () => askPop.classList.add('hidden')
-    $('diagramAskGo').addEventListener('click', change)
-    askInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); change() }
-      else if (e.key === 'Escape') { e.preventDefault(); closeAsk() }
-    })
-    document.addEventListener('mousedown', (e) => { if (!askPop.classList.contains('hidden') && !askPop.contains(e.target) && !e.target.closest('.he-ask')) closeAsk() })
-  }
+
 
   // Pasting a whole HTML page or an <svg> (copied as text from a code editor or a chat)
   // makes a diagram instead of a wall of code. Capture, so it beats ProseMirror's paste.

@@ -233,11 +233,14 @@
         </div>
       </details>
     </div>
-    <div class="popover hidden" id="diagramAsk">
-      <label>What should change?</label>
-      <textarea id="diagramAskInput" rows="2" placeholder="e.g. smaller labels, slow the animation, make the danger zone orange" spellcheck="true"></textarea>
-      <div class="row"><span class="dg-status" id="diagramAskStatus"></span><button class="pop-btn" id="diagramAskGo">Change it</button></div>
-    </div>
+    <aside class="dg-chat" id="dgChat" hidden aria-label="Diagram chat">
+      <div class="dgc-head"><span>Diagram chat</span><button class="dgc-close" id="dgChatClose" type="button" aria-label="Close">×</button></div>
+      <div class="dgc-list" id="dgChatList"></div>
+      <div class="dgc-foot">
+        <textarea id="dgChatInput" rows="2" placeholder="Ask for a change…" spellcheck="true"></textarea>
+        <button class="pop-btn" id="dgChatSend" type="button">Send</button>
+      </div>
+    </aside>
 
     <!-- ===================== FLOATING: describe the open equation in words (ai-math.js) ===================== -->
     <div class="math-ask hidden" id="mathAsk">

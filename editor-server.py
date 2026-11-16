@@ -1472,7 +1472,8 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._read_json()
             if body is None:
                 return self.send_error(400, "bad json")
-            code, out = diagram_ai.make_diagram(str(body.get("prompt") or ""), str(body.get("html") or ""), str(body.get("context") or ""))
+            code, out = diagram_ai.make_diagram(str(body.get("prompt") or ""), str(body.get("html") or ""), str(body.get("context") or ""),
+                                               body.get("history") if isinstance(body.get("history"), list) else None)
             return self._send_json(out, code)
         if path == "/api/publish":       # write site files (see write_publish_files)
             body = self._read_json()

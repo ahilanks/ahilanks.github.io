@@ -302,6 +302,20 @@ export const editor = new Editor({
 // expose for console debugging
 window.__editor = editor
 
+// Drag-selecting near the bottom edge: Chrome's selection autoscroll honours the scroll
+// area's scroll-padding-bottom (22vh, which keeps the caret off the bottom edge while
+// typing) and keeps scrolling to get the moving end of the selection out of that band.
+// Each scroll extends the selection further down, so it ran away at ~18,000px/s. Drop the
+// padding while a button is held so the drag scrolls at Chrome's normal speed.
+{
+  const area = document.getElementById('scrollArea')
+  const release = () => area.classList.remove('pointer-held')
+  area.addEventListener('pointerdown', (e) => { if (e.button === 0) area.classList.add('pointer-held') })
+  window.addEventListener('pointerup', release)
+  window.addEventListener('pointercancel', release)
+  window.addEventListener('blur', release)
+}
+
 /* ---------------------------------------------------------------- toolbar */
 // A footnote body (raw contenteditable outside the doc) formats natively; anything else
 // goes through TipTap. Without the branch, `focus()` would yank the caret into the article.

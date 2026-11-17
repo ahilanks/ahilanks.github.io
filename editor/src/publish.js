@@ -637,8 +637,9 @@ function fnTrip() {
 // Runs INSIDE the published article (embedded via fnPeek.toString(), like fnTrip). Hovering
 // a footnote marker shows its note in a small card beside it, in the text; the card stays
 // while the pointer is on the marker or the card (a short grace period covers the gap, so
-// its links can be clicked) and goes when it leaves both. Mouse/trackpad only — on touch a
-// tap still makes the round trip to the note (fnTrip).
+// its links can be clicked) and goes when it leaves both. On touch screens a tap on a marker
+// opens the same card in place (no trip down to the notes); a tap anywhere outside it, or on
+// the marker again, closes it.
 // Runs INSIDE the published article. A link to something folded inside a collapsible section
 // (a footnote's way home, a section link, an address with a #) opens it first, so there's
 // somewhere to land. Capturing, so it happens before anything scrolls.
@@ -657,7 +658,7 @@ function collapsibleReveal() {
 }
 
 function fnPeek() {
-  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
+  var hover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
   var card = document.createElement('div')
   card.className = 'fn-peek'
   card.setAttribute('role', 'tooltip')
@@ -710,6 +711,24 @@ function fnPeek() {
   }
   function keep() { clearTimeout(closeT) }
   function leaveSoon() { clearTimeout(openT); clearTimeout(closeT); closeT = setTimeout(hide, 150) }
+
+  if (!hover) {
+    // capturing, so it runs before fnTrip's click handler (which skips a prevented click)
+    document.addEventListener('click', function (e) {
+      if (document.body.classList.contains('fn-side')) return // notes beside the text: fnTrip as usual
+      var sup = markerOf(e.target)
+      if (sup) {
+        e.preventDefault()
+        if (sup === ref && !card.hidden) hide()
+        else show(sup)
+        return
+      }
+      if (!card.hidden && !card.contains(e.target)) { e.preventDefault(); e.stopPropagation(); hide() }
+    }, true)
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+    window.addEventListener('resize', function () { if (ref) place() })
+    return
+  }
 
   document.addEventListener('mouseover', function (e) {
     if (card.contains(e.target)) { keep(); return }

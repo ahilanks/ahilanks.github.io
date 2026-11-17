@@ -168,26 +168,136 @@ export function setupVersions({ getDocId, currentSnapshot, applySnapshot, schedu
     return cache.list
   }
 
+  // Stars and names (server: drafts/.version-marks.json, backed up with the drafts) — so the
+  // versions worth going back to stand out before a big change.
+  let marks = { id: null, map: {} }
+  async function loadMarks(force) {
+    const id = getDocId()
+    if (!force && marks.id === id) return marks.map
+    try {
+      const r = await fetch('/api/version-marks?draft=' + encodeURIComponent(id), { cache: 'no-store' })
+      marks = { id, map: r.ok ? (await r.json()).marks || {} : {} }
+    } catch (e) { marks = { id, map: {} } }
+    return marks.map
+  }
+  async function setMark(v, patch) {
+    const id = getDocId()
+    const r = await fetch('/api/version-marks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft: id, sha: v.sha, ...patch }) })
+    if (!r.ok) throw new Error('Couldn’t save that (' + r.status + ')')
+    marks = { id, map: (await r.json()).marks || {} }
+  }
+  const markOf = (v) => marks.map[v.sha] || {}
+  const label = (v) => markOf(v).name || (KIND[v.kind] || 'Saved')
+
   // History's Versions tab
-  async function renderInto(el, onPick) {
+  async function renderInto(el, onPick, renameSha) {
     el.innerHTML = '<div class="cl-empty">Loading versions…</div>'
     let all
-    try { all = await list() } catch (e) { el.innerHTML = '<div class="cl-empty">' + escapeHtml(e.message) + ' — is the editor server running?</div>'; return }
+    try { all = await list(); await loadMarks() } catch (e) { el.innerHTML = '<div class="cl-empty">' + escapeHtml(e.message) + ' — is the editor server running?</div>'; return }
     el.textContent = ''
+    const redraw = (sha) => renderInto(el, onPick, sha)
+    const marked = (v) => markOf(v).star || markOf(v).name
+    const starred = all.filter((v) => markOf(v).star)
     const manual = all.filter((v) => v.kind === 'manual')
-    const autos = all.length - manual.length
-    const shown = showAuto || !manual.length ? all : manual
-    if (!all.length) { el.innerHTML = '<div class="cl-empty">No versions yet. Each time you back up (the cloud button) — and every few minutes automatically — a version is saved.</div>'; return }
+    const autos = all.filter((v) => v.kind !== 'manual' && !marked(v)).length
+    const shown = (showAuto || !manual.length ? all : all.filter((v) => v.kind === 'manual' || marked(v))).filter((v) => !markOf(v).star)
+
+    // before a big change: back up now and star that point
+    const now = document.createElement('button')
+    now.type = 'button'
+    now.className = 'vr-now'
+    now.textContent = '☆ Star this point'
+    now.title = 'Back up the draft as it is now and star that version, so you can come back to it'
+    now.addEventListener('mousedown', (e) => e.stopPropagation())
+    now.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      now.disabled = true
+      now.textContent = 'Backing up…'
+      const id = getDocId()
+      // the version is saved even when uploading it fails (offline): star it all the same
+      const ok = await backup()
+      if (getDocId() !== id) { toast('You switched drafts'); now.disabled = false; now.textContent = '☆ Star this point'; return }
+      try {
+        const latest = (await list(true))[0]
+        if (!latest) throw new Error('No version to star yet')
+        await setMark(latest, { star: true })
+        if (!ok) toast('Starred — not uploaded to the backup yet (offline?)')
+        redraw(latest.sha)
+      } catch (err) { toast(err.message); now.disabled = false; now.textContent = '☆ Star this point' }
+    })
+    el.appendChild(now)
+
+    if (!all.length) { el.insertAdjacentHTML('beforeend', '<div class="cl-empty">No versions yet. Each time you back up (the cloud button) — and every few minutes automatically — a version is saved.</div>'); return }
+
+    const row = (v, fullDate) => {
+      const m = markOf(v)
+      const r = document.createElement('div')
+      r.className = 'cl-row cl-open vr-row' + (m.star ? ' vr-starred' : '')
+      r.innerHTML = '<div class="cl-top">' +
+        '<button type="button" class="vr-star" title="' + (m.star ? 'Unstar' : 'Star') + '" aria-pressed="' + !!m.star + '">' + (m.star ? '★' : '☆') + '</button>' +
+        (m.name ? '<span class="vr-name">' + escapeHtml(m.name) + '</span>' : '<span class="cl-kind vr-kind-' + v.kind + '">' + (KIND[v.kind] || 'Saved') + '</span>') +
+        '<span class="cl-when">' + (fullDate ? when(v.ts) : new Date(v.ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })) +
+        (all[0] === v ? ' · latest' : '') + '</span>' +
+        '<button type="button" class="vr-rename">' + (m.name ? 'Rename' : 'Name') + '</button><span class="cl-jump">Compare</span></div>'
+      const star = r.querySelector('.vr-star'), ren = r.querySelector('.vr-rename')
+      ;[star, ren].forEach((b) => b.addEventListener('mousedown', (e) => e.stopPropagation()))
+      star.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        try { await setMark(v, { star: !m.star }); redraw() } catch (err) { toast(err.message) }
+      })
+      const rename = () => {
+        const inp = document.createElement('input')
+        inp.className = 'vr-name-input'
+        inp.value = m.name || ''
+        inp.placeholder = 'Name this version'
+        inp.maxLength = 120
+        const slot = r.querySelector('.vr-name, .cl-kind')
+        slot.replaceWith(inp)
+        r.querySelector('.cl-when').hidden = true
+        ren.hidden = true
+        let done = false
+        const finish = async (save) => {
+          if (done) return
+          done = true
+          if (save && inp.value.trim() !== (m.name || '')) {
+            try { await setMark(v, { name: inp.value }) } catch (err) { toast(err.message) }
+          }
+          redraw()
+        }
+        inp.addEventListener('mousedown', (e) => e.stopPropagation())
+        inp.addEventListener('click', (e) => e.stopPropagation())
+        inp.addEventListener('keydown', (e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter') { e.preventDefault(); finish(true) }
+          if (e.key === 'Escape') { e.preventDefault(); finish(false) }
+        })
+        inp.addEventListener('blur', () => finish(true))
+        inp.focus()
+        inp.select()
+      }
+      ren.addEventListener('click', (e) => { e.stopPropagation(); rename() })
+      r.addEventListener('click', () => { onPick(); open(v) })
+      el.appendChild(r)
+      if (renameSha && v.sha === renameSha) setTimeout(rename, 0)
+    }
+
+    if (starred.length) {
+      const h = document.createElement('div')
+      h.className = 'cl-section'
+      h.textContent = 'Starred'
+      el.appendChild(h)
+      starred.forEach((v) => row(v, true))
+    }
     if (autos) {
       const t = document.createElement('label')
       t.className = 'vr-toggle'
       t.innerHTML = '<input type="checkbox"' + (showAuto || !manual.length ? ' checked' : '') + (manual.length ? '' : ' disabled') + '> Show auto-backups (' + autos + ')'
-      t.querySelector('input').addEventListener('change', (e) => { showAuto = e.target.checked; renderInto(el, onPick) })
+      t.querySelector('input').addEventListener('change', (e) => { showAuto = e.target.checked; redraw() })
       t.addEventListener('mousedown', (e) => e.stopPropagation())
       el.appendChild(t)
     }
     let day = ''
-    shown.forEach((v, i) => {
+    shown.forEach((v) => {
       const d = new Date(v.ts * 1000).toDateString()
       if (d !== day) {
         day = d
@@ -196,13 +306,7 @@ export function setupVersions({ getDocId, currentSnapshot, applySnapshot, schedu
         h.textContent = new Date(v.ts * 1000).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
         el.appendChild(h)
       }
-      const row = document.createElement('div')
-      row.className = 'cl-row cl-open vr-row'
-      row.innerHTML = '<div class="cl-top"><span class="cl-kind vr-kind-' + v.kind + '">' + (KIND[v.kind] || 'Saved') + '</span>' +
-        '<span class="cl-when">' + new Date(v.ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
-        (all[0] === v ? ' · latest' : '') + '</span><span class="cl-jump">Compare</span></div>'
-      row.addEventListener('click', () => { onPick(); open(v) })
-      el.appendChild(row)
+      row(v, false)
     })
   }
 
@@ -247,7 +351,7 @@ export function setupVersions({ getDocId, currentSnapshot, applySnapshot, schedu
   async function open(v) {
     current = { v, data: null, only: true }
     view.classList.remove('hidden')
-    view.querySelector('.vd-when').textContent = (KIND[v.kind] || 'Saved') + ' · ' + when(v.ts)
+    view.querySelector('.vd-when').textContent = (markOf(v).star ? '★ ' : '') + label(v) + ' · ' + when(v.ts)
     view.querySelector('.vd-stats').textContent = ''
     view.querySelector('.vd-body').innerHTML = '<div class="vd-same">Loading…</div>'
     view.querySelector('.vd-only').checked = true

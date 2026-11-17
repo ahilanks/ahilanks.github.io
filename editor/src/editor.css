@@ -1275,3 +1275,16 @@ body.dg-chat-open .notes { display: none; }
 .html-embed-view.resizing iframe { pointer-events: none; }
 .html-embed-view.resizing .he-shield { display: block; cursor: nwse-resize; }
 .html-embed-view .he-resize[data-w]::after { content: attr(data-w); position: absolute; right: 16px; bottom: 14px; font: 600 0.72rem system-ui, sans-serif; color: #fff; background: var(--text); border-radius: 5px; padding: 0.1rem 0.35rem; white-space: nowrap; }
+
+/* Versions: stars + names (versions.js) */
+.vr-now { display: block; margin: 0.35rem 0.55rem 0.2rem; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 7px; padding: 3px 10px; font-size: 0.75rem; font-weight: 500; }
+.vr-now:hover:not(:disabled) { border-color: var(--text); }
+.vr-now:disabled { color: var(--muted); }
+.vr-star { flex: none; border: none; background: none; padding: 0 1px; font-size: 0.9rem; line-height: 1; color: var(--faint); cursor: pointer; }
+.vr-star:hover, .vr-starred .vr-star { color: #b08a2a; }
+.vr-name { font-size: 0.8rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.vr-rename { flex: none; border: none; background: none; padding: 0; font-size: 0.7rem; color: var(--muted); visibility: hidden; cursor: pointer; }
+.vr-row:hover .vr-rename { visibility: visible; }
+.vr-rename:hover { color: var(--text); text-decoration: underline; }
+.vr-name-input { flex: 1; min-width: 0; font: inherit; font-size: 0.8rem; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; outline: none; }
+.vr-name-input:focus { border-color: var(--text); }

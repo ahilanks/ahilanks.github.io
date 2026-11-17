@@ -736,6 +736,41 @@ def auto_push_loop():
 # Publish state (private) + proof upgrades
 # ---------------------------------------------------------------------------
 
+VERSION_MARKS_PATH = os.path.join(DRAFTS_DIR, ".version-marks.json")  # backed up with the drafts
+
+
+def load_version_marks():
+    """Starred / named versions (History → Versions): {draft_id: {sha: {"star": bool, "name": str}}}."""
+    try:
+        with open(VERSION_MARKS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, ValueError):
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def set_version_mark(draft_id, sha, star=None, name=None):
+    with LOCK:
+        data = load_version_marks()
+        marks = data.setdefault(draft_id, {})
+        m = dict(marks.get(sha) or {})
+        if star is not None:
+            m["star"] = bool(star)
+        if name is not None:
+            m["name"] = str(name).strip()[:120]
+        if m.get("star") or m.get("name"):
+            marks[sha] = {"star": bool(m.get("star")), "name": m.get("name") or ""}
+        else:
+            marks.pop(sha, None)
+        if not marks:
+            data.pop(draft_id, None)
+        tmp = VERSION_MARKS_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1, sort_keys=True)
+        os.replace(tmp, VERSION_MARKS_PATH)
+        return data.get(draft_id, {})
+
+
 def load_publish_state():
     """Per-draft publish bookkeeping that must NOT be public: the unlisted share token
     of each draft ({"shares": {draft_id: token}}). Lives in drafts/ (private repo)."""
@@ -1411,6 +1446,11 @@ class Handler(SimpleHTTPRequestHandler):
             if not SAFE_ID_RE.match(draft):
                 return self.send_error(400, "bad draft id")
             return self._send_json({"versions": draft_versions(draft)})
+        if path == "/api/version-marks":  # starred / named versions of a draft
+            draft = (self._query().get("draft") or [""])[0]
+            if not SAFE_ID_RE.match(draft):
+                return self.send_error(400, "bad draft id")
+            return self._send_json({"marks": load_version_marks().get(draft, {})})
         if path == "/api/version":       # one past version of a draft, for diffing / restoring
             q = self._query()
             draft = (q.get("draft") or [""])[0]
@@ -1444,6 +1484,14 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         path = self.path.split("?")[0]
+        if path == "/api/version-marks":   # {draft, sha, star?, name?} → that draft's marks
+            body = self._read_json()
+            if body is None:
+                return self.send_error(400, "bad json")
+            draft, sha = str(body.get("draft") or ""), str(body.get("sha") or "")
+            if not SAFE_ID_RE.match(draft) or not re.match(r"^[0-9a-f]{40}$", sha):
+                return self.send_error(400, "bad draft id or sha")
+            return self._send_json({"marks": set_version_mark(draft, sha, body.get("star"), body.get("name"))})
         if path == "/api/publish-state":   # merge {"shares": {id: token}}
             incoming = self._read_json()
             if incoming is None:

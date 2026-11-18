@@ -29,7 +29,8 @@ export const STYLE_OPTIONS = [
   },
   {
     // readers get them in the right margin unless the article says Bottom (2026-11-17; before,
-    // Bottom was the default). The editor itself keeps notes at the bottom either way.
+    // Bottom was the default). The editor keeps notes at the bottom until the writer picks
+    // Right margin for this article, which is then stored even though it is the default.
     key: 'footnotes',
     label: 'Footnotes',
     def: 'margin',
@@ -37,7 +38,10 @@ export const STYLE_OPTIONS = [
     // default say nothing about footnotes, and must read as different from today's default
     keyed: true,
     choices: [{ value: 'bottom', label: 'Bottom' }, { value: 'margin', label: 'Right margin' }],
-    hint: { margin: 'For readers (here they stay at the bottom). Narrow screens show them at the bottom.' },
+    hint: {
+      unset: 'Readers get the right margin. Click Right margin to see it here too.',
+      margin: 'Narrow screens show them at the bottom.',
+    },
   },
   {
     key: 'eqSlider',
@@ -48,13 +52,14 @@ export const STYLE_OPTIONS = [
   },
 ]
 
-// Only known keys with non-default values, in STYLE_OPTIONS order.
+// Only known keys with non-default values (or, for `keyed` options, any picked value), in
+// STYLE_OPTIONS order.
 export function normalizeStyle(style) {
   const out = {}
   for (const o of STYLE_OPTIONS) {
     const v = style && style[o.key]
     if (o.when && !Object.entries(o.when).every(([k, w]) => style && style[k] === w)) continue
-    if (v !== o.def && o.choices.some((c) => c.value === v)) out[o.key] = v
+    if ((v !== o.def || o.keyed) && o.choices.some((c) => c.value === v)) out[o.key] = v
   }
   return out
 }
@@ -125,7 +130,7 @@ export function setupStyle({ onChange, apply }) {
         b.classList.toggle('active', value === cur)
         b.setAttribute('aria-pressed', String(value === cur))
       })
-      hint.textContent = (o.hint && o.hint[cur]) || ''
+      hint.textContent = (o.hint && ((o.keyed && !(o.key in style) && o.hint.unset) || o.hint[cur])) || ''
       hint.hidden = !hint.textContent
     })
   }

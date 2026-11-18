@@ -1,8 +1,10 @@
-/* section-links.js — links that jump to a section (heading) of the same article.
+/* section-links.js — links that jump to a section (heading) or a paragraph of the same article.
  *
  * A heading gets a stable `anchor` attr (data-anchor) the first time something links to
  * it, so renaming the heading never breaks the link. The link itself is an ordinary link
  * mark with href "#<anchor>"; publish.js turns data-anchor into the heading's id.
+ * Paragraphs work the same way ("p-" + their first words); on the published page a link
+ * to one shows the paragraph in a small card, and clicking that goes there (paraPeek).
  */
 
 import { Extension } from '../vendor/lib.bundle.js'
@@ -34,9 +36,34 @@ export const HeadingAnchor = Extension.create({
           renderHTML: (attrs) => (attrs.inProgress ? { 'data-in-progress': '' } : {}),
         },
       },
+    }, {
+      types: ['paragraph'],
+      attributes: {
+        // not carried onto the next paragraph on Enter: the link points at this one
+        anchor: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (el) => el.getAttribute('data-anchor') || null,
+          renderHTML: (attrs) => (attrs.anchor ? { 'data-anchor': attrs.anchor } : {}),
+        },
+      },
     }]
   },
 })
+
+// Every non-empty paragraph: [{ pos, node, text, anchor, para: true }]
+export function docParagraphs(editor) {
+  const out = []
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph') {
+      const text = node.textContent.replace(/\s+/g, ' ').trim()
+      if (text) out.push({ pos, node, text, anchor: node.attrs.anchor, para: true })
+      return false
+    }
+    return node.isBlock
+  })
+  return out
+}
 
 // Every non-empty heading in the doc: [{ pos, node, text, level, anchor }]
 export function docHeadings(editor) {
@@ -53,19 +80,23 @@ export function docHeadings(editor) {
 
 export const anchorOf = (href) => (/^#[\w-]+$/.test(href || '') ? href.slice(1) : null)
 
+// The heading or paragraph an "#anchor" href points at
 export function headingForHref(editor, href) {
   const a = anchorOf(href)
-  return a ? docHeadings(editor).find((h) => h.anchor === a) || null : null
+  if (!a) return null
+  return docHeadings(editor).find((h) => h.anchor === a) || docParagraphs(editor).find((p) => p.anchor === a) || null
 }
 
 // The heading's anchor, or a fresh one for it ("sec-" + its text, deduped) if it has none
 // yet — the caller stores a fresh one on the heading in the same transaction as the link.
 export function anchorFor(editor, heading) {
   if (heading.anchor) return heading.anchor
-  const used = new Set(docHeadings(editor).map((h) => h.anchor).filter(Boolean))
-  const base = heading.text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'section'
-  let a = 'sec-' + base
-  for (let i = 2; used.has(a); i++) a = 'sec-' + base + '-' + i
+  const used = new Set(docHeadings(editor).concat(docParagraphs(editor)).map((h) => h.anchor).filter(Boolean))
+  const words = heading.para ? heading.text.split(' ').slice(0, 6).join(' ') : heading.text
+  const base = words.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || (heading.para ? 'paragraph' : 'section')
+  const pre = heading.para ? 'p-' : 'sec-'
+  let a = pre + base
+  for (let i = 2; used.has(a); i++) a = pre + base + '-' + i
   return a
 }
 

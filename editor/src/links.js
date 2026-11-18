@@ -22,7 +22,7 @@
 
 import { getMarkRange } from '../vendor/lib.bundle.js'
 import { $, toast } from './dom.js'
-import { docHeadings, anchorOf, anchorFor, headingForHref, jumpToSection } from './section-links.js'
+import { docHeadings, docParagraphs, anchorOf, anchorFor, headingForHref, jumpToSection } from './section-links.js'
 import {
   footnoteLinkContext, footnoteAnchorAtSelection, applyFootnoteLink, removeFootnoteLink, focusFootnoteLinkContext,
 } from './nodes/footnote.js'
@@ -107,17 +107,25 @@ export function setupLinks(editor) {
     const q = /[/:.]/.test(filter) || filter.startsWith('#') ? '' : filter.trim().toLowerCase()
     const current = anchorOf(editor.getAttributes('link').href)
     const hs = docHeadings(editor).filter((h) => !q || h.text.toLowerCase().includes(q))
-    hs.forEach((h) => {
+    // paragraphs: once a few letters are typed, the ones containing them (the words around
+    // the match, so you can tell which it is). A paragraph link already set always shows.
+    const ps = docParagraphs(editor).filter((p) => (q.length >= 3 && p.text.toLowerCase().includes(q)) || (current && p.anchor === current)).slice(0, 8)
+    hs.concat(ps).forEach((h) => {
       const b = document.createElement('button')
       b.type = 'button'
-      b.className = 'link-sec lvl-' + h.level + (current && h.anchor === current ? ' on' : '')
-      b.textContent = h.text
+      b.className = 'link-sec ' + (h.para ? 'link-para' : 'lvl-' + h.level) + (current && h.anchor === current ? ' on' : '')
+      b.textContent = h.para ? '¶ ' + snippet(h.text, q) : h.text
       b.title = h.text
       b.addEventListener('mousedown', (e) => e.preventDefault()) // keep the input's focus
       b.addEventListener('click', () => linkToSection(h))
       linkSecList.appendChild(b)
     })
-    linkSections.hidden = !hs.length
+    linkSections.hidden = !hs.length && !ps.length
+  }
+  function snippet(text, q) {
+    const i = q ? text.toLowerCase().indexOf(q) : -1
+    if (i < 50) return text
+    return '…' + text.slice(text.lastIndexOf(" ", i - 30) + 1)
   }
   function linkToSection(h) {
     const anchor = anchorFor(editor, h)
@@ -239,7 +247,7 @@ export function setupLinks(editor) {
     hoverShown = hover ? a : null
     const href = a.getAttribute('href') || ''
     const sec = anchorOf(href) && !inFootnote(a) ? headingForHref(editor, href) : null
-    const label = anchorOf(href) && !inFootnote(a) ? (sec ? '§ ' + sec.text : 'Section not found') : href
+    const label = anchorOf(href) && !inFootnote(a) ? (sec ? (sec.para ? '¶ ' : '§ ') + sec.text : 'Section not found') : href
     linkPreviewUrl.textContent = label.length > 60 ? label.slice(0, 57) + '…' : label
     linkPreviewUrl.setAttribute('href', href)
     positionPreview(a)

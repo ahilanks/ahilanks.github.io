@@ -99,7 +99,7 @@ function randomToken() {
 // should reach the public static site. Runs on the detached publish clone.
 const SANITIZE_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'NOSCRIPT', 'SVG', 'MATH'])
 const SANITIZE_ALLOW = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'A', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'CODE', 'PRE', 'SUP', 'SUB', 'HR', 'FIGURE', 'IMG', 'FIGCAPTION', 'SPAN', 'DIV', 'VIDEO', 'DETAILS', 'SUMMARY'])
-const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt', 'width', 'height', 'style'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy', 'data-embed'], P: ['data-levels'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
+const SANITIZE_ATTRS = { A: ['href', 'target', 'rel'], IMG: ['src', 'alt', 'width', 'height', 'style'], VIDEO: ['src', 'controls', 'playsinline', 'preload', 'loop', 'muted', 'poster', 'width', 'height'], SPAN: ['data-tex', 'data-display'], DIV: ['data-tex', 'data-display', 'data-h', 'data-x', 'data-y', 'data-w', 'data-fs', 'data-left', 'data-width', 'data-dy', 'data-embed'], P: ['data-levels', 'data-anchor'], SUP: ['data-fn'], H2: ['data-anchor'], H3: ['data-anchor'], H4: ['data-anchor'], SUMMARY: ['data-level', 'data-anchor'], FIGURE: ['data-w', 'data-pair', 'data-crop'] }
 function sanitizeNode(root) {
   root.querySelectorAll('*').forEach((el) => {
     // root.contains (not isConnected): the tree is detached, so isConnected is always false
@@ -309,6 +309,12 @@ function bodyToPublishHtml(clone, { sliders = true, poemDates = false } = {}) {
     toc.push({ id: e.h.id, text: e.text, level: depth + 2, n: depth === 0 ? secN : 0 })
   })
   clone.querySelectorAll('h2[data-anchor], h3[data-anchor], h4[data-anchor]').forEach((h) => h.removeAttribute('data-anchor'))
+  // a paragraph something links to (section-links.js): its anchor becomes its id
+  clone.querySelectorAll('p[data-anchor]').forEach((p) => {
+    const anchor = p.getAttribute('data-anchor')
+    p.removeAttribute('data-anchor')
+    if (/^[\w-]+$/.test(anchor) && !usedIds.has(anchor)) { usedIds.add(anchor); p.id = anchor }
+  })
   // links to a section of this article stay in the tab
   clone.querySelectorAll('a[href^="#"]').forEach((a) => { a.removeAttribute('target'); a.removeAttribute('rel') })
   return { html: clone.innerHTML, toc }
@@ -749,6 +755,134 @@ function fnPeek() {
   document.addEventListener('click', function (e) { if (markerOf(e.target)) hide() }, true) // off on the trip to the note
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
   window.addEventListener('resize', function () { if (ref) place() })
+}
+
+/* ------------------------------------------------------ paragraph links (page) */
+// Runs INSIDE the published article (embedded via paraPeek.toString(), like fnTrip). A link to
+// a paragraph of the article (href "#p-…", section-links.js) shows that paragraph in a small
+// card, like a footnote's: on hover with a mouse, on a tap on a touch screen (a tap outside
+// closes it). Clicking the card (or, with a mouse, the link itself) goes to the paragraph and
+// lights it up briefly; the browser's Back returns to where the reader was.
+function paraPeek() {
+  var hover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  var card = document.createElement('div')
+  card.className = 'fn-peek para-peek'
+  card.setAttribute('role', 'tooltip')
+  card.id = 'paraPeek'
+  card.hidden = true
+  document.body.appendChild(card)
+  var link = null
+  var openT = 0, closeT = 0
+
+  function target(a) {
+    var href = a.getAttribute('href') || ''
+    var el = /^#p-[\w-]+$/.test(href) && document.getElementById(href.slice(1))
+    return el && el.tagName === 'P' ? el : null
+  }
+  function linkOf(el) {
+    var a = el && el.closest && el.closest('a[href^="#p-"]')
+    return a && !card.contains(a) && target(a) ? a : null
+  }
+  function place() {
+    var r = link.getBoundingClientRect()
+    var gutter = 16
+    var w = Math.min(420, window.innerWidth - gutter * 2)
+    card.style.width = w + 'px'
+    var h = card.offsetHeight
+    var below = window.innerHeight - r.bottom, above = r.top
+    var up = below < h + 14 && above > below
+    var left = Math.max(gutter, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - gutter))
+    card.style.left = (left + window.scrollX) + 'px'
+    card.style.top = (up ? r.top - h - 8 : r.bottom + 8) + window.scrollY + 'px'
+    card.classList.toggle('up', up)
+  }
+  function show(a) {
+    var p = target(a)
+    if (!p) return
+    link = a
+    var body = p.cloneNode(true)
+    body.removeAttribute('id')
+    body.classList.remove('fn-flash', 'fn-flash-fade')
+    var ids = body.querySelectorAll('[id]')
+    for (var k = 0; k < ids.length; k++) ids[k].removeAttribute('id')
+    var above = p.getBoundingClientRect().top < a.getBoundingClientRect().top
+    card.innerHTML = '<div class="fn-peek-body"></div><span class="para-peek-go">Go to this paragraph ' + (above ? '\u2191' : '\u2193') + '</span>'
+    card.firstChild.innerHTML = body.innerHTML
+    card.hidden = false
+    a.setAttribute('aria-describedby', 'paraPeek')
+    place()
+  }
+  function hide() {
+    clearTimeout(openT); clearTimeout(closeT)
+    if (link) link.removeAttribute('aria-describedby')
+    link = null
+    card.hidden = true
+  }
+  function go(a) {
+    var p = a && target(a)
+    hide()
+    if (!p) return
+    for (var d = p.closest('details'); d; d = d.parentElement.closest('details')) d.open = true
+    if (location.hash !== '#' + p.id) history.pushState(null, '', '#' + p.id)
+    p.scrollIntoView({ block: 'center', behavior: motion })
+    p.classList.remove('fn-flash', 'fn-flash-fade')
+    void p.offsetWidth
+    p.classList.add('fn-flash')
+    var token = p._paraFlash = {}
+    setTimeout(function () {
+      if (p._paraFlash !== token) return
+      p.classList.add('fn-flash-fade')
+      setTimeout(function () { if (p._paraFlash === token) p.classList.remove('fn-flash', 'fn-flash-fade') }, 1200)
+    }, 2200)
+  }
+
+  card.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('a')) return // a link inside the paragraph
+    go(link)
+  })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+  window.addEventListener('resize', function () { if (link) place() })
+
+  if (!hover) {
+    // capturing, like fnPeek: a tap on the link opens the card instead of jumping
+    document.addEventListener('click', function (e) {
+      var a = linkOf(e.target)
+      if (a) {
+        e.preventDefault()
+        if (a === link && !card.hidden) hide()
+        else show(a)
+        return
+      }
+      if (!card.hidden && !card.contains(e.target)) { e.preventDefault(); e.stopPropagation(); hide() }
+    }, true)
+    return
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    if (card.contains(e.target)) { clearTimeout(closeT); return }
+    var a = linkOf(e.target)
+    if (!a) return
+    clearTimeout(closeT)
+    if (a === link && !card.hidden) return
+    clearTimeout(openT)
+    openT = setTimeout(function () { show(a) }, link ? 0 : 60)
+  })
+  document.addEventListener('mouseout', function (e) {
+    var from = linkOf(e.target) || (card.contains(e.target) ? card : null)
+    if (!from) return
+    var to = e.relatedTarget
+    if (to && (card.contains(to) || (link && link.contains(to)) || linkOf(to) === from)) return
+    clearTimeout(openT); clearTimeout(closeT)
+    closeT = setTimeout(hide, 150)
+  })
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    var a = linkOf(e.target)
+    if (!a) return
+    e.preventDefault()
+    go(a)
+  })
 }
 
 /* ------------------------------------------------------ footnotes in the margin (page) */
@@ -1553,6 +1687,8 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
   const fnMargin = !!footHtml && looks.footnotes === 'margin'
   const hasSliders = bodyHtml.includes('data-levels=')
   const hasCollapsibles = bodyHtml.includes('<details')
+  const hasParaLinks = bodyHtml.includes('href="#p-') // links to a paragraph: paraPeek
+  const peekCss = footHtml || hasParaLinks
   const hasCanvas = bodyHtml.includes('canvas-block')
   const hasEmbed = bodyHtml.includes('class="embed"')
   // Room needed for the notes: 820px column + 2rem gap + 260px note + a 24px edge, with the
@@ -1654,18 +1790,23 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '      .fn-return:hover { background:#1b2430; }' : '',
     footHtml ? '      @keyframes fn-return-in { from { opacity:0; transform:translate(-50%, 0.5rem); } }' : '',
     footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-return { animation:none; } }' : '',
-    footHtml ? '      .fn-peek { position:absolute; z-index:30; box-sizing:border-box; max-height:min(50vh, 22rem); overflow-y:auto; display:flex; gap:0.55rem; padding:0.75rem 0.95rem; background:#faf6ee; color:var(--text-color); border:1px solid rgba(39,50,63,0.14); border-radius:10px; box-shadow:0 1px 3px rgba(39,50,63,0.1), 0 8px 26px rgba(39,50,63,0.16); font-size:0.9rem; line-height:1.5; text-align:left; animation:fn-peek-in 0.12s ease-out; }' : '',
-    footHtml ? '      .fn-peek[hidden] { display:none; }' : '',
+    peekCss ? '      .fn-peek { position:absolute; z-index:30; box-sizing:border-box; max-height:min(50vh, 22rem); overflow-y:auto; display:flex; gap:0.55rem; padding:0.75rem 0.95rem; background:#faf6ee; color:var(--text-color); border:1px solid rgba(39,50,63,0.14); border-radius:10px; box-shadow:0 1px 3px rgba(39,50,63,0.1), 0 8px 26px rgba(39,50,63,0.16); font-size:0.9rem; line-height:1.5; text-align:left; animation:fn-peek-in 0.12s ease-out; }' : '',
+    peekCss ? '      .fn-peek[hidden] { display:none; }' : '',
     footHtml ? '      .fn-peek-n { flex:none; font-weight:600; color:var(--muted); }' : '',
-    footHtml ? '      .fn-peek-body { flex:1; min-width:0; overflow-wrap:break-word; }' : '',
-    footHtml ? '      .fn-peek-body p, .fn-peek-body div { margin:0 0 0.4rem; }' : '',
-    footHtml ? '      .fn-peek-body p:last-child, .fn-peek-body div:last-child { margin-bottom:0; }' : '',
-    footHtml ? '      .fn-peek-body img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.4rem 0; }' : '',
-    footHtml ? '      .fn-peek-body .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
-    footHtml ? '      @keyframes fn-peek-in { from { opacity:0; transform:translateY(3px); } }' : '',
-    footHtml ? '      .fn-peek.up { animation-name:fn-peek-in-up; }' : '',
-    footHtml ? '      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }' : '',
-    footHtml ? '      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }' : '',
+    peekCss ? '      .fn-peek-body { flex:1; min-width:0; overflow-wrap:break-word; }' : '',
+    peekCss ? '      .fn-peek-body p, .fn-peek-body div { margin:0 0 0.4rem; }' : '',
+    peekCss ? '      .fn-peek-body p:last-child, .fn-peek-body div:last-child { margin-bottom:0; }' : '',
+    peekCss ? '      .fn-peek-body img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.4rem 0; }' : '',
+    peekCss ? '      .fn-peek-body .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }' : '',
+    peekCss ? '      @keyframes fn-peek-in { from { opacity:0; transform:translateY(3px); } }' : '',
+    peekCss ? '      .fn-peek.up { animation-name:fn-peek-in-up; }' : '',
+    peekCss ? '      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }' : '',
+    hasParaLinks ? '      .para-peek { flex-direction:column; gap:0.45rem; cursor:pointer; }' : '',
+    hasParaLinks ? '      .para-peek .fn-peek-body { font-style:italic; }' : '',
+    hasParaLinks ? '      .para-peek-go { align-self:flex-end; font:600 0.72rem/1 system-ui, -apple-system, sans-serif; color:var(--muted); }' : '',
+    hasParaLinks ? '      .para-peek:hover .para-peek-go { color:var(--text-color); }' : '',
+    hasParaLinks ? '      p[id^="p-"] { scroll-margin-top:1.4rem; }' : '',
+    peekCss ? '      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }' : '',
     ...(version || draft ? PROV_CSS : []),
     footHtml ? '      @media screen {' : '',
     footHtml ? '        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }' : '',
@@ -1766,6 +1907,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     footHtml ? '    <script>(' + fnSide.toString() + ')(' + fnMinWidth + ',' + JSON.stringify(fnMargin ? 'side' : 'below') + ');</script>' : '',
     hasSliders ? '    <script>(' + eqSlider.toString() + ')();</script>' : '',
     hasCollapsibles ? '    <script>(' + collapsibleReveal.toString() + ')();</script>' : '',
+    hasParaLinks ? '    <script>(' + paraPeek.toString() + ')();</script>' : '',
     hasVideo ? '    <script>(' + vidPlay.toString() + ')();</script>' : '',
     hasEmbed ? '    <script>(' + embedResize.toString() + ')();</script>' : '',
     bodyHtml.includes('canvas-item') ? '    <script>(' + canvasPlace.toString() + ')();</script>' : '',

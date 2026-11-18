@@ -740,21 +740,31 @@ export function setupFootnotes(editor, onFootnoteEdit) {
 }
 
 /* --------------------------------------------------------- hover peek */
-// Hovering a ref shows its note, read-only, in a small card beside it — the same card the
-// published page has (publish.js fnPeek). It stays while the pointer is on the ref or the
-// card (a short grace covers the gap, so its links can be clicked) and goes when it leaves
-// both. Mouse/trackpad only; a click still makes the round trip to the note to edit it.
+// Hovering a ref shows its note in a small card beside it — the same card the published
+// page has (publish.js fnPeek). It stays while the pointer is on the ref or the card (a
+// short grace covers the gap) and goes when it leaves both. Mouse/trackpad only; a click on
+// the ref still makes the round trip to the note.
+// The note in the card can be edited in place: it's a copy of the real body (which stays in
+// #fnList, where saving, numbering and the word count read it), and every change is copied
+// back and announced there as an input, so the draft saves as if typed in the list. It
+// carries .fn-body, so ⌘B/⌘I/⌘K format it like a note in the list. While the caret is in
+// the card it stays open; it closes when the caret leaves it, or on Escape.
 function setupPeek(editor) {
   const none = { hide() {} }
   if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return none
   const card = document.createElement('div')
   card.className = 'fn-peek'
   card.id = 'fnPeek'
-  card.setAttribute('role', 'tooltip')
   card.hidden = true
   document.body.appendChild(card)
   let ref = null
   let openT = 0, closeT = 0
+  let edit = null // the card's editable copy of the note
+  const editing = () => !!edit && card.contains(document.activeElement)
+  const realBody = () => {
+    const li = ref && document.querySelector(`#fnList li[data-fn="${ref.dataset.fn}"]`)
+    return li && li.querySelector('.fn-body')
+  }
   const refOf = (el) => (el && el.closest ? el.closest('.ProseMirror .fn-ref') : null)
 
   function place() {
@@ -777,10 +787,13 @@ function setupPeek(editor) {
     if (!body) return
     ref = el
     const clone = body.cloneNode(true)
-    clone.removeAttribute('contenteditable')
-    clone.querySelectorAll('[contenteditable], [id]').forEach((x) => { x.removeAttribute('contenteditable'); x.removeAttribute('id') })
-    clone.className = 'fn-peek-body'
-    if (isEmptyBody(body)) { clone.textContent = 'Empty footnote — click to write it.'; clone.classList.add('fn-peek-empty') }
+    clone.removeAttribute('id')
+    clone.className = 'fn-body fn-peek-body'
+    clone.setAttribute('contenteditable', 'true')
+    clone.setAttribute('spellcheck', 'true')
+    clone.dataset.placeholder = 'Write the footnote…'
+    if (isEmptyBody(body)) clone.textContent = ''
+    edit = clone
     card.textContent = ''
     const n = document.createElement('span')
     n.className = 'fn-peek-n'
@@ -789,7 +802,41 @@ function setupPeek(editor) {
     card.hidden = false
     place()
   }
-  function hide() { clearTimeout(openT); clearTimeout(closeT); ref = null; card.hidden = true }
+  function hide() {
+    clearTimeout(openT); clearTimeout(closeT)
+    if (editing()) document.activeElement.blur()
+    ref = null; edit = null; card.hidden = true
+  }
+  // the copy → the real note, then the list's own input handling (save, word count)
+  function syncBack() {
+    const real = realBody()
+    if (!real || !edit) return
+    real.innerHTML = isEmptyBody(edit) ? '' : edit.innerHTML
+    real.dispatchEvent(new Event('input', { bubbles: true }))
+    if (ref && ref.isConnected) place()
+  }
+  card.addEventListener('input', syncBack)
+  card.addEventListener('paste', (e) => {
+    const cd = e.clipboardData
+    if (!cd || !edit || !edit.contains(e.target)) return
+    e.preventDefault()
+    const imgFile = imageFileFrom(cd)
+    if (imgFile) { toast('Add images to a footnote down in the list'); return }
+    const html = cd.getData('text/html')
+    if (html) {
+      const tmp = document.createElement('div')
+      tmp.innerHTML = cleanPastedHTML(html)
+      normalizeFnBody(tmp)
+      insertCleanHTML(tmp.innerHTML)
+    } else insertPlain(cd.getData('text/plain') || '')
+    syncBack()
+  })
+  // the caret left the card (not for the link box, which edits this note): close it
+  card.addEventListener('focusout', () => setTimeout(() => {
+    const a = document.activeElement
+    if (card.hidden || card.contains(a) || (a && a.closest && a.closest('#linkPop'))) return
+    if (!card.matches(':hover')) hide()
+  }, 0))
   const keep = () => clearTimeout(closeT)
   const leaveSoon = () => { clearTimeout(openT); clearTimeout(closeT); closeT = setTimeout(hide, 150) }
 
@@ -799,6 +846,7 @@ function setupPeek(editor) {
     if (!el) return
     keep()
     if (el === ref && !card.hidden) return
+    if (editing()) return
     clearTimeout(openT)
     openT = setTimeout(() => show(el), ref ? 0 : 60)
   })
@@ -807,18 +855,26 @@ function setupPeek(editor) {
     if (!from) return
     const to = e.relatedTarget
     if (to && (card.contains(to) || (ref && ref.contains(to)) || refOf(to) === from)) return
+    if (editing()) return // typing in it: it stays until the caret leaves
     leaveSoon()
   })
-  // links in the card open in a new tab (the note itself is edited down in the list)
+  // as in the list: a plain click on a link opens it in a new tab; hold a modifier to click
+  // into it and edit
   card.addEventListener('click', (e) => {
     const a = e.target.closest && e.target.closest('a[href]')
-    if (!a) return
+    if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
     e.preventDefault()
     window.open(a.href, '_blank', 'noopener')
   })
   document.addEventListener('scroll', () => { if (ref) place() }, { capture: true, passive: true })
   window.addEventListener('resize', () => { if (ref) place() })
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide() })
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || card.hidden) return
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#linkPop')) return
+    const was = editing()
+    hide()
+    if (was) editor.commands.focus() // back to the text
+  })
   editor.on('update', () => { if (ref && !ref.isConnected) hide() })
   return { hide }
 }

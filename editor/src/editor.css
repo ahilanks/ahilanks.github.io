@@ -384,7 +384,8 @@ ol.fn-list li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.
 .fn-peek-body p:last-child, .fn-peek-body div:last-child { margin-bottom: 0; }
 .fn-peek-body a { color: var(--text); text-decoration: underline; text-decoration-skip-ink: none; }
 .fn-peek-body img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.4rem 0; }
-.fn-peek-empty { color: var(--faint); font-style: italic; }
+.fn-peek-body { outline: none; cursor: text; }
+.fn-peek-body:empty::before { content: attr(data-placeholder); color: var(--faint); font-style: italic; }
 .fn-peek.up { animation-name: fn-peek-in-up; }
 @keyframes fn-peek-in { from { opacity: 0; transform: translateY(3px); } }
 @keyframes fn-peek-in-up { from { opacity: 0; transform: translateY(-3px); } }

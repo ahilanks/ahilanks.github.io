@@ -302,18 +302,75 @@ export const editor = new Editor({
 // expose for console debugging
 window.__editor = editor
 
-// Drag-selecting near the bottom edge: Chrome's selection autoscroll honours the scroll
-// area's scroll-padding-bottom (22vh, which keeps the caret off the bottom edge while
-// typing) and keeps scrolling to get the moving end of the selection out of that band.
-// Each scroll extends the selection further down, so it ran away at ~18,000px/s. Drop the
-// padding while a button is held so the drag scrolls at Chrome's normal speed.
+// Drag-selecting past the top or bottom edge scrolls at a readable pace. Chrome's own
+// selection autoscroll ran 2,000–6,000px/s (a screen in a fraction of a second; into the
+// toolbar was the worst), and with the scroll area's scroll-padding-bottom it ran away
+// entirely. So once a mouse press in the article turns into a drag, the scroll area is
+// overflow:hidden (Chrome won't autoscroll it; scrollTop still works) and this scrolls it
+// instead: 60px/s at the edge band, faster the further out the pointer goes, capped at
+// 900px/s, moving the end of the selection to whatever is under the pointer. The trackpad
+// still scrolls while the button is held (forwarded below).
 {
   const area = document.getElementById('scrollArea')
-  const release = () => area.classList.remove('pointer-held')
-  area.addEventListener('pointerdown', (e) => { if (e.button === 0) area.classList.add('pointer-held') })
-  window.addEventListener('pointerup', release)
-  window.addEventListener('pointercancel', release)
-  window.addEventListener('blur', release)
+  const EDGE = 40, MAX = 900
+  let press = null // { x0, y0, x, y, dragging, last, raf }
+  function speed(y) {
+    const r = area.getBoundingClientRect()
+    if (y < r.top + EDGE) return -Math.min(MAX, 60 + (r.top + EDGE - y) * 7)
+    if (y > r.bottom - EDGE) return Math.min(MAX, 60 + (y - (r.bottom - EDGE)) * 7)
+    return 0
+  }
+  function extend() {
+    const r = area.getBoundingClientRect()
+    const view = editor.view
+    const hit = view.posAtCoords({ left: press.x, top: Math.min(Math.max(press.y, r.top + 4), r.bottom - 4) })
+    const { state } = view
+    if (!hit || hit.pos === state.selection.head) return
+    try {
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, state.selection.anchor, hit.pos)).setMeta('pointer', true))
+    } catch { /* a position inside an atom: the next frame finds another */ }
+  }
+  function tick(t) {
+    if (!press) return
+    const dt = Math.min(50, t - (press.last || t))
+    press.last = t
+    const v = speed(press.y)
+    if (v) { area.scrollTop += v * dt / 1000; extend() }
+    press.raf = requestAnimationFrame(tick)
+  }
+  function end() {
+    if (!press) return
+    cancelAnimationFrame(press.raf)
+    press = null
+    area.classList.remove('drag-select')
+  }
+  area.addEventListener('pointerdown', (e) => {
+    end()
+    // mouse only (touch selection is the OS's); article text only, not math or footnotes
+    if (e.button !== 0 || e.pointerType !== 'mouse' || !editor.view.dom.contains(e.target)) return
+    if (e.target.closest('math-field, .canvas-item, [contenteditable="false"]')) return
+    press = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, dragging: false, last: 0 }
+  })
+  window.addEventListener('pointermove', (e) => {
+    if (!press) return
+    press.x = e.clientX
+    press.y = e.clientY
+    // a click held still near the edge stays a click: only a real drag scrolls
+    if (!press.dragging && Math.hypot(press.x - press.x0, press.y - press.y0) > 4) {
+      press.dragging = true
+      area.classList.add('drag-select')
+      press.raf = requestAnimationFrame(tick)
+    }
+  })
+  window.addEventListener('pointerup', end)
+  window.addEventListener('pointercancel', end) // includes a drag of an image or block
+  window.addEventListener('blur', end)
+  area.addEventListener('wheel', (e) => {
+    if (!press || !press.dragging) return
+    e.preventDefault()
+    area.scrollTop += e.deltaMode === 1 ? e.deltaY * 18 : e.deltaY
+    extend()
+  }, { passive: false })
 }
 
 /* ---------------------------------------------------------------- toolbar */

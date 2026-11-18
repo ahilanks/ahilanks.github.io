@@ -122,7 +122,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 
 /* ----------------------------- SURFACE ----------------------------- */
 .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scroll-padding-bottom: 22vh; }
-.scroll.pointer-held { scroll-padding-bottom: 0; } /* see main.js: drag-select runaway */
+/* drag-selecting: main.js scrolls at a readable pace instead of Chrome; the gutter keeps the text from reflowing */
+.scroll { scrollbar-gutter: stable; }
+.scroll.drag-select { overflow-y: hidden; scroll-padding-bottom: 0; }
 /* the page ends just below the last text; room to scroll on only while the math keyboard is
    up, since it would otherwise cover an equation at the end of the draft */
 .surface { --end-gap: 4.5rem; max-width: var(--maxw); margin: 2.4rem auto 0; padding: 0 1.5rem var(--end-gap); position: relative; }

@@ -582,6 +582,8 @@ window.__comments = comments // console debugging, like __editor
 setupFootnoteMargin(editor, comments)
 const style = setupStyle({
   apply: (s) => {
+    // margin, the readers' default, comes through as no value: the editor keeps notes at
+    // the bottom unless that changes (style.js)
     setFootnotePlacement(s.footnotes)
     document.body.classList.toggle('poem', s.kind === 'poem')
     setPoemDates(editor, s.kind === 'poem' && s.poemDates === 'each')

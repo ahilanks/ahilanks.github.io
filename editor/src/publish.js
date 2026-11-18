@@ -1684,7 +1684,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
   const looks = normalizeStyle(style)
-  const fnMargin = !!footHtml && looks.footnotes === 'margin'
+  const fnMargin = !!footHtml && looks.footnotes !== 'bottom' // the right margin is the readers' default (style.js)
   const hasSliders = bodyHtml.includes('data-levels=')
   const hasCollapsibles = bodyHtml.includes('<details')
   const hasParaLinks = bodyHtml.includes('href="#p-') // links to a paragraph: paraPeek

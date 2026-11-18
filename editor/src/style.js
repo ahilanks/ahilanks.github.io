@@ -28,11 +28,16 @@ export const STYLE_OPTIONS = [
     hint: { each: 'Type each date under its poem’s heading.' },
   },
   {
+    // readers get them in the right margin unless the article says Bottom (2026-11-17; before,
+    // Bottom was the default). The editor itself keeps notes at the bottom either way.
     key: 'footnotes',
     label: 'Footnotes',
-    def: 'bottom',
+    def: 'margin',
+    // always written into the page's style key: pages published while Bottom was the
+    // default say nothing about footnotes, and must read as different from today's default
+    keyed: true,
     choices: [{ value: 'bottom', label: 'Bottom' }, { value: 'margin', label: 'Right margin' }],
-    hint: { margin: 'Narrow screens show them at the bottom.' },
+    hint: { margin: 'For readers (here they stay at the bottom). Narrow screens show them at the bottom.' },
   },
   {
     key: 'eqSlider',
@@ -54,9 +59,11 @@ export function normalizeStyle(style) {
   return out
 }
 
-// A stable one-line form, written on the published page ('' = all defaults).
+// A stable one-line form, written on the published page ('' = all defaults, apart from
+// `keyed` options, which always appear).
 export function styleKey(style) {
-  return Object.entries(normalizeStyle(style)).map(([k, v]) => k + '=' + v).join(';')
+  const norm = normalizeStyle(style)
+  return STYLE_OPTIONS.filter((o) => o.key in norm || o.keyed).map((o) => o.key + '=' + (norm[o.key] || o.def)).join(';')
 }
 
 /**

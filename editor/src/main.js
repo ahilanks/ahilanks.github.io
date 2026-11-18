@@ -31,6 +31,7 @@ import { setupPublish } from './publish.js'
 import { setupMobileViewport } from './mobile.js'
 import { setupMathAlign } from './math-align.js'
 import { CommentMark, setupComments } from './comments.js'
+import { TrackInsert, TrackDelete, TrackChanges, setupTrackChanges } from './track-changes.js'
 import { Suggestions, setupSuggestions } from './ai-suggest.js'
 import { setupClosedList } from './closed.js'
 import { setupVersions } from './versions.js'
@@ -134,6 +135,9 @@ export const editor = new Editor({
     HeadingAnchor,
     PoemDates,
     CommentMark,
+    TrackInsert,
+    TrackDelete,
+    TrackChanges,
     Suggestions,
     SectionFocus,
   ],
@@ -576,6 +580,7 @@ setupFootnotes(editor, scheduleSave)
 
 // Comments: toolbar button / ⌘⌥M on a selection (or the word at the caret) → a margin card.
 const comments = setupComments(editor, scheduleSave)
+setupTrackChanges(editor)
 window.__comments = comments // console debugging, like __editor
 
 // Style: the toolbar's per-article look. A pick saves and syncs at once, since no edit follows it.

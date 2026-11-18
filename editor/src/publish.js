@@ -34,6 +34,7 @@ import { $, escapeHtml, slugify, todayLong, toast } from './dom.js'
 // subtitle, body and the footnote list.
 import { CONFIG, LS } from './config.js'
 import { normalizeStyle, styleKey } from './style.js'
+import { stripSuggestions } from './track-changes.js'
 import { levelsFor } from './equation-levels.js'
 import { CANVAS_CSS, canvasForPublish, canvasPlace } from './nodes/canvas.js'
 import { extractEmbeds, embedsForPublish, EMBED_CSS, embedResize } from './nodes/embed.js'
@@ -178,6 +179,9 @@ const IN_PROGRESS_NOTE = 'This section is in progress.'
 function holdBackSections(bodyHtml) {
   const d = document.createElement('div')
   d.innerHTML = bodyHtml || ''
+  // pending suggestions (Commenter mode, track-changes.js) aren't published: readers get the
+  // text as it was until you accept them
+  const suggestions = stripSuggestions(d)
   const titles = []
   const cutAnchors = new Set()
   const isHeading = (el) => /^H[1-6]$/.test(el.tagName)
@@ -204,7 +208,7 @@ function holdBackSections(bodyHtml) {
   d.querySelectorAll('a[href^="#"]').forEach((a) => {
     if (cutAnchors.has(a.getAttribute('href').slice(1))) { a.replaceWith(...a.childNodes); deadLinks++ }
   })
-  return { html: d.innerHTML, titles, deadLinks }
+  return { html: d.innerHTML, titles, deadLinks, suggestions }
 }
 
 // Turn a detached clone of the serialised body into clean published HTML:
@@ -2093,11 +2097,11 @@ export function setupPublish({ editor, currentSnapshot }) {
     const held = holdBackSections(snap.body)
     seedThumbFromBody(held.html)
     const heldEl = $('pubHeld')
-    heldEl.hidden = !held.titles.length
-    heldEl.innerHTML = held.titles.length
+    heldEl.hidden = !held.titles.length && !held.suggestions
+    heldEl.innerHTML = (held.titles.length
       ? '<b>In progress:</b> ' + held.titles.map(escapeHtml).join(', ') + '. Readers see only the heading and a note.' +
         (held.deadLinks ? ' ' + (held.deadLinks === 1 ? 'A link' : held.deadLinks + ' links') + ' into that text become plain words.' : '')
-      : ''
+      : '') + (held.suggestions ? (held.titles.length ? '<br>' : '') + '<b>Suggestions:</b> there are suggested edits you haven\u2019t accepted or rejected. Readers get the text without them.' : '')
     setMode('draft')
     showVersionInfo(slugify(titleText))
     seedTechnical(slugify(titleText), snap.id)

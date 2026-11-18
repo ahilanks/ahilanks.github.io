@@ -308,11 +308,13 @@ window.__editor = editor
 // entirely. So once a mouse press in the article turns into a drag, the scroll area is
 // overflow:hidden (Chrome won't autoscroll it; scrollTop still works) and this scrolls it
 // instead: 60px/s at the edge band, faster the further out the pointer goes, capped at
-// 900px/s, moving the end of the selection to whatever is under the pointer. The trackpad
-// still scrolls while the button is held (forwarded below).
+// 400px/s either way. (Going up, the pointer travels far past the edge, into the tabs and
+// menu bar; going down, the screen's bottom stops it. A higher cap made up far faster than
+// down.) Each step moves the end of the selection to whatever is under the pointer. The
+// trackpad still scrolls while the button is held (forwarded below).
 {
   const area = document.getElementById('scrollArea')
-  const EDGE = 40, MAX = 900
+  const EDGE = 40, MAX = 400
   let press = null // { x0, y0, x, y, dragging, last, raf }
   function speed(y) {
     const r = area.getBoundingClientRect()

@@ -699,6 +699,17 @@ editor.view.dom.addEventListener('mouseout', (e) => {
 })
 
 /* ---------------------------------------------------------------- keyboard shortcuts */
+// ⌘S: save now and back up, the same as clicking the cloud ("Backing up…" → "Backed up ✓").
+// Without the server's backup (sandbox), just save.
+function saveNow() {
+  const b = $('pushBtn')
+  if (b && typeof b.onclick === 'function' && !b.disabled) b.onclick()
+  else if (!b || !b.disabled) scheduleSave()
+}
+// a diagram's frame has the keyboard while you use it: it passes ⌘S up (embed.js)
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.embedSave && [...document.querySelectorAll('.html-embed-view iframe')].some((f) => f.contentWindow === e.source)) saveNow()
+})
 document.addEventListener('keydown', (e) => {
   const meta = e.metaKey || e.ctrlKey
   if (!meta) return
@@ -706,7 +717,7 @@ document.addEventListener('keydown', (e) => {
   // e.key is 'µ' on a Mac, so the plain ⌘M math branch below never sees it either way.
   if (e.altKey && e.code === 'KeyM') { e.preventDefault(); comments.add(); return }
   const k = e.key.toLowerCase()
-  if (k === 's') { e.preventDefault(); scheduleSave(); return }
+  if (k === 's') { e.preventDefault(); saveNow(); return }
   // inside an equation (⌘B/⌘I style the math there — mathlive-config.js), its words bar,
   // or a box you're typing a question into
   const t = e.target

@@ -35,6 +35,8 @@ const RESIZE = '<script>(function(){var d=document.documentElement,last=0,busy=0
   'function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}' +
   'try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}' +
   'addEventListener("resize",fit);addEventListener("load",fit);fit();' +
+  // ⌘S while using a diagram in the editor still saves (main.js)
+  'addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key||"").toLowerCase()==="s"){e.preventDefault();parent.postMessage({embedSave:1},"*")}});' +
   // the editor's first click on a diagram, passed through (see the node view's cover)
   'addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;' +
   'if(el.focus)try{el.focus({preventScroll:true})}catch(x){}' +

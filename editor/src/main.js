@@ -489,7 +489,9 @@ const setStatus = (state, text) => {
   const s = $('saveStatus'); if (!s) return
   s.className = 'save-status ' + state; $('saveText').textContent = text
 }
-const _save = debounce(() => {
+let savePending = false // an edit is waiting for the autosave below
+const saveToBrowser = () => {
+  savePending = false
   const s = currentSnapshot()
   let all = {}
   try { all = JSON.parse(localStorage.getItem(LS.drafts) || '{}') } catch (e) {}
@@ -505,11 +507,33 @@ const _save = debounce(() => {
   if (window.__drafts) window.__drafts.pushLive(local ? null : s) // (set up after load())
   setStatus('saved', 'Saved')
   storeInlineImagesSoon()
-}, CONFIG.autosaveMs)
+  return s
+}
+const _save = debounce(saveToBrowser, CONFIG.autosaveMs)
 // inline images in the open draft → files on the server (figures.js), a moment after edits
 const storeInlineImagesSoon = debounce(() => storeInlineImages(editor, getDocId, scheduleSave), 1500)
 const notes = setupNotes({ onChange: () => scheduleSave() })
-function scheduleSave() { setStatus('saving', 'Saving…'); _save() }
+function scheduleSave() { savePending = true; setStatus('saving', 'Saving…'); _save() }
+
+// Closing the tab (⌘W, the tab's ×, quitting) with changes the server doesn't have yet:
+// save them right then, and ask before the tab goes. Browsers only allow their own
+// "Leave site?" wording, so the page itself says what's happening behind it. The save
+// is a keepalive request, which finishes even if you then close; were it too big for
+// that (~64 KB), the browser's copy is saved and goes up the next time the editor opens.
+window.addEventListener('beforeunload', (e) => {
+  const behind = savePending || (window.__drafts && window.__drafts.serverBehind())
+  if (!behind || SANDBOX) return
+  const s = saveToBrowser()
+  toast('Saving before you close…')
+  fetch('/api/drafts', {
+    method: 'PUT',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ drafts: { [s.id]: s } }),
+  }).then((r) => { if (r.ok) toast('Saved. You can close the tab.') }).catch(() => {})
+  e.preventDefault()
+  e.returnValue = '' // older Chrome needs this to ask
+})
 
 // Load a draft's CONTENT only (title/subtitle/body/footnotes). Does not set doc.id —
 // the drafts module owns switching ids. emitUpdate:false so a switch never queues a save.

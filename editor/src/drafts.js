@@ -484,14 +484,20 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
         return reconcile(data.drafts || {}, data.deleted || {}, data.layout)
       } catch (e) { return false }
     },
+    // wantAt: the last time something asked to go up; okAt: the start of the latest push the
+    // server took. wantAt > okAt = the server is behind (main.js asks before closing the tab).
+    wantAt: 0,
+    okAt: 0,
     schedulePush() {
       if (SANDBOX) return
+      this.wantAt = Date.now()
       clearTimeout(this.pushTimer)
       this.pushTimer = setTimeout(() => this.push(), 600)
     },
     async push() {
       if (SANDBOX) return
       clearTimeout(this.pushTimer) // a direct push supersedes any scheduled one
+      const started = Date.now()
       // Every draft goes up in one push, plus the open one's latest copy when the
       // browser was too full to keep it (pushLive).
       const all = getDrafts()
@@ -503,6 +509,7 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
           body: JSON.stringify({ drafts: all, deleted: getDeleted(), layout: getLayout() }),
         })
         if (!r.ok) return false
+        this.okAt = Math.max(this.okAt, started)
         const data = await r.json()
         if (reconcile(data.drafts || {}, data.deleted || {}, data.layout)) renderDraftsList()
         return true
@@ -641,5 +648,5 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
     else if (live && live.id === getDocId()) live = null // the browser has it again
     SYNC.schedulePush()
   }
-  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), pushLive, restoreScrollPos, backup, markPublished, markOutbound }
+  return { renderDraftsList, openDraft, newDraft, deleteDraft, schedulePush: () => SYNC.schedulePush(), serverBehind: () => !SANDBOX && SYNC.wantAt > SYNC.okAt, pushLive, restoreScrollPos, backup, markPublished, markOutbound }
 }

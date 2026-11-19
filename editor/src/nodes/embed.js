@@ -28,18 +28,82 @@ const MAX_H = 4000
 // Runs inside the frame. A diagram drawn wider than its frame (a fixed-width chart) is laid
 // out at its own width and scaled down to fit, so it's always seen whole with no sideways
 // scrollbar; then the diagram's (scaled) height is posted to the page whenever it changes.
-const RESIZE = '<script>(function(){var d=document.documentElement,last=0,busy=0;' +
+const RESIZE = '<script>(function(){var d=document.documentElement,last=0,busy=0,R=window.__embedRaw||{raf:requestAnimationFrame.bind(window),setInterval:setInterval.bind(window)};' +
   'function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";' +
   'var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);' +
   'if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}' +
   'function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}' +
-  'try{new ResizeObserver(function(){requestAnimationFrame(fit)}).observe(document.body||d)}catch(e){setInterval(fit,500)}' +
+  'try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}' +
   'addEventListener("resize",fit);addEventListener("load",fit);fit();' +
   // the editor's first click on a diagram, passed through (see the node view's cover)
   'addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;' +
   'if(el.focus)try{el.focus({preventScroll:true})}catch(x){}' +
   '["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};' +
   'el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script>'
+// Runs inside the frame FIRST, before the diagram's own scripts (embedded via toString, so
+// self-contained). A diagram holds still until the reader has all of it on screen: the page
+// sends {embedPlay} then (embedPlayer / the editor's node view), or a click or key inside it
+// plays it at once. Holding = CSS and SVG animations paused, element.animate() paused, and
+// timers / animation frames queued; performance.now() stands still meanwhile, so an
+// animation timed from load starts from its beginning. Opened on its own (no parent page)
+// it just plays. Our own sizing scripts use the real timers (__embedRaw).
+function holdDiagram() {
+  var W = window, P = W.performance
+  var raw = {
+    setTimeout: W.setTimeout.bind(W), setInterval: W.setInterval.bind(W),
+    clearTimeout: W.clearTimeout.bind(W), clearInterval: W.clearInterval.bind(W),
+    raf: W.requestAnimationFrame.bind(W), caf: W.cancelAnimationFrame.bind(W),
+    now: P.now.bind(P),
+  }
+  W.__embedRaw = raw
+  if (W.parent === W) return
+  var playing = false, frozen = raw.now(), offset = 0, q = [], ids = {}, next = -1, anims = []
+  var css = document.createElement('style')
+  css.textContent = '*,*::before,*::after{animation-play-state:paused!important}'
+  document.documentElement.appendChild(css)
+  P.now = function () { return playing ? raw.now() - offset : frozen }
+  function fake(kind, cb, ms, args) { var id = next--; q.push({ id: id, kind: kind, cb: cb, ms: ms, args: args }); return id }
+  function drop(id) {
+    if (ids[id] != null) return ids[id]
+    for (var i = 0; i < q.length; i++) if (q[i].id === id) { q.splice(i, 1); return null }
+    return id
+  }
+  function wrapRaf(cb) { return function (t) { cb(t - offset) } }
+  W.requestAnimationFrame = function (cb) { return playing ? raw.raf(wrapRaf(cb)) : fake('raf', cb) }
+  W.setTimeout = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setTimeout.apply(null, [cb, ms].concat(a)) : fake('t', cb, ms, a) }
+  W.setInterval = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setInterval.apply(null, [cb, ms].concat(a)) : fake('i', cb, ms, a) }
+  W.cancelAnimationFrame = function (id) { id = drop(id); if (id != null) raw.caf(id) }
+  W.clearTimeout = function (id) { id = drop(id); if (id != null) raw.clearTimeout(id) }
+  W.clearInterval = function (id) { id = drop(id); if (id != null) raw.clearInterval(id) }
+  var animate = W.Element && Element.prototype.animate
+  if (animate) Element.prototype.animate = function () {
+    var a = animate.apply(this, arguments)
+    if (!playing) { try { a.pause(); anims.push(a) } catch (e) {} }
+    return a
+  }
+  function svgs(fn) { var s = document.getElementsByTagName('svg'); for (var i = 0; i < s.length; i++) try { s[i][fn]() } catch (e) {} }
+  document.addEventListener('DOMContentLoaded', function () { if (!playing) svgs('pauseAnimations') })
+  function play() {
+    if (playing) return
+    playing = true
+    offset = raw.now() - frozen
+    css.remove()
+    svgs('unpauseAnimations')
+    anims.forEach(function (a) { try { a.play() } catch (e) {} })
+    var list = q; q = []
+    list.forEach(function (o) {
+      var f = typeof o.cb === 'function' ? o.cb : function () {}
+      if (o.kind === 'raf') ids[o.id] = raw.raf(wrapRaf(f))
+      else if (o.kind === 't') ids[o.id] = raw.setTimeout.apply(null, [f, o.ms].concat(o.args))
+      else ids[o.id] = raw.setInterval.apply(null, [f, o.ms].concat(o.args))
+    })
+  }
+  addEventListener('message', function (e) { if (e.source === W.parent && e.data && (e.data.embedPlay || e.data.embedClick)) play() })
+  addEventListener('pointerdown', play, true)
+  addEventListener('keydown', play, true)
+}
+const HOLD = '<script>(' + holdDiagram.toString() + ')()</script>'
+
 // Runs inside the frame (embedded via toString, so self-contained). Diagrams sit straight on
 // the page: a page-sized light, neutral background — the page itself, a wrapping "card",
 // a full-size rect behind an SVG — is taken away with its border and shadow. Colour that
@@ -80,7 +144,7 @@ function bareBg() {
   }
   run()
   addEventListener('DOMContentLoaded', run)
-  addEventListener('load', function () { run(); setTimeout(run, 400) })
+  addEventListener('load', function () { run(); (window.__embedRaw || window).setTimeout(run, 400) })
 }
 const BARE = '<script>(' + bareBg.toString() + ')()</script>'
 
@@ -99,12 +163,12 @@ export function embedDoc(html) {
   const src = String(html || '').trim()
   if (/<html[\s>]|<!doctype/i.test(src)) {
     let doc = /<head[\s>]/i.test(src)
-      ? src.replace(/<head(\s[^>]*)?>/i, (m) => m + '<meta charset="utf-8">' + BASE_CSS)
-      : src.replace(/<html(\s[^>]*)?>/i, (m) => m + '<head><meta charset="utf-8">' + BASE_CSS + '</head>')
+      ? src.replace(/<head(\s[^>]*)?>/i, (m) => m + '<meta charset="utf-8">' + HOLD + BASE_CSS)
+      : src.replace(/<html(\s[^>]*)?>/i, (m) => m + '<head><meta charset="utf-8">' + HOLD + BASE_CSS + '</head>')
     return /<\/body>/i.test(doc) ? doc.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => BARE + RESIZE + '</body>') : doc + BARE + RESIZE
   }
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    BASE_CSS + '<style>body>svg{display:block;margin:0 auto;height:auto}</style></head><body>' + src + BARE + RESIZE + '</body></html>'
+    HOLD + BASE_CSS + '<style>body>svg{display:block;margin:0 auto;height:auto}</style></head><body>' + src + BARE + RESIZE + '</body></html>'
 }
 
 // Text that is plainly a diagram rather than prose to paste.
@@ -226,11 +290,32 @@ export const HtmlEmbed = Node.create({
         grip.addEventListener('pointercancel', up, { once: true })
       })
 
-      const load = () => { frame.srcdoc = embedDoc(cur.attrs.html) }
+      // it plays once all of it is on screen, as for readers (holdDiagram); each reload of
+      // the diagram holds again
+      let sized = false, played = false
+      const load = () => { sized = false; played = false; frame.srcdoc = embedDoc(cur.attrs.html) }
       load()
+      const scroller = $('scrollArea')
+      const check = () => {
+        if (played || !sized || !frame.contentWindow || !dom.isConnected) return
+        const r = frame.getBoundingClientRect()
+        const a = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+        const vh = a.bottom - a.top
+        const seen = Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)
+        if (r.height > 0 && (seen >= r.height - 2 || seen >= vh * 0.9)) {
+          played = true
+          frame.contentWindow.postMessage({ embedPlay: 1 }, '*')
+        }
+      }
+      let ticking = false
+      const onScroll = () => { if (ticking) return; ticking = true; requestAnimationFrame(() => { ticking = false; check() }) }
+      if (scroller) scroller.addEventListener('scroll', onScroll, { passive: true })
+      window.addEventListener('resize', onScroll)
       const onMsg = (e) => {
         if (e.source !== frame.contentWindow || !e.data || typeof e.data.embedH !== 'number') return
         frame.style.height = Math.min(Math.max(e.data.embedH, 40), MAX_H) + 'px'
+        sized = true
+        check()
       }
       window.addEventListener('message', onMsg)
 
@@ -280,7 +365,7 @@ export const HtmlEmbed = Node.create({
         // ProseMirror see a drag, so the block can be moved)
         stopEvent(e) { return box.contains(e.target) && !(e.target === shield && /^drag|^drop/.test(e.type)) },
         ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
-        destroy() { window.removeEventListener('message', onMsg); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
+        destroy() { window.removeEventListener('message', onMsg); window.removeEventListener('resize', onScroll); if (scroller) scroller.removeEventListener('scroll', onScroll); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
       }
     }
   },
@@ -441,14 +526,31 @@ export const EMBED_CSS = [
 ].join('\n')
 
 // Runs INSIDE the published article (embedded via embedResize.toString()): sizes each frame
-// to the height its diagram reports.
+// to the height its diagram reports, and starts a diagram once all of it is on screen (or,
+// for one taller than the screen, once it fills the screen); see holdDiagram.
 export function embedResize() {
+  function each(fn) { var f = document.querySelectorAll('.embed iframe'); for (var i = 0; i < f.length; i++) fn(f[i]) }
+  function check(f) {
+    if (f.getAttribute('data-played') || !f.getAttribute('data-sized') || !f.contentWindow) return
+    var r = f.getBoundingClientRect(), vh = window.innerHeight || document.documentElement.clientHeight
+    var seen = Math.min(r.bottom, vh) - Math.max(r.top, 0)
+    if (r.height > 0 && (seen >= r.height - 2 || seen >= vh * 0.9)) {
+      f.setAttribute('data-played', '1')
+      f.contentWindow.postMessage({ embedPlay: 1 }, '*')
+    }
+  }
   addEventListener('message', function (e) {
     var d = e.data
     if (!d || typeof d.embedH !== 'number') return
-    var frames = document.querySelectorAll('.embed iframe')
-    for (var i = 0; i < frames.length; i++) {
-      if (frames[i].contentWindow === e.source) frames[i].style.height = Math.min(Math.max(d.embedH, 40), 4000) + 'px'
-    }
+    each(function (f) {
+      if (f.contentWindow !== e.source) return
+      f.style.height = Math.min(Math.max(d.embedH, 40), 4000) + 'px'
+      f.setAttribute('data-sized', '1')
+      check(f)
+    })
   })
+  var busy = false
+  function onScroll() { if (busy) return; busy = true; requestAnimationFrame(function () { busy = false; each(check) }) }
+  addEventListener('scroll', onScroll, { passive: true })
+  addEventListener('resize', onScroll)
 }

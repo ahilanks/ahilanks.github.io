@@ -1254,6 +1254,10 @@ body.canvas-active .tb-canvas-only { display: inline-flex; }
 .dgc-foot { display: flex; gap: 0.5rem; align-items: flex-end; padding: 0.6rem 0.9rem 0.8rem; border-top: 1px solid var(--line); }
 .dgc-foot textarea { flex: 1; resize: none; font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.55rem; background: var(--bg); color: var(--text); outline: none; }
 .dgc-foot textarea:focus { border-color: var(--link); }
+/* while Claude works (Stop / Send now showing): the buttons drop under the message box */
+.dgc-foot:has(#dgChatStop:not([hidden])) { flex-wrap: wrap; }
+.dgc-foot:has(#dgChatStop:not([hidden])) textarea { flex-basis: calc(100% - 40px); }
+.dgc-foot #dgChatStop { margin-left: auto; }
 body.dg-chat-open .notes { display: none; }
 .dgc-think { margin: 0 0 0.3rem; }
 .dgc-think summary { font-size: 0.72rem; color: var(--muted); cursor: pointer; list-style: none; }

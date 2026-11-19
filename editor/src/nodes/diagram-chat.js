@@ -11,6 +11,8 @@
  * on the last answer. Nothing locks: the diagram stays usable, with a small tag on it.
  *
  * Stop (beside Send, while Claude works) ends the answer it's writing and drops queued ones.
+ * Send now (or ⌘Enter) does that too, then sends the new message together with any it
+ * hadn't answered yet; plain Send queues behind the running answer.
  * Files can be attached (📎, paste, drop): pictures go with that message; other files (PDF,
  * HTML, notes, data) stay with the diagram on the server as context for every later message.
  *
@@ -86,6 +88,7 @@ function setChat(editor, id, chat) {
 const jobs = new Map()     // job id -> { id, did, status, think, text, t0 }
 const following = new Set()
 const waiting = new Set()  // finished, but their diagram's draft isn't open here
+const interrupted = new Set() // stopped by Send now: their question rides along with the new one
 let ed = null
 
 const live = (j) => j.status === 'queued' || j.status === 'running'
@@ -150,7 +153,8 @@ function applyJob(sum) {
   const hit = findById(ed, sum.did)
   if (!hit) return false // its draft isn't open: later
   const chat = parseChat(hit.node.attrs.chat)
-  if (!chat.some((m) => m.j === sum.id && m.r !== 'u')) {
+  const folded = sum.result && sum.result.stopped && interrupted.has(sum.id) // answered by the Send now that stopped it
+  if (!folded && !chat.some((m) => m.j === sum.id && m.r !== 'u')) {
     // a reload before the draft saved the question: put it back
     if (!chat.some((m) => m.j === sum.id && m.r === 'u')) chat.push({ r: 'u', t: sum.prompt, j: sum.id, at: iso(sum.created * 1000) })
     const res = sum.result || {}
@@ -198,12 +202,12 @@ async function syncJobs() {
 }
 
 /* ------------------------------------------------------------ sending */
-async function submit(editor, did, text, images, thumbs, { html, files } = {}) {
+async function submit(editor, did, text, images, thumbs, { html, files, shown } = {}) {
   const hit = findById(editor, did)
   if (!hit) return false
   if (files && files.length && !(await serverReady())) { toast(OLD_SERVER); return false }
   const chat = parseChat(hit.node.attrs.chat)
-  const history = chat.filter((m) => m.r !== 'e').slice(-14).map((m) => ({ role: m.r === 'u' ? 'user' : 'assistant', text: m.t }))
+  const history = chat.filter((m) => m.r !== 'e' && !interrupted.has(m.j)).slice(-14).map((m) => ({ role: m.r === 'u' ? 'user' : 'assistant', text: m.t }))
   let out
   try {
     out = await api('POST', '/api/diagram/jobs', {
@@ -214,7 +218,7 @@ async function submit(editor, did, text, images, thumbs, { html, files } = {}) {
   const now = findById(editor, did)
   if (now) {
     const c2 = parseChat(now.node.attrs.chat)
-    c2.push({ r: 'u', t: text, j: out.id, at: iso(), img: thumbs && thumbs.length ? thumbs : undefined, fl: files && files.length ? files.map((f) => f.name) : undefined })
+    c2.push({ r: 'u', t: shown != null ? shown : text, j: out.id, at: iso(), img: thumbs && thumbs.length ? thumbs : undefined, fl: files && files.length ? files.map((f) => f.name) : undefined })
     setChat(editor, did, c2)
   }
   jobs.set(out.id, { id: out.id, did, status: 'queued', think: '', text: '', t0: 0 })
@@ -349,8 +353,10 @@ function render() {
   const list = $('dgChatList')
   const hit = panelId && findById(ed, panelId)
   const mine = [...jobs.values()].filter((j) => j.did === panelId)
-  const stopBtn = $('dgChatStop')
-  if (stopBtn) stopBtn.hidden = !mine.some(live)
+  const busy = mine.some(live)
+  const stopBtn = $('dgChatStop'), nowBtn = $('dgChatNow')
+  if (stopBtn) stopBtn.hidden = !busy
+  if (nowBtn) nowBtn.hidden = !busy
   const sig = hit ? panelId + '|' + hit.node.attrs.chat + '|' + hit.node.attrs.html.length + '|' + mine.map((j) => j.id + j.status).join(',') : 'none'
   if (sig === lastSig) return
   lastSig = sig
@@ -443,6 +449,36 @@ export function setupDiagramChat(editor) {
       input.value = t; attached = keep; paintAttached() // not sent: put it back
     })
   }
+  // Send now (while Claude works): stop what it's doing and start again with this message
+  // plus any it hadn't answered yet, instead of waiting in the queue. ⌘Enter does the same.
+  const sendNow = async () => {
+    if (!panelId) return
+    const t = input.value.trim()
+    if (!t && !attached.length) return
+    if (!isPending(panelId)) { send(); return }
+    const did = panelId
+    if (!(await serverReady())) { toast(OLD_SERVER); return }
+    const hit = findById(editor, did)
+    const live_ = new Set([...jobs.values()].filter((j) => j.did === did && live(j)).map((j) => j.id))
+    const earlier = hit ? parseChat(hit.node.attrs.chat).filter((m) => m.r === 'u' && live_.has(m.j)).map((m) => m.t).filter((x) => x && !/^\(see the attached/.test(x)) : []
+    live_.forEach((id) => interrupted.add(id))
+    const imgs = attached.filter((a) => a.img).map((a) => a.img), thumbs = attached.filter((a) => a.img).map((a) => a.thumb)
+    const files = attached.filter((a) => a.file).map((a) => a.file)
+    const keep = attached
+    input.value = ''
+    attached = []
+    paintAttached()
+    try { await api('POST', '/api/diagram/stop', { did }) } catch (e) { toast(e.message); input.value = t; attached = keep; paintAttached(); return }
+    const prompt = earlier.length
+      ? 'Earlier message' + (earlier.length > 1 ? 's' : '') + ' I sent while you were working (you hadn\'t answered yet):\n' + earlier.map((x) => '- ' + x).join('\n') + '\n\nNew message: ' + (t || '(see the attachments)')
+      : t
+    // a new diagram that was still being drawn: start it from scratch, not from the placeholder
+    const fresh = hit && hit.node.attrs.html === PLACEHOLDER
+    submit(editor, did, prompt, imgs, thumbs, { files, shown: t, html: fresh ? '' : undefined })
+  }
+  const nowBtn = $('dgChatNow')
+  if (nowBtn) nowBtn.addEventListener('click', sendNow)
+
   // Stop: Claude stops the answer it's writing for this diagram and drops the queued ones;
   // the diagram stays as it was
   const stopBtn = $('dgChatStop')
@@ -461,7 +497,8 @@ export function setupDiagramChat(editor) {
   $('dgChatSend').addEventListener('click', send)
   $('dgChatClose').addEventListener('click', closeChat)
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendNow() }
+    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
     else if (e.key === 'Escape') { e.preventDefault(); closeChat(); editor.commands.focus() }
   })
   // paste or drop pictures (screenshots, sketches) to show Claude what you mean

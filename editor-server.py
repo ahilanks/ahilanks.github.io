@@ -1546,6 +1546,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_error(400, "bad json")
             code, out = diagram_ai.submit(body)
             return self._send_json(out, code)
+        if path == "/api/diagram/stop":  # {did}: stop Claude's work on that diagram
+            code, out = diagram_ai.stop(self._read_json())
+            return self._send_json(out, code)
         m = re.match(r"^/api/diagram/jobs/([0-9a-f]{12})/applied$", path)
         if m:
             code, out = diagram_ai.applied(m.group(1))

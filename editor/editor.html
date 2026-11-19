@@ -234,8 +234,10 @@
 
     <div class="popover hidden" id="diagramPop">
       <div class="dg-describe">
-        <textarea id="diagramPrompt" rows="3" placeholder="Describe a diagram" spellcheck="true"></textarea>
-        <div class="row"><span class="dg-status"></span><button class="pop-btn" id="diagramGenerate">Draw it</button></div>
+        <textarea id="diagramPrompt" rows="3" placeholder="Describe a diagram (attach a paper, notes, data or HTML to draw from)" spellcheck="true"></textarea>
+        <div class="dgc-att dg-att" id="diagramAtt" hidden></div>
+        <input type="file" id="diagramCtxFile" multiple hidden />
+        <div class="row"><button class="dgc-clip" id="diagramAttach" type="button" title="Attach a file or picture for Claude to use (PDF, HTML, notes, data…)" aria-label="Attach a file"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg></button><span class="dg-status"></span><button class="pop-btn" id="diagramGenerate">Draw it</button></div>
       </div>
       <details class="dg-paste" id="diagramPaste">
         <summary>Paste HTML or open a file</summary>
@@ -252,7 +254,10 @@
       <div class="dgc-list" id="dgChatList"></div>
       <div class="dgc-att" id="dgChatAtt" hidden></div>
       <div class="dgc-foot">
+        <button class="dgc-clip" id="dgChatAttach" type="button" title="Attach a file or picture (PDF, HTML, notes, data…)" aria-label="Attach a file"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg></button>
+        <input type="file" id="dgChatFile" multiple hidden />
         <textarea id="dgChatInput" rows="2" placeholder="Message Claude" spellcheck="true"></textarea>
+        <button class="pop-btn ghost" id="dgChatStop" type="button" hidden>Stop</button>
         <button class="pop-btn" id="dgChatSend" type="button">Send</button>
       </div>
     </aside>

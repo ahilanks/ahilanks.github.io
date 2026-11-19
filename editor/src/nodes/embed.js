@@ -19,7 +19,7 @@
 
 import { Node, NodeSelection } from '../../vendor/lib.bundle.js'
 import { $, toast } from '../dom.js'
-import { openChat, ensureId, isPending, pendingSince, startNewDiagram } from './diagram-chat.js'
+import { openChat, ensureId, isPending, pendingSince, startNewDiagram, addAttachments, chipsHtml, pastedAsFile, PASTE_AS_FILE } from './diagram-chat.js'
 
 const clampW = (v) => Math.max(20, Math.min(100, Math.round(parseFloat(v) || 100)))
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
@@ -398,16 +398,31 @@ function openDiagramPop(editor, { html = '', anchor, pos = null } = {}) {
 /* ------------------------------------------- Claude: describe a new diagram */
 // It goes in at once as a placeholder after the cursor's paragraph and Claude draws it in
 // the background (diagram-chat.js); the chat panel opens on it, showing Claude's thinking.
+// Attached files (a paper, notes, data, an HTML page, pictures) go with it as context.
+let newAtt = []
+function paintNewAtt() {
+  const box = $('diagramAtt')
+  if (!box) return
+  box.hidden = !newAtt.length
+  box.innerHTML = chipsHtml(newAtt)
+}
 async function generate(editor) {
   const ta = $('diagramPrompt')
   const prompt = ta.value.trim()
-  if (!prompt) return
+  if (!prompt && !newAtt.length) return
   const pop = $('diagramPop')
   pop.classList.add('hidden')
   ta.value = ''
+  const att = newAtt
+  newAtt = []
+  paintNewAtt()
   const at = editor.state.selection.to
   editor.view.focus()
-  await startNewDiagram(editor, at, prompt)
+  await startNewDiagram(editor, at, prompt, {
+    images: att.filter((a) => a.img).map((a) => a.img),
+    thumbs: att.filter((a) => a.img).map((a) => a.thumb),
+    files: att.filter((a) => a.file).map((a) => a.file),
+  })
 }
 
 function commit(html) {
@@ -445,6 +460,31 @@ export function setupEmbeds(editor) {
     document.addEventListener('mousedown', (e) => { if (isOpen() && !pop.contains(e.target) && e.target !== btn) close() })
     const ta = $('diagramPrompt')
     $('diagramGenerate').addEventListener('click', () => generate(editor))
+    const ctxIn = $('diagramCtxFile')
+    const addFiles = async (fs) => { await addAttachments(newAtt, fs); paintNewAtt(); ta.focus() }
+    $('diagramAttach').addEventListener('click', () => ctxIn.click())
+    ctxIn.addEventListener('change', () => { const fs = Array.from(ctxIn.files || []); ctxIn.value = ''; addFiles(fs) })
+    $('diagramAtt').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-i]')
+      if (!b) return
+      newAtt.splice(+b.dataset.i, 1)
+      paintNewAtt()
+    })
+    // paste a file, or a long text (an HTML page, notes): it becomes an attachment
+    ta.addEventListener('paste', (e) => {
+      const fs = Array.from((e.clipboardData && e.clipboardData.files) || [])
+      const t = e.clipboardData && e.clipboardData.getData('text/plain')
+      if (fs.length) { e.preventDefault(); addFiles(fs) }
+      else if (t && (t.length > PASTE_AS_FILE || looksLikeHtmlDoc(t))) { e.preventDefault(); newAtt.push(pastedAsFile(t)); paintNewAtt() }
+    })
+    const desc = pop.querySelector('.dg-describe')
+    desc.addEventListener('dragover', (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault() })
+    desc.addEventListener('drop', (e) => {
+      const fs = Array.from((e.dataTransfer && e.dataTransfer.files) || [])
+      if (!fs.length) return
+      e.preventDefault(); e.stopPropagation()
+      addFiles(fs)
+    })
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(editor) }
       else if (e.key === 'Escape') { e.preventDefault(); close(); editor.commands.focus() }

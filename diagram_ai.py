@@ -8,14 +8,18 @@ Requests are server-side JOBS, so an answer keeps going (and is kept) when the b
 reloads: the editor only watches. Jobs for the same diagram run one after another, each
 starting from the previous answer's diagram, so the writer can keep sending messages.
 
-  POST /api/diagram/jobs            {did, prompt, html, context, history, images} -> {id}
+  POST /api/diagram/jobs            {did, prompt, html, context, history, images, files} -> {id}
+  POST /api/diagram/stop            {did} -> stop what Claude is doing on that diagram (the
+                                    running answer and any queued after it)
   GET  /api/diagram/jobs            -> every job not yet applied to its draft
   GET  /api/diagram/jobs/<id>/events?from=N   NDJSON: {"k":"think"|"text","t":…} … then
                                               {"k":"end","job":{…}} when it finishes
   POST /api/diagram/jobs/<id>/applied         the editor put the answer into the draft
 
 Finished jobs are written to .diagram-jobs/ (gitignored) until applied, so an answer that
-lands while no editor is open is still there later. The key is ANTHROPIC_API_KEY, from the
+lands while no editor is open is still there later. Files the writer attaches (a paper, notes,
+data, an HTML page: {name, kind: "text"|"pdf", data}) stay with their diagram in
+.diagram-jobs/ctx/<did>.json, so every later message about it still has them. The key is ANTHROPIC_API_KEY, from the
 environment or the project's .env (gitignored).
 """
 import base64
@@ -32,6 +36,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 JOB_DIR = os.path.join(ROOT, ".diagram-jobs")
 IMG_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 MAX_IMAGES = 6
+MAX_TEXT = 200000          # characters kept from one text file
+MAX_CTX_TEXT = 400000      # all of one diagram's text files together
+MAX_PDF = 12 * 1024 * 1024 # base64 characters of one PDF
 
 HOUSE_STYLE = """You make diagrams for a personal essay site about AI. Each diagram is one self-contained HTML document shown inside a sandboxed iframe in the article, between paragraphs. Readers see it on laptops (frame about 820px wide) and phones (about 340px wide).
 
@@ -49,6 +56,7 @@ Rules for every diagram:
 - Accurate: labels and shapes must match what the text says. Don't invent data; if the figure is illustrative, keep it qualitative (no fake numbers on axes).
 - When the writer says a change didn't work or they still can't see something, read the current code closely to find what really controls it (inline styles, opacity, a script or animation that sets colours at runtime, a later CSS rule) and fix that, rather than repeating the same edit.
 - The writer may paste screenshots or sketches; use them to see what they mean.
+- The writer may attach files (a paper, notes, data, an existing HTML page). Treat them as the source for what the diagram shows: take its facts, numbers and terms from them. An attached HTML page can be a starting point to restyle in the house style.
 
 How to answer:
 - A new diagram: the complete HTML document in one ```html code block, then a line "CAPTION: …" (one plain sentence for under the figure, no "Figure 1"), then a line "NOTE: …" (one sentence on what you drew).
@@ -89,7 +97,7 @@ def _parse(text):
     return doc, (cap.group(1).strip() if cap else ""), note_text
 
 
-def run_claude(prompt, html, context, history, images, emit):
+def run_claude(prompt, html, context, history, images, emit, files=None, stopped=lambda: False):
     """Stream one request. emit({"k": "think"|"text", "t": delta}). Returns a result dict."""
     try:
         import anthropic
@@ -112,6 +120,15 @@ def run_claude(prompt, html, context, history, images, emit):
     else:
         parts.append("Diagram: " + prompt)
     content = []
+    names = []
+    for f in (files or []):
+        if f.get("kind") == "pdf":
+            content.append({"type": "document", "title": f["name"], "source": {"type": "base64", "media_type": "application/pdf", "data": f["data"]}})
+        else:
+            content.append({"type": "document", "title": f["name"], "source": {"type": "text", "media_type": "text/plain", "data": f["data"]}})
+        names.append(f["name"])
+    if names:
+        parts.insert(0, "Files the writer attached for this diagram (above): " + ", ".join(names) + ". Use them as the source for what it shows.")
     for im in (images or [])[:MAX_IMAGES]:
         if isinstance(im, dict) and im.get("media_type") in IMG_TYPES and im.get("data"):
             content.append({"type": "image", "source": {"type": "base64", "media_type": im["media_type"], "data": im["data"]}})
@@ -132,6 +149,8 @@ def run_claude(prompt, html, context, history, images, emit):
             messages=[{"role": "user", "content": content}],
         ) as stream:
             for event in stream:
+                if stopped():
+                    return {"ok": False, "stopped": True, "error": "Stopped."}  # leaving the block closes the request
                 if event.type == "content_block_delta":
                     d = event.delta
                     if d.type == "thinking_delta" and d.thinking:
@@ -176,6 +195,8 @@ class Job:
         self.context = str(body.get("context") or "")
         self.history = body.get("history") if isinstance(body.get("history"), list) else []
         self.images = body.get("images") if isinstance(body.get("images"), list) else []
+        self.files = _clean_files(body.get("files"))
+        self.stop = False
         self.status = "queued"
         self.created = time.time()
         self.events = []
@@ -202,6 +223,77 @@ class Job:
         os.replace(tmp, os.path.join(JOB_DIR, self.id + ".json"))
 
 
+def _clean_files(raw):
+    out = []
+    for f in (raw if isinstance(raw, list) else [])[:12]:
+        if not isinstance(f, dict):
+            continue
+        name = re.sub(r"[^\w .()\-]", "_", str(f.get("name") or "file"))[:120] or "file"
+        data = f.get("data")
+        if not isinstance(data, str) or not data:
+            continue
+        if f.get("kind") == "pdf":
+            if len(data) <= MAX_PDF and re.match(r"^[A-Za-z0-9+/=\s]+$", data[:200]):
+                out.append({"name": name, "kind": "pdf", "data": data})
+        else:
+            out.append({"name": name, "kind": "text", "data": data[:MAX_TEXT]})
+    return out
+
+
+def _ctx_path(did):
+    return os.path.join(JOB_DIR, "ctx", re.sub(r"[^\w-]", "", did)[:40] + ".json")
+
+
+def ctx_files(did):
+    """The files attached to this diagram so far."""
+    try:
+        with open(_ctx_path(did), "r", encoding="utf-8") as fh:
+            d = json.load(fh)
+        return d if isinstance(d, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _add_ctx(did, files):
+    """Keep new files with the diagram (a file with the same name is replaced; the oldest
+    text goes first when the text gets too long)."""
+    if not files or not did:
+        return
+    have = [f for f in ctx_files(did) if f["name"] not in {n["name"] for n in files}] + files
+    while sum(len(f["data"]) for f in have if f["kind"] == "text") > MAX_CTX_TEXT and len(have) > 1:
+        have.pop(0)
+    os.makedirs(os.path.dirname(_ctx_path(did)), exist_ok=True)
+    tmp = _ctx_path(did) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(have, fh)
+    os.replace(tmp, _ctx_path(did))
+
+
+def stop(body):
+    """Stop the running answer for this diagram and drop the queued ones."""
+    did = str((body or {}).get("did") or "")
+    if not did:
+        return 400, {"ok": False, "error": "missing diagram id"}
+    n = 0
+    with LOCK:
+        jobs = [j for j in JOBS.values() if j.did == did and j.status in ("queued", "running")]
+        for j in jobs:
+            j.stop = True
+            n += 1
+            if j.status == "queued":
+                j.status = "error"
+                j.result = {"ok": False, "stopped": True, "error": "Stopped before it started."}
+    for j in jobs:
+        if j.status == "error":
+            try:
+                j.save()
+            except OSError:
+                pass
+        with j.cond:
+            j.cond.notify_all()
+    return 200, {"ok": True, "stopped": n}
+
+
 def _queue_for(did):
     return sorted([j for j in JOBS.values() if j.did == did and j.status == "queued"], key=lambda j: j.created)
 
@@ -221,7 +313,8 @@ def _worker(did):
         hist = (chain_hist if chain_hist is not None else list(job.history))
         job.push({"k": "start", "at": time.time()})
         try:
-            res = run_claude(job.prompt, html, job.context, hist, job.images, job.push)
+            res = run_claude(job.prompt, html, job.context, hist, job.images, job.push,
+                             files=ctx_files(did), stopped=lambda: job.stop)
         except Exception as e:  # never leave a job hanging
             res = {"ok": False, "error": "Something broke: " + str(e)[:200]}
         job.images = []  # big; not needed any more
@@ -242,12 +335,18 @@ def _worker(did):
 
 def submit(body):
     job = Job(body)
-    if not job.prompt and not job.images:
+    if not job.prompt and not job.images and not job.files:
         return 400, {"ok": False, "error": "Say what you'd like first."}
     if not job.prompt:
-        job.prompt = "(see the attached image)"
+        job.prompt = "(see the attached image)" if job.images else "(see the attached files)"
     if not job.did:
         return 400, {"ok": False, "error": "missing diagram id"}
+    if job.files:
+        try:
+            _add_ctx(job.did, job.files)
+        except OSError:
+            return 500, {"ok": False, "error": "Couldn't keep the attached files."}
+        job.files = []
     with LOCK:
         JOBS[job.id] = job
         start = job.did not in WORKERS

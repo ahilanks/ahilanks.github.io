@@ -10,6 +10,10 @@
  * next time it is. Messages sent while Claude is busy queue and run in order, each building
  * on the last answer. Nothing locks: the diagram stays usable, with a small tag on it.
  *
+ * Stop (beside Send, while Claude works) ends the answer it's writing and drops queued ones.
+ * Files can be attached (📎, paste, drop): pictures go with that message; other files (PDF,
+ * HTML, notes, data) stay with the diagram on the server as context for every later message.
+ *
  * A diagram's change is one ⌘Z-able step; chat updates stay out of the undo history.
  */
 import { $, toast } from '../dom.js'
@@ -159,10 +163,10 @@ function applyJob(sum) {
       }
       chat.push({ r: 'a', t: res.note || 'Done.', j: sum.id, at: iso(), h: res.html || undefined, th })
     } else {
-      chat.push({ r: 'e', t: res.error || 'Something went wrong.', j: sum.id, at: iso(), th })
+      chat.push({ r: 'e', t: res.error || 'Something went wrong.', j: sum.id, at: iso(), th, st: res.stopped ? 1 : undefined })
     }
     setChat(ed, sum.did, chat)
-    if (!panelOpen() || panelId !== sum.did) toast(res.ok ? (res.html ? 'Claude changed a diagram · ⌘Z to undo' : 'Claude replied about a diagram') : res.error || 'Claude ran into a problem')
+    if (!panelOpen() || panelId !== sum.did) { if (!res.stopped) toast(res.ok ? (res.html ? 'Claude changed a diagram · ⌘Z to undo' : 'Claude replied about a diagram') : res.error || 'Claude ran into a problem') }
   }
   jobs.delete(sum.id)
   waiting.delete(sum.id)
@@ -186,7 +190,7 @@ async function syncJobs() {
 }
 
 /* ------------------------------------------------------------ sending */
-async function submit(editor, did, text, images, thumbs, { html } = {}) {
+async function submit(editor, did, text, images, thumbs, { html, files } = {}) {
   const hit = findById(editor, did)
   if (!hit) return false
   const chat = parseChat(hit.node.attrs.chat)
@@ -195,13 +199,13 @@ async function submit(editor, did, text, images, thumbs, { html } = {}) {
   try {
     out = await api('POST', '/api/diagram/jobs', {
       did, prompt: text, html: html != null ? html : hit.node.attrs.html,
-      context: contextAround(editor, hit.pos), history, images,
+      context: contextAround(editor, hit.pos), history, images, files: files && files.length ? files : undefined,
     })
   } catch (e) { toast(e.message); return false }
   const now = findById(editor, did)
   if (now) {
     const c2 = parseChat(now.node.attrs.chat)
-    c2.push({ r: 'u', t: text, j: out.id, at: iso(), img: thumbs && thumbs.length ? thumbs : undefined })
+    c2.push({ r: 'u', t: text, j: out.id, at: iso(), img: thumbs && thumbs.length ? thumbs : undefined, fl: files && files.length ? files.map((f) => f.name) : undefined })
     setChat(editor, did, c2)
   }
   jobs.set(out.id, { id: out.id, did, status: 'queued', think: '', text: '', t0: 0 })
@@ -214,12 +218,12 @@ async function submit(editor, did, text, images, thumbs, { html } = {}) {
 // It goes in at once as a placeholder (so it survives a reload) and Claude draws it in the
 // background; the chat panel opens on it to show the thinking as it happens.
 const PLACEHOLDER = '<svg viewBox="0 0 600 120" width="100%"><text x="300" y="66" text-anchor="middle" font-family="var(--font)" fill="var(--muted)" font-size="16" font-style="italic">Claude is drawing this diagram…</text></svg>'
-export async function startNewDiagram(editor, at, prompt) {
+export async function startNewDiagram(editor, at, prompt, { images = [], thumbs = [], files = [] } = {}) {
   const $p = editor.state.doc.resolve(Math.min(at, editor.state.doc.content.size))
   const pos = $p.depth ? $p.after(1) : at // after the paragraph the cursor was in
   const did = newId()
   editor.chain().insertContentAt(pos, { type: 'htmlEmbed', attrs: { html: PLACEHOLDER, did, chat: '[]' } }).run()
-  const ok = await submit(editor, did, prompt, [], [], { html: '' })
+  const ok = await submit(editor, did, prompt, images, thumbs, { html: '', files })
   if (ok) openChat(editor, did, { focus: false })
 }
 
@@ -236,23 +240,50 @@ async function shrink(file, max, type, q) {
   g.drawImage(bmp, 0, 0, c.width, c.height)
   return c.toDataURL(type, q)
 }
-let attached = [] // { api: {media_type, data}, thumb }
-async function attach(files) {
-  for (const f of files) {
-    if (!/^image\//.test(f.type) || attached.length >= 6) continue
-    try {
-      const big = await shrink(f, API_IMG, 'image/jpeg', 0.9)
-      const thumb = await shrink(f, THUMB, 'image/jpeg', 0.8)
-      attached.push({ api: { media_type: 'image/jpeg', data: big.split(',')[1] }, thumb })
-    } catch (e) { toast('Couldn\'t read that picture') }
+// A picture → { img, thumb } (sent with that message). Any other file → { file } — a PDF, or
+// anything that reads as text (HTML, Markdown, CSV, code, notes) — which the server keeps
+// with the diagram, so later messages about it still have it (diagram_ai.py).
+const TEXT_MAX = 400000, FILE_MAX = 9 * 1024 * 1024
+export async function readAttachment(f) {
+  if (/^image\//.test(f.type)) {
+    const big = await shrink(f, API_IMG, 'image/jpeg', 0.9)
+    const thumb = await shrink(f, THUMB, 'image/jpeg', 0.8)
+    return { name: f.name, img: { media_type: 'image/jpeg', data: big.split(',')[1] }, thumb }
   }
+  if (f.size > FILE_MAX) throw new Error(f.name + ' is too big (over 9 MB)')
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+    const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
+    return { name: f.name, file: { name: f.name, kind: 'pdf', data: url.split(',')[1] } }
+  }
+  const text = await f.text()
+  if (/\u0000/.test(text.slice(0, 8000))) throw new Error('Can\'t read ' + f.name + ': attach a PDF, a picture, or a text file (HTML, Markdown, CSV…)')
+  return { name: f.name, file: { name: f.name, kind: 'text', data: text.slice(0, TEXT_MAX) } }
+}
+// Long text pasted into a message box (an HTML page, notes) goes in as a file instead
+export const pastedAsFile = (t) => ({ name: /^\s*(<!doctype html|<html[\s>]|<svg[\s>])/i.test(t) ? 'pasted.html' : 'pasted.txt', file: { name: /^\s*(<!doctype html|<html[\s>]|<svg[\s>])/i.test(t) ? 'pasted.html' : 'pasted.txt', kind: 'text', data: t.slice(0, TEXT_MAX) } })
+export const PASTE_AS_FILE = 1500 // characters
+// The chips under a message box: a picture's thumbnail, a file's name.
+export function chipsHtml(list) {
+  return list.map((a, i) => '<span class="dgc-att-i' + (a.file ? ' dgc-att-file' : '') + '">' +
+    (a.file ? '<span class="dgc-fname">' + esc(a.name) + '</span>' : '<img src="' + a.thumb + '" alt="">') +
+    '<button type="button" data-i="' + i + '" aria-label="Remove">×</button></span>').join('')
+}
+export async function addAttachments(list, files) {
+  for (const f of files) {
+    if (list.length >= 8) { toast('That\'s enough attachments for one message'); break }
+    try { list.push(await readAttachment(f)) } catch (e) { toast(e.message || 'Couldn\'t read ' + f.name) }
+  }
+}
+let attached = [] // readAttachment results
+async function attach(files) {
+  await addAttachments(attached, files)
   paintAttached()
 }
 function paintAttached() {
   const box = $('dgChatAtt')
   if (!box) return
   box.hidden = !attached.length
-  box.innerHTML = attached.map((a, i) => '<span class="dgc-att-i"><img src="' + a.thumb + '" alt=""><button type="button" data-i="' + i + '" aria-label="Remove picture">×</button></span>').join('')
+  box.innerHTML = chipsHtml(attached)
 }
 
 /* ------------------------------------------------------------ the panel */
@@ -308,6 +339,8 @@ function render() {
   const list = $('dgChatList')
   const hit = panelId && findById(ed, panelId)
   const mine = [...jobs.values()].filter((j) => j.did === panelId)
+  const stopBtn = $('dgChatStop')
+  if (stopBtn) stopBtn.hidden = !mine.some(live)
   const sig = hit ? panelId + '|' + hit.node.attrs.chat + '|' + hit.node.attrs.html.length + '|' + mine.map((j) => j.id + j.status).join(',') : 'none'
   if (sig === lastSig) return
   lastSig = sig
@@ -321,12 +354,13 @@ function render() {
   const byId = new Map(mine.map((j) => [j.id, j]))
   let h = ''
   chat.forEach((m, i) => {
-    const cls = m.r === 'u' ? 'dgc-you' : m.r === 'e' ? 'dgc-err' : 'dgc-claude'
+    const cls = m.r === 'u' ? 'dgc-you' : m.r === 'e' ? (m.st ? 'dgc-stopped' : 'dgc-err') : 'dgc-claude'
     const job = m.r === 'u' && m.j ? byId.get(m.j) : null
     h += '<div class="dgc-msg ' + cls + '">'
     if (m.th) h += '<details class="dgc-think"><summary>Thinking</summary><div class="dgc-think-t">' + esc(m.th) + '</div></details>'
     if (m.img) h += '<div class="dgc-imgs">' + m.img.map((s) => '<img class="dgc-img" src="' + esc(s) + '" alt="">').join('') + '</div>'
-    if (m.t && m.t !== '(see the attached image)') h += '<div class="dgc-text">' + esc(m.t) + '</div>'
+    if (m.fl) h += '<div class="dgc-files">' + m.fl.map((n) => '<span class="dgc-fname">' + esc(n) + '</span>').join('') + '</div>'
+    if (m.t && m.t !== '(see the attached image)' && m.t !== '(see the attached files)') h += '<div class="dgc-text">' + esc(m.t) + '</div>'
     h += '<div class="dgc-meta">' + esc(when(m.at)) +
       (job && job.status === 'queued' ? ' · <span class="dgc-q">queued</span>' : '') +
       (m.h ? (m.h === current ? ' · <span class="dgc-cur">showing</span>' : ' · <button type="button" class="dgc-restore" data-i="' + i + '">Restore this version</button>') : '') +
@@ -388,12 +422,24 @@ export function setupDiagramChat(editor) {
     if (!panelId) return
     const t = input.value.trim()
     if (!t && !attached.length) return
-    const imgs = attached.map((a) => a.api), thumbs = attached.map((a) => a.thumb)
+    const imgs = attached.filter((a) => a.img).map((a) => a.img), thumbs = attached.filter((a) => a.img).map((a) => a.thumb)
+    const files = attached.filter((a) => a.file).map((a) => a.file)
     input.value = ''
     attached = []
     paintAttached()
-    submit(editor, panelId, t, imgs, thumbs)
+    submit(editor, panelId, t, imgs, thumbs, { files })
   }
+  // Stop: Claude stops the answer it's writing for this diagram and drops the queued ones;
+  // the diagram stays as it was
+  const stopBtn = $('dgChatStop')
+  if (stopBtn) stopBtn.addEventListener('click', () => {
+    if (!panelId) return
+    stopBtn.hidden = true
+    api('POST', '/api/diagram/stop', { did: panelId }).catch((e) => { toast(e.message); render() })
+  })
+  const fileIn = $('dgChatFile')
+  $('dgChatAttach').addEventListener('click', () => fileIn.click())
+  fileIn.addEventListener('change', () => { const fs = Array.from(fileIn.files || []); fileIn.value = ''; attach(fs); input.focus() })
   $('dgChatSend').addEventListener('click', send)
   $('dgChatClose').addEventListener('click', closeChat)
   input.addEventListener('keydown', (e) => {
@@ -402,7 +448,9 @@ export function setupDiagramChat(editor) {
   })
   // paste or drop pictures (screenshots, sketches) to show Claude what you mean
   input.addEventListener('paste', (e) => {
-    const files = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type))
+    const files = Array.from((e.clipboardData && e.clipboardData.files) || [])
+    const t = e.clipboardData && e.clipboardData.getData('text/plain')
+    if (!files.length && t && t.length > PASTE_AS_FILE) { e.preventDefault(); attached.push(pastedAsFile(t)); paintAttached(); return }
     if (!files.length) return
     e.preventDefault()
     attach(files)
@@ -411,7 +459,7 @@ export function setupDiagramChat(editor) {
   p.addEventListener('dragleave', (e) => { if (!p.contains(e.relatedTarget)) p.classList.remove('dgc-drop') })
   p.addEventListener('drop', (e) => {
     p.classList.remove('dgc-drop')
-    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => /^image\//.test(f.type))
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || [])
     if (!files.length) return
     e.preventDefault()
     attach(files)

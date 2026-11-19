@@ -1270,6 +1270,15 @@ body.dg-chat-open .notes { display: none; }
 .dgc-att + .dgc-foot { border-top: 0; }
 .dgc-att-i { position: relative; }
 .dgc-att-i img { width: 56px; height: 56px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); display: block; }
+.dgc-att-file { display: inline-flex; align-items: center; height: 30px; padding: 0 0.6rem; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
+.dgc-fname { font-size: 0.75rem; color: var(--text); max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgc-files { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.25rem; }
+.dgc-files .dgc-fname { border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.45rem; }
+.dgc-files .dgc-fname::before, .dgc-att-file .dgc-fname::before { content: '📄 '; }
+.dgc-stopped .dgc-text { color: var(--muted); font-style: italic; padding-left: 0; }
+.dgc-clip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.dgc-clip:hover { background: var(--line); color: var(--text); }
+.dg-att { border-top: 0; padding: 0.4rem 0 0; }
 .dgc-att-i button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--text); color: #fff; font-size: 0.75rem; line-height: 18px; padding: 0; cursor: pointer; }
 .dg-chat.dgc-drop { outline: 2px dashed var(--link); outline-offset: -6px; }
 

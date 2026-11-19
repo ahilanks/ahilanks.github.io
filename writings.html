@@ -113,7 +113,54 @@
       .why-write blockquote p {
         margin: 0 0 0.9em;
       }
-      .why-write blockquote .key {
+      /* Condensed quote: only the key lines until expanded */
+      .pg blockquote {
+        color: var(--text-color);
+        transition: color 0.4s ease;
+      }
+      .pg:not(.open) blockquote {
+        cursor: pointer;
+      }
+      .pg:not(.open) blockquote p {
+        display: inline;
+      }
+      .pg .ellip {
+        color: var(--muted);
+      }
+      .pg .rest,
+      .pg .full,
+      .pg.open .ellip,
+      .pg.open .short {
+        display: none;
+      }
+      .pg.open blockquote {
+        color: var(--muted);
+      }
+      .pg.open .rest,
+      .pg.open .full {
+        display: inline;
+        animation: pg-fade 0.5s ease;
+      }
+      @keyframes pg-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .pg figcaption {
+        margin-top: 0.9em;
+      }
+      .pg-toggle {
+        display: block;
+        margin-top: 0.4em;
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+      }
+      .pg-toggle:hover {
         color: var(--text-color);
       }
       .why-write figcaption {
@@ -241,31 +288,31 @@
 
       <details class="why-write">
         <summary>Why write?</summary>
-        <figure>
+        <figure class="pg">
           <blockquote>
             <p>
-              “To understand what a real essay is, we have to reach back into
+              “<span class="rest">To understand what a real essay is, we have to reach back into
               history again, though this time not so far. To Michel de Montaigne,
               who in 1580 published a book of what he called ‘essais.’ He was
               doing something quite different from what lawyers do, and the
               difference is embodied in the name. Essayer is the French verb
-              meaning ‘to try’ and an essai is an attempt. <span class="key">An essay is something
-              you write to try to figure something out.</span>
+              meaning ‘to try’ and an essai is an attempt. </span>An essay is something
+              you write to try to figure something out.<span class="ellip"> …</span>
             </p>
             <p>
-              Figure out what? You don’t know yet. And so you can’t begin with a
-              thesis, because you don’t have one, and may never have one. <span class="key">An essay
-              doesn’t begin with a statement, but with a question.</span> In a real
+              <span class="rest">Figure out what? You don’t know yet. And so you can’t begin with a
+              thesis, because you don’t have one, and may never have one. </span><span class="full">An essay</span><span class="short">[It]</span>
+              doesn’t begin with a statement, but with a question.<span class="rest"> In a real
               essay, you don’t take a position and defend it. You notice a door
-              that’s ajar, and you open it and walk in to see what’s inside.
+              that’s ajar, and you open it and walk in to see what’s inside.</span><span class="ellip"> …</span>
             </p>
             <p>
-              If all you want to do is figure things out, why do you need to write
+              <span class="rest">If all you want to do is figure things out, why do you need to write
               anything, though? Why not just sit and think? Well, there precisely
-              is Montaigne’s great discovery. <span class="key">Expressing ideas helps to form them.</span>
-              Indeed, helps is far too weak a word. <span class="key">Most of what ends up in my
+              is Montaigne’s great discovery. </span>Expressing ideas helps to form them.<span class="rest">
+              Indeed, helps is far too weak a word.</span><span class="ellip"> …</span> Most of what ends up in my
               essays I only thought of when I sat down to write them. That’s why I
-              write them.</span>”
+              write them.”
             </p>
           </blockquote>
           <figcaption>
@@ -273,6 +320,7 @@
             <a href="https://paulgraham.com/essay.html" target="_blank" rel="noopener"
               >The Age of the Essay</a
             >
+            <button type="button" class="pg-toggle" aria-expanded="false">Read the full passage</button>
           </figcaption>
         </figure>
       </details>
@@ -361,6 +409,22 @@
           (window.requestIdleCallback || setTimeout)(function () { warm(document.querySelector('.post a[href^="writings/"]')) })
         })
       })()
+    </script>
+    <script>
+      (() => {
+        const fig = document.querySelector(".pg");
+        if (!fig) return;
+        const btn = fig.querySelector(".pg-toggle");
+        const set = (open) => {
+          fig.classList.toggle("open", open);
+          btn.setAttribute("aria-expanded", open);
+          btn.textContent = open ? "Show less" : "Read the full passage";
+        };
+        fig.querySelector("blockquote").addEventListener("click", () => {
+          if (!fig.classList.contains("open")) set(true);
+        });
+        btn.addEventListener("click", () => set(!fig.classList.contains("open")));
+      })();
     </script>
   </body>
 </html>

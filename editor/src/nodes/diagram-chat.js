@@ -174,10 +174,18 @@ function applyJob(sum) {
   return true
 }
 
+// The server's diagram version (diagram_ai.open_jobs): 2+ takes files and Stop.
+let serverV = 0
+const OLD_SERVER = 'The editor server is out of date: double-click run-editor.command to restart it, then try again.'
+async function serverReady() {
+  if (serverV < 2) await syncJobs()
+  return serverV >= 2
+}
 // On load (and while answers are waiting for their draft): pick up every job on the server.
 async function syncJobs() {
   let out
   try { out = await api('GET', '/api/diagram/jobs') } catch (e) { return }
+  serverV = out.v || 1
   for (const sum of out.jobs) {
     if (sum.status === 'done' || sum.status === 'error') {
       if (!applyJob(sum)) waiting.add(sum.id)
@@ -193,6 +201,7 @@ async function syncJobs() {
 async function submit(editor, did, text, images, thumbs, { html, files } = {}) {
   const hit = findById(editor, did)
   if (!hit) return false
+  if (files && files.length && !(await serverReady())) { toast(OLD_SERVER); return false }
   const chat = parseChat(hit.node.attrs.chat)
   const history = chat.filter((m) => m.r !== 'e').slice(-14).map((m) => ({ role: m.r === 'u' ? 'user' : 'assistant', text: m.t }))
   let out
@@ -221,6 +230,7 @@ const PLACEHOLDER = '<svg viewBox="0 0 600 120" width="100%"><text x="300" y="66
 export async function startNewDiagram(editor, at, prompt, { images = [], thumbs = [], files = [] } = {}) {
   const $p = editor.state.doc.resolve(Math.min(at, editor.state.doc.content.size))
   const pos = $p.depth ? $p.after(1) : at // after the paragraph the cursor was in
+  if (files.length && !(await serverReady())) { toast(OLD_SERVER); return false }
   const did = newId()
   editor.chain().insertContentAt(pos, { type: 'htmlEmbed', attrs: { html: PLACEHOLDER, did, chat: '[]' } }).run()
   const ok = await submit(editor, did, prompt, images, thumbs, { html: '', files })
@@ -424,18 +434,26 @@ export function setupDiagramChat(editor) {
     if (!t && !attached.length) return
     const imgs = attached.filter((a) => a.img).map((a) => a.img), thumbs = attached.filter((a) => a.img).map((a) => a.thumb)
     const files = attached.filter((a) => a.file).map((a) => a.file)
+    const keep = attached
     input.value = ''
     attached = []
     paintAttached()
-    submit(editor, panelId, t, imgs, thumbs, { files })
+    submit(editor, panelId, t, imgs, thumbs, { files }).then((ok) => {
+      if (ok || input.value || attached.length) return
+      input.value = t; attached = keep; paintAttached() // not sent: put it back
+    })
   }
   // Stop: Claude stops the answer it's writing for this diagram and drops the queued ones;
   // the diagram stays as it was
   const stopBtn = $('dgChatStop')
   if (stopBtn) stopBtn.addEventListener('click', () => {
     if (!panelId) return
-    stopBtn.hidden = true
-    api('POST', '/api/diagram/stop', { did: panelId }).catch((e) => { toast(e.message); render() })
+    const did = panelId
+    serverReady().then((ok) => {
+      if (!ok) { toast(OLD_SERVER); return }
+      stopBtn.hidden = true
+      api('POST', '/api/diagram/stop', { did }).catch((e) => { toast(e.message); lastSig = ''; render() })
+    })
   })
   const fileIn = $('dgChatFile')
   $('dgChatAttach').addEventListener('click', () => fileIn.click())

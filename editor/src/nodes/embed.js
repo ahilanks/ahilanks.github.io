@@ -418,11 +418,12 @@ async function generate(editor) {
   paintNewAtt()
   const at = editor.state.selection.to
   editor.view.focus()
-  await startNewDiagram(editor, at, prompt, {
+  const sent = await startNewDiagram(editor, at, prompt, {
     images: att.filter((a) => a.img).map((a) => a.img),
     thumbs: att.filter((a) => a.img).map((a) => a.thumb),
     files: att.filter((a) => a.file).map((a) => a.file),
   })
+  if (sent === false) { ta.value = prompt; newAtt = att; paintNewAtt() } // not sent: keep it for next time
 }
 
 function commit(html) {

@@ -380,7 +380,9 @@ def open_jobs():
     with LOCK:
         live = {j.id: j.summary() for j in JOBS.values() if j.status in ("queued", "running") or j.id in saved}
     saved.update(live)
-    return {"ok": True, "jobs": sorted(saved.values(), key=lambda d: d.get("created", 0))}
+    # v2: takes attached files and /api/diagram/stop (the editor checks, so an old server
+    # that's still running says so instead of quietly dropping files)
+    return {"ok": True, "v": 2, "jobs": sorted(saved.values(), key=lambda d: d.get("created", 0))}
 
 
 def applied(job_id):

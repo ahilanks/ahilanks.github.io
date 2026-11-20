@@ -440,9 +440,12 @@
           </label>
         </div>
         <div id="pubDraftFields" hidden>
-          <div class="field">
-            <label for="draftVersion">Version</label>
-            <select id="draftVersion"></select>
+          <div class="field" id="draftVersionField" hidden>
+            <label>Version</label>
+            <div class="seg" id="draftVersion">
+              <button type="button" data-v="update"></button>
+              <button type="button" data-v="new"></button>
+            </div>
             <p class="desc" id="draftVersionDesc"></p>
           </div>
           <div class="field">
@@ -452,6 +455,7 @@
               <button type="button" class="pop-btn ghost" id="draftCopy">Copy</button>
             </div>
           </div>
+          <div class="draft-older" id="draftOlder" hidden></div>
         </div>
         <div class="pub-held" id="pubHeld" hidden></div>
         <div class="modal-actions">

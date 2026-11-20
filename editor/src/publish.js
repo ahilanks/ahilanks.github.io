@@ -2038,26 +2038,34 @@ export function setupPublish({ editor, currentSnapshot }) {
   const site = () => (CONFIG.siteUrl || '').replace(/\/$/, '')
   const draftLinkUrl = (token) => site() + '/writings/p/' + token + '.html'
 
-  // Version picker: update one of the existing links in place, or make a new one.
-  function renderDraftVersions(select) {
-    const sel = $('draftVersion')
-    const next = draftVersions.reduce((a, v) => Math.max(a, v.n), 0) + 1
-    sel.innerHTML = draftVersions.slice().reverse().map((v) =>
-      '<option value="' + v.n + '">v' + v.n + (v.created ? ' · ' + escapeHtml(longDate(v.created)) : '') + ' — update this link</option>'
-    ).join('') + '<option value="new">v' + next + ' — new link (keeps the old ones)</option>'
-    sel.value = select != null ? String(select) : (draftVersions.length ? String(draftVersions[draftVersions.length - 1].n) : 'new')
-    showDraftVersion()
-  }
-  function showDraftVersion() {
-    const v = $('draftVersion').value
-    const entry = draftVersions.find((x) => String(x.n) === v)
-    $('draftUrl').value = entry ? draftLinkUrl(entry.token) : ''
-    $('draftVersionDesc').textContent = entry
-      ? 'Replaces v' + entry.n + ' at the same link.'
-      : draftVersions.length ? 'A new link. Earlier versions stay up at their own links.' : ''
+  // Version toggle: [Update vN | New vN+1], numbers shown so nothing has to be remembered.
+  // Earlier versions are listed under the link, each with its own copy button.
+  let draftChoice = 'update' // 'update' (the latest link in place) | 'new'
+  const latestDraft = () => draftVersions[draftVersions.length - 1] || null
+  function renderDraftVersions() {
+    const latest = latestDraft()
+    const next = latest ? latest.n + 1 : 1
+    $('draftVersionField').hidden = !latest
+    const [upd, nw] = $('draftVersion').querySelectorAll('button')
+    upd.textContent = latest ? 'Update v' + latest.n : ''
+    nw.textContent = 'New v' + next
+    upd.classList.toggle('active', draftChoice === 'update')
+    nw.classList.toggle('active', draftChoice === 'new')
+    const updating = draftChoice === 'update' && latest
+    $('draftUrl').value = updating ? draftLinkUrl(latest.token) : ''
+    $('draftUrl').placeholder = latest ? 'v' + next + '\u2019s link is made when you create it' : 'Created when you publish the draft'
+    $('draftVersionDesc').textContent = !latest ? ''
+      : updating ? 'v' + latest.n + (latest.created ? ' (' + longDate(latest.created) + ')' : '') + ' changes in place: anyone with its link sees the new text.'
+        : 'A new link. ' + (latest.n === 1 ? 'v1 stays up at its own link.' : 'v1\u2013v' + latest.n + ' stay up at their own links.')
+    const older = draftVersions.slice(0, updating ? -1 : undefined).reverse()
+    $('draftOlder').hidden = !older.length
+    $('draftOlder').innerHTML = older.length ? (updating ? 'Earlier: ' : 'Existing: ') + older.map((v) =>
+      '<button type="button" data-token="' + v.token + '" title="Copy v' + v.n + '\u2019s link">v' + v.n + '</button>').join(' · ') : ''
+    if (mode === 'draft') $('publishConfirm').textContent = !latest ? 'Create draft link' : updating ? 'Update v' + latest.n : 'Create v' + next
   }
   async function loadDraftVersions(docId) {
     draftVersions = []
+    draftChoice = 'update'
     renderDraftVersions()
     try { draftVersions = await shareVersionsFor(docId || 'doc') } catch (e) {}
     renderDraftVersions()
@@ -2085,7 +2093,8 @@ export function setupPublish({ editor, currentSnapshot }) {
     document.querySelectorAll('#pubMode button').forEach((b) => b.classList.toggle('active', b.dataset.mode === m))
     $('pubPublishFields').hidden = m !== 'publish'
     $('pubDraftFields').hidden = m !== 'draft'
-    $('publishConfirm').textContent = m === 'draft' ? 'Create draft link' : 'Publish'
+    $('publishConfirm').textContent = 'Publish'
+    if (m === 'draft') renderDraftVersions()
     setMsg($('publishMsg'), '', '')
   }
 
@@ -2230,15 +2239,16 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       /* ---------------------------------------------------------- draft link */
       if (draft) {
-        const pick = $('draftVersion').value
-        const { n: dn, token } = await claimShareVersion(snap.id || 'doc', pick === 'new' ? 'new' : Number(pick))
+        const latest = latestDraft()
+        const { n: dn, token } = await claimShareVersion(snap.id || 'doc', draftChoice === 'update' && latest ? latest.n : 'new')
         const html = buildArticleHtml(Object.assign({}, common, { draft: true, draftN: dn }))
         const rel = 'writings/p/' + token + '.html'
         await sink.add(rel, html)
         const written = await sink.flush()
         await sitePush(written, 'Draft preview: ' + titleText + ' (v' + dn + ')')
         draftVersions = await shareVersionsFor(snap.id || 'doc').catch(() => draftVersions)
-        renderDraftVersions(dn)
+        draftChoice = 'update' // the version just made is now the latest: its link is shown
+        renderDraftVersions()
         setMsg(msg, 'Live in a minute.', 'ok')
         toast('Draft link pushed')
         if (window.__drafts && snap.id) window.__drafts.markOutbound(snap.id) // first draft link: into the Outbound folder
@@ -2336,7 +2346,18 @@ export function setupPublish({ editor, currentSnapshot }) {
   $('publishConfirm').addEventListener('click', doPublish)
   $('thumbDrop').addEventListener('click', chooseThumb)
   document.querySelectorAll('#pubMode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
-  $('draftVersion').addEventListener('change', showDraftVersion)
+  $('draftVersion').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-v]')
+    if (!b || busy) return
+    draftChoice = b.dataset.v
+    setMsg($('publishMsg'), '', '')
+    renderDraftVersions()
+  })
+  $('draftOlder').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-token]')
+    if (!b) return
+    try { await navigator.clipboard.writeText(draftLinkUrl(b.dataset.token)); toast(b.textContent + ' link copied') } catch (err) { toast("Couldn't copy") }
+  })
   $('draftCopy').addEventListener('click', async () => {
     const v = $('draftUrl').value
     if (!v) return

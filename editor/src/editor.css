@@ -901,6 +901,9 @@ math-field#mathEditField:focus-within { border-color: var(--link); outline: none
 .draft-url-row { display: flex; gap: 0.5rem; align-items: stretch; }
 .draft-url-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
 .draft-url-row .pop-btn { flex: none; }
+.draft-older { margin: -0.2rem 0 0.85rem; font-size: 0.76rem; color: var(--faint); }
+.draft-older button { border: none; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.draft-older button:hover { color: var(--text); }
 .modal-msg code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
 .modal-msg { font-size: 0.83rem; margin-top: 0.8rem; min-height: 1em; }
 .modal-msg.err { color: #c0392b; }

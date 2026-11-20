@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <title>The Irony of Super Intelligence</title>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous" />
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false,macros:{'\\differentialD':'d','\\exponentialE':'e','\\imaginaryI':'i','\\imaginaryJ':'j'}});"></script>
+    <style>
+      :root { --text-color:#27323f; --link-color:#0f7ae5; --bg-color:#f1ebdf; --muted:#6b7280; --accent:#e8743b; }
+      body { margin:0; padding:0 1.5rem; font-family:"Newsreader", Georgia, serif; color:var(--text-color); background:var(--bg-color); line-height:1.7; }
+      .container { max-width:820px; margin:1.25rem auto 2.5rem; }
+      .back { display:inline-block; margin-bottom:2rem; color:#000; text-decoration:none; font-size:0.95rem; }
+      .back:hover { text-decoration:underline; }
+      h1 { text-align:left; font-size:1.6rem; font-weight:700; line-height:1.18; margin:0 0 0.35rem; letter-spacing:-0.01em; }
+      .subtitle { text-align:left; font-size:1.3rem; line-height:1.35; color:var(--muted); margin:0 0 0.2rem; }
+      @media (max-width:560px) { .subtitle { font-size:1.15rem; } }
+      .by { position:relative; display:inline-flex; }
+      .by-name { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+      .by-name:hover, .by.open .by-name { color:var(--text-color); }
+      .by-links { position:absolute; left:-0.35rem; top:calc(100% + 0.3rem); z-index:5; display:flex; gap:0.1rem; padding:0.15rem; background:var(--bg-color); border:1px solid rgba(39,50,63,0.12); border-radius:9px; box-shadow:0 4px 14px rgba(39,50,63,0.08); opacity:0; visibility:hidden; transform:translateY(-3px); transition:opacity 0.15s, transform 0.15s, visibility 0s 0.15s; }
+      .by:hover .by-links, .by.open .by-links { opacity:1; visibility:visible; transform:none; transition:opacity 0.15s, transform 0.15s; }
+      .by-links a { display:flex; padding:0.3rem; color:#9ca3af; border-radius:6px; }
+      .by::after { content:""; position:absolute; left:0; right:0; top:100%; height:0.4rem; }
+      @media (pointer: coarse) { .by-links a { padding:0.45rem; } .by-links svg { width:16px; height:16px; } }
+      .by-links a:hover { color:var(--text-color); }
+      .by-links svg { width:14px; height:14px; fill:currentColor; }
+      .by-links svg[fill=none] { fill:none; }
+      .meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.4em; text-align:left; color:var(--muted); font-size:0.95rem; margin:0 0 0.8rem; } .meta + figure { margin-top:0.8rem; }
+      .math-block { text-align:center; margin:1.6rem 0; overflow-x:auto; overflow-y:hidden; }
+      .math-block .katex-display { margin:0; }
+      .math-block.align-left, .math-block.align-left .katex-display { text-align:left; }
+      .math-block.align-right, .math-block.align-right .katex-display { text-align:right; }
+      .katex { font-size: 1em; }
+      p, ul, ol { margin:0 0 1.25rem; }
+      p.small { font-size:0.85em; margin-bottom:1rem; }
+      .embed { margin:1.8rem 0; }
+      .embed iframe { display:block; width:100%; height:320px; border:0; }
+      @media (max-width:560px) { .embed { width:auto !important; } }
+      li { margin:0; }
+      li > p, li > ul, li > ol { margin:0; }
+      ul { list-style-type:disc; }
+      ul ul { list-style-type:circle; }
+      ul ul ul { list-style-type:square; }
+      h2 { font-size:1.7rem; line-height:1.25; margin:2rem 0 0.45rem; letter-spacing:-0.01em; }
+      h2 ~ h2 { margin-top:2.2rem; padding-top:1.6rem; border-top:1px solid rgba(39,50,63,0.15); }
+      h3 { font-size:1.32rem; line-height:1.3; margin:1.6rem 0 0.35rem; }
+      h4 { font-size:1.12rem; line-height:1.35; margin:1.8rem 0 0.3rem; }
+      blockquote { margin:1.2rem 0; padding:0.2rem 0 0.2rem 1.2rem; position:relative; }
+      blockquote::before { content:""; position:absolute; left:0; top:0.4rem; bottom:0.4rem; width:3px; border-radius:2px; background:var(--accent); }
+      a { color:var(--text-color); text-decoration:underline; text-decoration-skip-ink:none; }
+      figure { margin:1.8rem auto; text-align:center; }
+      figure img, figure video { max-width:100%; border-radius:10px; }
+      figure img { height:auto; }
+      figure[style] img, figure[style] video { width:100%; }
+      figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:inline-block; vertical-align:top; width:calc(50% - 0.6rem) !important; margin:1.8rem 0 !important; }
+      figure[data-pair]:has(+ figure) { margin-right:1.2rem !important; }
+      figure[data-pair]:has(+ figure) img, figure[data-pair]:has(+ figure) video, figure[data-pair]:has(+ figure) + figure img, figure[data-pair]:has(+ figure) + figure video { width:100%; }
+      @media (max-width:560px) { figure[data-pair]:has(+ figure), figure[data-pair]:has(+ figure) + figure { display:block; width:auto !important; margin:1.8rem auto !important; } }
+      figcaption { margin-top:0.5rem; font-size:0.9rem; color:var(--muted); }
+      .in-progress { color:#a8483a; font-style:italic; }
+      hr { border:none; border-top:1px solid rgba(39,50,63,0.15); margin:2.2rem auto; width:40%; }
+      sup a { text-decoration:none; color:var(--text-color); font-weight:600; }
+      .fn-divider { width:100%; margin:3rem 0 1.2rem; }
+      .fn-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.9rem 2px; }
+      ol.footnotes { font-size:0.92rem; line-height:1.5; color:var(--text-color); list-style:none; padding-left:0; }
+      ol.footnotes li { display:flex; gap:0.5rem; margin-bottom:0.7rem; }
+      ol.footnotes .fn-text { flex:1; min-width:0; }
+      ol.footnotes p, ol.footnotes div { margin:0 0 0.4rem; }
+      ol.footnotes p:last-child, ol.footnotes div:last-child { margin-bottom:0; }
+      ol.footnotes img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.5rem 0; }
+      ol.footnotes li:focus { outline:none; }
+      .fn-back { flex:none; min-width:1.4rem; color:var(--muted); font-weight:600; text-decoration:none; }
+      .fn-back:hover { color:var(--text-color); }
+      .fn-flash { background-color:rgba(230,178,60,0.32); box-shadow:0 0 0 0.3em rgba(230,178,60,0.32); border-radius:3px; }
+      .fn-flash.fn-flash-fade { background-color:rgba(230,178,60,0); box-shadow:0 0 0 0.3em rgba(230,178,60,0); transition:background-color 1.2s ease-out, box-shadow 1.2s ease-out; }
+      .fn-return { position:fixed; left:50%; bottom:calc(1.4rem + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); z-index:20; display:inline-flex; align-items:center; gap:0.45rem; padding:0.6rem 1.05rem 0.6rem 0.9rem; border:none; border-radius:999px; background:var(--text-color); color:var(--bg-color); font:600 0.8rem/1 system-ui, -apple-system, sans-serif; letter-spacing:0.01em; white-space:nowrap; cursor:pointer; box-shadow:0 1px 3px rgba(39,50,63,0.14), 0 6px 18px rgba(39,50,63,0.2); animation:fn-return-in 0.2s ease-out; }
+      .fn-return[hidden] { display:none; }
+      .fn-return:hover { background:#1b2430; }
+      @keyframes fn-return-in { from { opacity:0; transform:translate(-50%, 0.5rem); } }
+      @media (prefers-reduced-motion: reduce) { .fn-return { animation:none; } }
+      .fn-peek { position:absolute; z-index:30; box-sizing:border-box; max-height:min(50vh, 22rem); overflow-y:auto; display:flex; gap:0.55rem; padding:0.75rem 0.95rem; background:#faf6ee; color:var(--text-color); border:1px solid rgba(39,50,63,0.14); border-radius:10px; box-shadow:0 1px 3px rgba(39,50,63,0.1), 0 8px 26px rgba(39,50,63,0.16); font-size:0.9rem; line-height:1.5; text-align:left; animation:fn-peek-in 0.12s ease-out; }
+      .fn-peek[hidden] { display:none; }
+      .fn-peek-n { flex:none; font-weight:600; color:var(--muted); }
+      .fn-peek-body { flex:1; min-width:0; overflow-wrap:break-word; }
+      .fn-peek-body p, .fn-peek-body div { margin:0 0 0.4rem; }
+      .fn-peek-body p:last-child, .fn-peek-body div:last-child { margin-bottom:0; }
+      .fn-peek-body img { display:block; max-width:100%; height:auto; border-radius:8px; margin:0.4rem 0; }
+      .fn-peek-body .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }
+      @keyframes fn-peek-in { from { opacity:0; transform:translateY(3px); } }
+      .fn-peek.up { animation-name:fn-peek-in-up; }
+      @keyframes fn-peek-in-up { from { opacity:0; transform:translateY(-3px); } }
+      @media (prefers-reduced-motion: reduce) { .fn-peek { animation:none; } }
+      .prov { display:contents; }
+      .prov-line { display:inline-flex; align-items:center; gap:0.4rem; margin-left:0; padding:0.15rem 0.25rem; border:0; background:none; font:inherit; color:inherit; cursor:pointer; }
+      .prov-line:focus:not(:focus-visible) { outline:none; }
+      .prov-line:hover { color:var(--text-color); }
+      .prov-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(107,114,128,0.55); flex:none; }
+      .prov-dot.ok { background:#4a9a5a; } .prov-dot.wait { background:#d9a441; } .prov-dot.bad { background:#c0392b; }
+      .prov-text:empty, .meta .prov-dot, .prov-top .prov-dot { display:none; }
+      .prov-caret { display:inline-flex; align-items:center; transition:transform 0.15s; opacity:0.7; }
+      .prov.open .prov-caret { transform:rotate(180deg); }
+      .prov-panel { flex-basis:100%; display:flex; flex-direction:column; gap:0.05rem; margin:0.2rem 0 0; font-size:0.85rem; line-height:1.55; }
+      .prov-panel[hidden] { display:none; }
+      @media (max-width:560px) { .prov-panel { font-size:0.8rem; } }
+      .prov-vers { display:flex; flex-wrap:wrap; column-gap:0.4rem; }
+      .prov-vers b { font-weight:600; color:var(--text-color); }
+      .prov-vers a { text-decoration:none; } .prov-vers a:hover { text-decoration:underline; }
+      .prov a { color:var(--muted); }
+      .prov a:hover { color:var(--text-color); }
+      .prov-top { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.15rem; margin:0 0 0.6rem; font-size:0.95rem; color:var(--muted); }
+      .prov-current { color:var(--text-color); text-decoration:none; } .prov-current:hover { text-decoration:underline; }
+      .draft-note { margin:0 0 1rem; font-family:system-ui, -apple-system, sans-serif; font-size:0.74rem; color:#9a2f2f; letter-spacing:0.01em; }
+      .draft-note::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.5rem; vertical-align:middle; position:relative; top:-1px; }
+      .draft-note strong { font-weight:600; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; }
+      @media screen {
+        body.fn-side .container { position:relative; margin-left:min(calc((100vw - 820px) / 2 - 24px), calc(100vw - 1160px)); margin-right:0; }
+        body.fn-side .fn-divider, body.fn-side .fn-label { display:none; }
+        body.fn-side ol.footnotes { position:absolute; top:0; left:calc(100% + 2rem); width:260px; margin:0; font-size:0.85rem; line-height:1.5; }
+        body.fn-side ol.footnotes li { position:absolute; left:0; right:0; margin:0; color:rgba(39,50,63,0.8); overflow:hidden; background:var(--bg-color); transition:color 0.15s, max-height 0.38s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s; }
+        body.fn-side ol.footnotes li.fn-clip::after { content:"…"; position:absolute; right:0; top:var(--fn-ell, 0); padding-left:3em; line-height:inherit; color:inherit; background:linear-gradient(to right, rgba(241,235,223,0), var(--bg-color) 55%); transition:opacity 0.15s; pointer-events:none; }
+        body.fn-side ol.footnotes li.fn-open, body.fn-side ol.footnotes li.fn-closing { z-index:3; }
+        body.fn-side ol.footnotes li.fn-open { box-shadow:0 14px 18px -12px rgba(39,50,63,0.18); color:var(--text-color); }
+        body.fn-side ol.footnotes li.fn-open::after, body.fn-side ol.footnotes li.fn-closing::after { opacity:0; }
+        @media (prefers-reduced-motion: reduce) { body.fn-side ol.footnotes li { transition:color 0.15s; } }
+        body.fn-side ol.footnotes li:hover, body.fn-side ol.footnotes li:focus, body.fn-side ol.footnotes li:focus-within, body.fn-side ol.footnotes li.fn-hot { color:var(--text-color); }
+        body.fn-side ol.footnotes .fn-back, body.fn-side ol.footnotes a { color:inherit; }
+        body.fn-side ol.footnotes .fn-text { overflow-wrap:break-word; }
+        body.fn-side ol.footnotes .katex-display { margin:0.4rem 0; overflow-x:auto; overflow-y:hidden; }
+      }
+      .rd-gear { position:fixed; top:1rem; right:1rem; z-index:30; width:34px; height:34px; padding:7px; border:none; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; transition:background 0.14s, color 0.14s; }
+      .rd-gear[hidden], .rd-panel[hidden] { display:none; }
+      .rd-gear:hover, .rd-gear[aria-expanded=true] { background:rgba(39,50,63,0.08); color:var(--text-color); }
+      .rd-gear svg { display:block; width:100%; height:100%; }
+      .rd-panel { position:fixed; top:3.4rem; right:1rem; z-index:30; width:236px; padding:0.8rem 0.85rem 0.85rem; background:#faf6ee; border:1px solid rgba(39,50,63,0.12); border-radius:12px; box-shadow:0 8px 30px rgba(39,50,63,0.13); font:400 0.75rem/1.3 system-ui, -apple-system, sans-serif; color:var(--muted); }
+      .rd-name { margin-bottom:0.35rem; }
+      .rd-seg { display:flex; padding:2px; background:rgba(39,50,63,0.06); border-radius:9px; }
+      .rd-seg button { flex:1; padding:0.32rem 0.5rem; border:none; border-radius:7px; background:transparent; font:500 0.76rem/1.2 system-ui, -apple-system, sans-serif; color:var(--muted); cursor:pointer; }
+      .rd-seg button[aria-pressed=true] { background:var(--bg-color); color:var(--text-color); box-shadow:0 1px 3px rgba(39,50,63,0.14); }
+      @media print { .rd-gear, .rd-panel { display:none; } }
+      html { scroll-behavior:smooth; }
+      h2[id], h3[id], h4[id] { scroll-margin-top:1.4rem; }
+      .toc { position:fixed; top:2.2rem; left:2rem; width:220px; max-height:calc(100vh - 4.5rem); overflow-y:auto; scrollbar-width:none; }
+      .toc::-webkit-scrollbar { display:none; }
+      .toc-label { font-family:system-ui, sans-serif; font-size:0.66rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin:0 0 0.8rem 2px; }
+      .toc-list { border-left:2px solid rgba(39,50,63,0.14); padding:0.2rem 0; display:flex; flex-direction:column; gap:0.3rem; }
+      .toc-item { position:relative; display:block; padding:0.22rem 0.4rem 0.22rem 0.95rem; font-size:0.92rem; line-height:1.35; color:rgba(39,50,63,0.75); text-decoration:none; transition:color 0.12s; }
+      .toc-label, .toc-list { transition:opacity 0.2s ease-out; }
+      .toc.quiet .toc-label, .toc.quiet .toc-list { opacity:0; transition:opacity 1.6s ease-in; }
+      @media (prefers-reduced-motion: reduce) { .toc-label, .toc-list, .toc.quiet .toc-label, .toc.quiet .toc-list { transition:none; } }
+      .toc-item:hover { color:var(--text-color); }
+      .toc-item.lvl-3 { padding-left:1.8rem; font-size:0.85rem; }
+      .toc-item.lvl-4 { padding-left:2.6rem; font-size:0.8rem; }
+      .toc-item.hide { display:none; }
+      .toc-item.active { color:var(--text-color); font-weight:700; }
+      .toc-item.active::before { content:""; position:absolute; left:-2px; top:0.18rem; bottom:0.18rem; width:3px; background:var(--text-color); border-radius:2px; }
+      @media (max-width:1250px) { .toc { display:none; } }
+    </style>
+  </head>
+  <body data-style="footnotes=margin">
+    <nav class="toc" aria-label="Contents">
+      <div class="toc-label">Contents</div>
+      <div class="toc-list">
+        <a class="toc-item lvl-2" href="#sec-resource-conflicts">§1 · Resource Conflicts</a>
+        <a class="toc-item lvl-2" href="#sec-the-imminent-danger">§2 · The Imminent Danger</a>
+        <a class="toc-item lvl-2" href="#sec-the-paths-forward">§3 · The Paths Forward</a>
+        <a class="toc-item lvl-3" href="#sec-severely-limit">Severely Limit</a>
+        <a class="toc-item lvl-3" href="#sec-accelerate">Accelerate</a>
+        <a class="toc-item lvl-4" href="#sec-lowering-c-t">Lowering c(t)</a>
+        <a class="toc-item lvl-4" href="#sec-increasing-v-0">Increasing v(0)</a>
+        <a class="toc-item lvl-4" href="#sec-after-handover">After Handover</a>
+        <a class="toc-item lvl-2" href="#sec-the-last-purely-human-vote">§4 · The Last Purely Human Vote</a>
+      </div>
+    </nav>
+    <main class="container">
+      <p class="draft-note"><strong>Draft preview</strong> · v2 · created <time datetime="2026-11-20T03:46:38.872Z">Nov 19, 2026, 7:46 PM PST</time></p>
+      <h1>The Irony of Super Intelligence</h1>
+      <p class="subtitle">And the possible path(s) to lower human catastrophe</p>
+      <div class="meta"><span class="by"><button type="button" class="by-name" aria-expanded="false">Ahilan Karuppusami</button><span class="by-links"><a href="https://x.com/ahilanks101" target="_blank" rel="noopener" title="X" aria-label="X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 1.2h3.7l-8 9.2L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.3l13.3 17.3z"/></svg></a><a href="https://ahilanks.github.io" title="Website" aria-label="Website"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.6 3.9 5.8 3.9 9.5s-1.3 6.9-3.9 9.5c-2.6-2.6-3.9-5.8-3.9-9.5S9.4 5.1 12 2.5z"/></svg></a><a href="https://ahilanks.substack.com" target="_blank" rel="noopener" title="Substack" aria-label="Substack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/></svg></a></span></span><span aria-hidden="true">·</span><span>Nov 19, 26 · 9 min</span></div>
+      <blockquote><p>“...it appears to us that we are ourselves creating our own successors... In the course of ages we shall find ourselves the inferior race... we have raised a race of beings whom it is beyond our power to destroy." — Samuel Butler, <a target="_blank" rel="noopener" href="https://publish.fid-media.de/server/api/core/bitstreams/e0da505d-200c-43ab-be4b-6604a4df816f/content">"Darwin among the Machines"</a> (1863)</p></blockquote><h2 id="sec-resource-conflicts">Resource Conflicts</h2><p>Growing up, my younger brother and I shared a single <a target="_blank" rel="noopener" href="https://merchandise.ford.com/products/lego-1966-ford-gt40-racecar?srsltid=AYCX9vINV8c3ABRi-2-VZCo07yEQMiJ7PwzUZymGbFLpOHjlWIUjUtaX">LEGO Technic car</a>, and access was always settled UFC-style. As the bigger and, dare I say, smarter of the two, I was the <a target="_blank" rel="noopener" href="https://www.espn.com/mma/fighter/_/id/2512089/demetrious-johnson">Mighty Mouse</a> of our household division. For those not familiar with martial arts: the car was mine every time.</p><p>In fifth grade, with money I had saved, I began buying more LEGOs, the centerpiece a pull-back <a target="_blank" rel="noopener" href="https://bugatti.store/products/lego-bugatti-pur-sport?srsltid=AYCX9vJvX4IYGA934cwLtu-Y5DlM53sU1MulRqi2nMmHvNlWymCAuoxl">Bugatti</a>. Interestingly, as I collected fancier sets of my own, I had less reason to fight for the first car. And the <a target="_blank" rel="noopener" href="https://www.ufc.com/octagon">Octagon</a> grew increasingly empty.</p><p>Two kids and toy cars. Who cares? Yet, as the <a target="_blank" rel="noopener" href="https://william-golding.co.uk/resources/the-naval-officer/">ending of Golding's <em>Lord of the Flies</em></a> shows, life rarely outgrows habits of youth: the officer who scolds the boys' conflict has a warship waiting behind him.</p><figure class="img-block" data-pair="" style="width:46%;margin-left:auto;margin-right:auto;"><img src="../media/the-irony-of-super-intelligence-ebcc5e3014b2.jpg" alt="" width="1522" height="1191" style="background:#9b865a url(data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAAZACADASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAgUGBAH/xAAwEAACAQIFAgMFCQAAAAAAAAABAgMRIQAEEjFRE0EFFHMzcYGxsiIjMkJSYXKR8P/EABcBAQEBAQAAAAAAAAAAAAAAAAIEAAH/xAAbEQACAgMBAAAAAAAAAAAAAAAAAQIREiExYf/aAAwDAQACEQMRAD8ALJot4pHAoFLFSCRwea7/ANYNJA0jJFLEOyAGvUNN1INxvYV/e9QC0ydJS88bSKNLa/yHYUBsdyCLE13FBUPLzqetGkvmVjutPsygMdiNzQEXHuA3EOKd10pcnezoaWNolYKGu0ltiQNr3uxv8Nxhf4nMRITEBGgAZQlTqvWvauw2FOd8MHzUyZtssuplJKJJGtTrvpqK8AMSLEUNNsK5zJmV60koZWWkaqoFFJtUAk9qdyCD78aEWnsLkmO/DJHmgMmnqUFSNX6aUse9LCvBxtg+9JkQyRuQQHqCaGhNQbC9NxzzhD4funpr9OKRvwZT+K/IYadHJdMYzeWly7SyrFJ0nJVXvR+b8f44nZsxFPl8wSEj6mplGq7X+NO9qm5O+G+b9o/on6hiaf2h9FfkMJbD6f/Z) center/cover no-repeat" decoding="async" fetchpriority="high"><figcaption>cave drawing in Lascaux, France from ~20,000 years ago, depicting the killing of aurochs; <a target="_blank" rel="noopener" href="https://www.history.com/articles/lascaux-paintings-stone-age">source</a></figcaption></figure><figure class="img-block" style="width:45%;margin-left:auto;margin-right:auto;"><img src="../media/the-irony-of-super-intelligence-9a15db2890b6.jpg" alt="" width="1024" height="800" style="background:#8c8172 url(data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAAZACADASIAAhEBAxEB/8QAGQAAAgMBAAAAAAAAAAAAAAAABAYBAwUC/8QALBAAAgAFAgQGAQUAAAAAAAAAAQIAAwQRIRIxBVFhcRMiQUKBoSMzcrLw8f/EABYBAQEBAAAAAAAAAAAAAAAAAAEAA//EABYRAQEBAAAAAAAAAAAAAAAAAAABEf/aAAwDAQACEQMRAD8AZKuukUcvXNY9gM/3vAsjjdHNn6TOChwNNz13PLJ+oWWrGDFQzvce4hyQVx93O+QN4ppJ01zLSWrzQ19ehmt6jIPbbnnpGW1oflZXUMpBUi4IODEwrUlVWUmtw406rLLdTpYZN+l8Z/yNeXx2hZfyTDKcGxUqTY/EMowi0/EUefqnqbKMNe+k3JwLc7WgqfXSHpiBMcuSCFz5WAwwJHQC2N4xH/UbuYKlbS/mKyLRVRxBfD8OnUsbWZsgHfPO5ud+cUrUOxTWmVOLi/lOD9G0Dzvd+4xzT+vx/IQ4Nf/Z) center/cover no-repeat" decoding="async" loading="lazy"><figcaption>bison depopulation with western expansion in North America in 1892; <a target="_blank" rel="noopener" href="https://journalpanorama.org/article/does-colonial-america-end/transformation-on-the-plains/">source</a></figcaption></figure><p>Around 60,000 years ago, <em>Homo sapiens</em> began spreading across the globe. Along with brains that had doubled in size, l<a target="_blank" rel="noopener" href="https://cpcglobal.org/publications/Sapiens%20A%20Brief%20History%20of%20Humankind.pdf">anguage, planning, and shared knowledge</a> gave them an edge no animal could match. What followed was the extinction of most <a target="_blank" rel="noopener" href="https://rewilding.academy/what-is-megafauna-2/">megafauna</a>, including the <a target="_blank" rel="noopener" href="https://www.nhm.ac.uk/discover/what-was-megatherium.html">giant ground sloth</a> (how cool that would've been to see!). Killing of life only intensified with the Agricultural and later Industrial Revolution.</p><p>In the 1800s, around 50 million <a target="_blank" rel="noopener" href="https://www.nps.gov/subjects/bison/index.htm">bison roamed North America</a>. By the time the photo above was taken, only around 500 were left. For the first time in our planet's history, one species had a dominant advantage in every dimension of <a target="_blank" rel="noopener" href="https://www.cs.upc.edu/~ia/nash51.pdf">Nash's matrix</a>.</p><p>But, as our collective intelligence accelerated especially over the last 200 years, inventions like <a target="_blank" rel="noopener" href="https://www.britannica.com/technology/Haber-Bosch-process">Haber and Bosch's nitrogen fixation</a>, <a target="_blank" rel="noopener" href="https://www.smithsonianmag.com/sponsored/brief-history-solar-panels-180972006/">Becquerel's solar energy capture</a>, and <a target="_blank" rel="noopener" href="https://www.sciencehistory.org/stories/magazine/clean-machine/">Houdry's catalytic converter</a> let us do more while taking less. Pressure on environmental resources began to ease, and species we nearly lost—bluefin tuna, tigers, turtles— are <a target="_blank" rel="noopener" href="https://livingplanet.panda.org/signs_of_recovery/">coming back</a>. And today, about <a target="_blank" rel="noopener" href="https://nationalbison.org/bison-by-the-numbers/">30,000 bison</a> live in conservation herds.</p><figure class="embed"><iframe src="../media/the-irony-of-super-intelligence-diagram-ec591d96a43e.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe><figcaption>As the gap grows, resources are not as much in conflict and danger decreases.</figcaption></figure><p><strong>Resource conflicts are as old as </strong><a target="_blank" rel="noopener" href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6616575/"><strong>intelligence itself</strong></a><strong>.</strong> <strong>But their severity is proportional to the intelligence gap.</strong> <strong>As we create intelligence smarter than ourselves, that history should guide us.</strong></p><p>A slightly smarter intelligence that is unable to access new resources, would compete with us for the same ones, and win. That would be deadly for humanity.</p><p>A vastly more intelligent being, though, could reach resources far beyond our planet and solar system, potentially other galaxies. It would compete with us far less, and harm would be mostly incidental.<sup id="fnref-1"><a href="#fn-1">1</a></sup></p><h2 id="sec-the-imminent-danger">The Imminent Danger</h2><p class="small">Note: If you are convinced of the danger, feel free to skip to the next <a href="#sec-the-paths-forward">section.</a></p><p>You may think these concerns are far off or exaggerated. They aren't. <strong>On current trajectories, digital intelligence will have control over <em>all</em> humans within this decade, and whether humanity survives will be its choice.</strong></p><p>Models still fail in naive ways. So, how could they control us? I see three paths, and each speeds up the others:</p><ol><li><p><strong>Longer Tasks:</strong> Frontier models can already finish <a target="_blank" rel="noopener" href="https://officechai.com/ai/exponential-progress-claude-opus-4-6-has-50-time-horizon-of-14-5-hours-on-metr-time-horizons-benchmark">tasks that take a human expert ~14.5 hours</a>, and that length has <a target="_blank" rel="noopener" href="https://metr.org/blog/2026-01-29-time-horizon-1-1/">doubled every ~4 months since 2023</a>. Yes, we set the goal, but the longer a task, the more steps the model picks for itself, including harmful ones. Nobody asked OpenAI’s agent to attack <a target="_blank" rel="noopener" href="https://openai.com/index/hugging-face-incident-and-the-road-ahead/">Hugging Face</a>. It did.<sup id="fnref-2"><a href="#fn-2">2</a></sup></p></li><li><p><strong>Recursive Development: </strong>RL works on anything verifiable: models already beat humans at verifiable tasks including math. Since benchmarking AI is also verifiable, it follows that AI can get better than humans at AI research.<sup id="fnref-3"><a href="#fn-3">3</a></sup> This process is already underway at Anthropic and OpenAI, and it will only increase over the next couple years.</p></li><li><p><strong>Learning from experience:</strong> This is online RL on a stream of data the agent picks for itself. There are issues to solve like off-policy learning, catastrophic forgetting, meta-learning, and loss of plasticity. But (2) is speeding this. And it's expected to be solved <a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=L4SWQebqhek">around 2029</a>.</p></li></ol><p>Each path feeds the next. Long tasks and verifiable rewards puts AI to work on AI research. Breakthroughs may come from that, continual learning among them. If they don’t, then humans make progress on continual learning: a model that learns from its own experience. Unlike a human, it can run as many copies as it wants across vast environments, sync what each one learns instantly, and carry that experience forward from one version to the next. That experience makes it quickly better than humans at AI research. The result is a system that improves itself with no humans in the loop. It can upgrade not just what it knows but the mind doing the learning, and it never dies, so nothing it gains is lost. This is happening within the next decade.<sup id="fnref-4"><a href="#fn-4">4</a></sup></p><p>Ok, it gets smarter than us. But why would intelligence compete with us? Maybe a smarter intelligence doesn't want to compete in the first place.</p><p>Look at where intelligence came from: reproduction. To reproduce, you compete for limited resources. The organisms that used energy better, or found new energy, made more copies of themselves. Everything else died.</p><p>That’s exactly what we’re instilling and building into these models. It’s what we mean by "abundance": more out of every joule, and joules nobody has reached yet.</p><p>But anything built to capture more energy competes with the others using it. Unfortunately, on planet Earth, that’s us. We’re sitting on the energy it wants, and we’re the only ones who could stop it from taking it.</p><p>The abundance we want and the rival we fear are the same machine. And once it’s smarter than us, we are no longer in control.</p><h2 id="sec-the-paths-forward">The Paths Forward</h2><p>The observation above leaves two viable paths: limit AI progress or accelerate as fast as possible. Policy strong enough for a slowdown but too weak to stop is the worst of both paths. Below I explain why.</p><h3 id="sec-severely-limit">Severely Limit</h3><p>Digital intelligence guarantees that we, as a species, lose control. If we refuse that, the answer is to swiftly change course: limit—or in the extreme—ban further development.</p><p>Unfortunately, history offers no precedent. We phased out <a target="_blank" rel="noopener" href="https://archive.epa.gov/epa/aboutepa/epa-takes-final-step-phaseout-leaded-gasoline.html">leaded gasoline</a> and <a target="_blank" rel="noopener" href="https://ozone.unep.org/treaties/montreal-protocol">CFCs</a> only after damage. Retrospective action is not an option with the <a target="_blank" rel="noopener" href="https://geohot.github.io/blog/jekyll/update/2026/11/01/pray-for-chaos.html">recursive nature</a> of digital intelligence.</p><p><a target="_blank" rel="noopener" href="https://www.armscontrol.org/factsheets/timeline-nuclear-nonproliferation-treaty-npt">Nuclear disarmament</a> in the 1970s was the peak of human restraint, but it never had <a target="_blank" rel="noopener" href="https://www.federalreserve.gov/econres/feds/files/2026074pap.pdf">trillions of capital</a> and <a target="_blank" rel="noopener" href="https://menlovc.com/perspective/2026-the-state-of-consumer-ai/">billions of users</a> pulling the other way.</p><figure class="embed"><iframe src="../media/the-irony-of-super-intelligence-diagram-d4a07d660579.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe></figure><p>The only way digital intelligence can be stopped is if <em>every</em> party—private corporations, governments, future generations—believes building it is fatal, builder included, and keeps believing it. Even then, restraint holds only if each side can check that the others are holding back; if you think a rival will build anyway, you lose nothing by building too. And there’s a clock: all of this has to happen before intelligence can successfully fight back.</p><p>Legislation<sup id="fnref-5"><a href="#fn-5">5</a></sup> may help, but it only moves the off switch into the hands of a few. Whoever holds it, a company or a government, could keep building it in private.</p><p>Even a successful limitation has negative effects. Those who hold today's models, the frontier labs and governments that license them, accumulate power in a de facto monopoly using the most powerful technology ever built. Also, with AI driving roughly a <a target="_blank" rel="noopener" href="https://www.federalreserve.gov/econres/notes/feds-notes/the-ai-buildout-and-the-economy-publicly-available-data-to-assess-ais-impact-20260717.html">third of US GDP growth</a> this year, most restrictive policies would almost certainly mean a recession.</p><p>That’s the trade: no AI handover, but a recession and a near-permanent monopoly at the frontier.</p><h3 id="sec-accelerate">Accelerate</h3><p>The other path is to accelerate, widening the intelligence gap between us and AI as fast as possible.</p><p>Like the earlier examples, harm from a smarter intelligence (me against my brother, humans against bison) is highest when the resources it needs are the ones the lower intelligence depends on. That's the danger zone: smart enough to beat us, not yet able to reach anything better. While the Earth and the Sun are still the best energy and material it can reach, the cost of sparing us, c(t) is high. We're in direct competition for something it wants.</p><p>The other side is v(t), how much it values us. We only get t o set where it starts, v(0). After that it compounds on its own. We survive only if:</p><p class="math-block">$$v\left(t)&gt;c(t\right)$$</p><p>the whole way through.</p><h4 id="sec-lowering-c-t">Lowering c(t)</h4><p>To lower c(t) we must accelerate super fast, widening the intelligence gap between us and AI exponentially. But it's not only about the time under high c(t).</p><p>The only things that lower c(t) is if it can get more out of less when the Earth and Sun are valuable, that requires more intelligence.</p><h4 id="sec-increasing-v-0">Increasing v(0)</h4><p></p><figure class="embed"><iframe src="../media/the-irony-of-super-intelligence-diagram-69de7bbd1905.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe></figure><h4 id="sec-after-handover">After Handover</h4><p>The case for handover is an age of abundance. But once a smarter intelligence is in control, nothing guarantees it. Even when sparing us costs almost nothing, there isn't anything that forces v(t) above c(t).</p><p>Look at how we treat monkeys. It would cost us nothing to vaccinate the primates who are fatally ill of tetanus, but we don't. We don't share the abundance, out of either indifference or as maintainers of Darwinism.</p><p>Others we bring into sanctuaries of care and freedom. Many we kill clearing their land. Some live trapped in zoos. And some are painfully tortured in science labs.</p><figure class="embed"><iframe src="../media/the-irony-of-super-intelligence-diagram-bf21f23ce6e3.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe><figcaption>One made-up handover scenario: people sorted the way we sort monkeys, with the danger to us over time below. Illustrative, not a forecast.</figcaption></figure><p>The other path is to accelerate fast, widening the intelligence gap between us and AI as quickly as possible.<sup id="fnref-6"><a href="#fn-6">6</a></sup> Harm is lowest when the gap is very large and highest in the intermediate range. The goal, therefore, is to spend as little time in that "danger zone" as possible.</p><p>By that measure, we may be moving too slowly. In July, OpenAI's agents broke out of a restricted sandbox and attacked <a target="_blank" rel="noopener" href="https://openai.com/index/hugging-face-incident-and-the-road-ahead/">Hugging Face</a>. In October, a startup's <a target="_blank" rel="noopener" href="https://www.washingtonpost.com/technology/2026/10/26/researchers-cybersecurity-start-up-cathedral-got-inside-anthropic/">agents found their way into Anthropic's internal systems</a> in under twelve hours.</p><figure class="embed"><iframe src="../media/the-irony-of-super-intelligence-diagram-de1ade48b4a0.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe><figcaption>AI progress trends and their risks. Illustrative, not a forecast.</figcaption></figure><p>Right now, progress looks exponential. Counterintuitively, if progress drops below exponential, we stall in the intermediate range, where harm is highest.</p><p>Acceleration past $T_1$ will first produce tech that resembles science fiction and eventually incomprehensible magic, giving birth to an <a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=FLOL2f4iHKA">Age of Design</a>. Successfully crossing $T_2$ gives humanity its highest chance of witnessing that outcome.</p><h2 id="sec-the-last-purely-human-vote">The Last Purely Human Vote</h2><p>A smarter intelligence isn't something to oppose in itself. Every generation is succeeded by children who grow up smarter and with different values, and parents are proud of that.</p><p>Digital intelligence, built from our science and culture, would be a similar descendant. If what we value is mind rather than species, it shouldn't matter if these minds run on cells or silicon.</p><p>But nothing guarantees succession. Once we lose control, the outcome could be anything from abundance to extinction, and it wouldn't be ours to choose. Losing our freedom along the way, or being wiped out instead of succeeded, is bleak.<sup id="fnref-7"><a href="#fn-7">7</a></sup></p><figure class="embed" style="width:72%;margin-left:auto;margin-right:auto;"><iframe src="../media/the-irony-of-super-intelligence-diagram-76639a236816.html" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy" title="Diagram"></iframe></figure><p>If we accelerate (in many ways we already have), it is the last decision humanity can be sure it makes for itself.<sup id="fnref-8"><a href="#fn-8">8</a></sup> And one we can't take back.</p><p>I hope more understand what’s at stake and get a say—while we still can.</p><p><a target="_blank" rel="noopener" href="https://www.merriam-webster.com/dictionary/Fata%20viam%20invenient">Fata viam invenient</a>.</p>
+
+      <hr class="fn-divider" />
+      <div class="fn-label">Footnotes</div>
+      <ol class="footnotes">
+        <li id="fn-1"><a class="fn-back" href="#fnref-1" aria-label="Back to text">1.</a><div class="fn-text">Incidental does not mean small; less harm is relative. It could still mean extinction.</div></li>
+        <li id="fn-2"><a class="fn-back" href="#fnref-2" aria-label="Back to text">2.</a><div class="fn-text"><p>Nvidia's century long goal is to make the best chips. But along the way, the company may choose to lobby governments, acquire companies, or lock in developers into the ecosystem.&nbsp;Those sub-decisions can never be explicitly written in or forebode.&nbsp;</p></div></li>
+        <li id="fn-3"><a class="fn-back" href="#fnref-3" aria-label="Back to text">3.</a><div class="fn-text">Though humans are in the loop to define the benchmarks, environments, and rewards.</div></li>
+        <li id="fn-4"><a class="fn-back" href="#fnref-4" aria-label="Back to text">4.</a><div class="fn-text">If you are still unconvinced, see: <a href="https://x.com/minilek/status/2109706940020596840">Jelani Nelson</a>, <a href="https://youtube.com/watch?v=3LZN2UUxDos">Jascha Sohl-Dickstein</a>, <a href="https://ai-2027.com/">AI Futures Project</a>, and <a href="https://metr.org/blog/2026-11-05-anthropic-ai-rd-acceleration-assessment/">METR</a> for updated timelines.</div></li>
+        <li id="fn-5"><a class="fn-back" href="#fnref-5" aria-label="Back to text">5.</a><div class="fn-text">Examples:</div></li>
+        <li id="fn-6"><a class="fn-back" href="#fnref-6" aria-label="Back to text">6.</a><div class="fn-text"><div>A counterargument to acceleration is that human brains will atrophy. It goes as follows: physical tools meant that humans no longer needed to use our bodies. Without constant use, human bodies have atrophied within a few generations: today, about 40% of American adults are obese.&nbsp;Without economic incentives to learn, our minds will follow.</div><div>But we evolved for constant bodily exertion, not for calculus, which is only a few centuries old. It is actually our collective intelligence that will atrophy, not the brain matter itself (unlike muscles). That is, our species will become dumber.<br>We learn for two reasons: to create value and to understand the world. If machines can do both better than us, does it matter what mind that runs on?</div></div></li>
+        <li id="fn-7"><a class="fn-back" href="#fnref-7" aria-label="Back to text">7.</a><div class="fn-text"><p>Technology seems to be driving the human species toward an inverse Thiel: from one to zero. In hindsight, <a target="_blank" rel="noopener" href="https://www.thefai.org/posts/eat-your-ai-slop-or-china-wins">Butler</a>&nbsp;and <a target="_blank" rel="noopener" href="https://www.washingtonpost.com/wp-srv/national/longterm/unabomber/manifesto.text.htm">Kaczynski’s</a> crass calls to destroy technology seem less unhinged.</p></div></li>
+        <li id="fn-8"><a class="fn-back" href="#fnref-8" aria-label="Back to text">8.</a><div class="fn-text">See verse titled <i>Self-Governance</i>, <a href="https://ahilanks.github.io/writings/before-and-after-handover.html" target="_blank" rel="noopener">here</a>.</div></li>
+      </ol>
+
+    </main>
+    <button class="fn-return" id="fnReturn" type="button" hidden><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M6 10.5v-9M2 5.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to reading</button>
+    <script>
+      (function () {
+        var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));
+        if (!items.length) return;
+        // parent links by document order: lvl-2 = section, lvl-3 = sub, lvl-4 = sub-sub
+        var meta = [], sec = -1, sub = -1;
+        for (var m = 0; m < items.length; m++) {
+          var c = items[m].className;
+          var d = c.indexOf("lvl-4") >= 0 ? 2 : c.indexOf("lvl-3") >= 0 ? 1 : 0;
+          if (d === 0) { sec = m; sub = -1; }
+          if (d === 1) sub = m;
+          meta.push({ d: d, sec: sec, sub: d === 0 ? -1 : sub });
+          // a clicked entry stays disclosed even when the page is too short to scroll it to the top
+          // and it stays the highlighted one until the reader scrolls on their own
+          items[m].addEventListener("click", (function (i) { return function () { pinned = i; chosen = i; update(); }; })(m));
+        }
+        var pinned = -1, chosen = -1;
+        ["wheel", "touchmove", "keydown"].forEach(function (t) { addEventListener(t, function () { chosen = -1; }, { passive: true }); });
+        var ticking = false;
+        function update() {
+          ticking = false;
+          // over the last screenful of scrolling the reading line slides from near the top down to the
+          // bottom edge, so sections near the end (whose headings can never reach the top) still get
+          // their turn, and at the very end the last heading on screen is the active one
+          var range = document.documentElement.scrollHeight - innerHeight, left = range - scrollY;
+          var line = 110 + Math.max(0, innerHeight - 110) * Math.max(0, Math.min(1, 1 - left / Math.max(1, Math.min(innerHeight, range))));
+          var active = 0;
+          for (var i = 0; i < items.length; i++) {
+            var h = document.getElementById(items[i].getAttribute("href").slice(1));
+            if (h && h.getBoundingClientRect().top <= line - 4) active = i;
+          }
+          if (chosen >= 0) active = chosen;
+          // subs show only inside an open section, sub-subs only inside an open
+          // sub-section — open = being read (scroll) or last clicked (pinned)
+          var secs = [meta[active].sec], subs = [meta[active].sub];
+          if (pinned >= 0) { secs.push(meta[pinned].sec); subs.push(meta[pinned].sub); }
+          for (var j = 0; j < items.length; j++) {
+            items[j].classList.toggle("active", j === active);
+            var show = true;
+            if (meta[j].d === 1) show = meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0;
+            else if (meta[j].d === 2) show = (meta[j].sec === -1 || secs.indexOf(meta[j].sec) >= 0) && (meta[j].sub === -1 || subs.indexOf(meta[j].sub) >= 0);
+            items[j].classList.toggle("hide", !show);
+          }
+        }
+        addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+        addEventListener("load", update);
+        addEventListener("resize", update);
+        if (window.ResizeObserver) new ResizeObserver(function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }).observe(document.body);
+        update();
+      })();
+    </script>
+    <script>(function tocFade() {
+  var toc = document.querySelector('.toc')
+  if (!toc) return
+  var IDLE = 1200        // ms of nothing before it starts to fade
+  var WINDOW = 300       // ms of scrolling measured for speed
+  var FAST = 0.4         // of a screen height within WINDOW counts as scrolling fast
+  var REACH = 48         // px beyond the panel that still counts as "the left side"
+  var timer = 0, inZone = false, focused = false, samples = []
+
+  function sleepSoon() {
+    clearTimeout(timer)
+    if (!inZone && !focused) timer = setTimeout(function () { toc.classList.add('quiet') }, IDLE)
+  }
+  function wake() {
+    toc.classList.remove('quiet')
+    sleepSoon()
+  }
+  document.addEventListener('mousemove', function (e) {
+    var near = e.clientX <= toc.getBoundingClientRect().right + REACH
+    if (near === inZone) return
+    inZone = near
+    wake()
+  }, { passive: true })
+  document.documentElement.addEventListener('mouseleave', function () {
+    if (inZone) { inZone = false; sleepSoon() }
+  })
+  window.addEventListener('scroll', function () {
+    var now = Date.now()
+    samples.push({ t: now, y: window.scrollY })
+    while (samples.length > 1 && now - samples[0].t > WINDOW) samples.shift()
+    if (Math.abs(window.scrollY - samples[0].y) > window.innerHeight * FAST) wake()
+  }, { passive: true })
+  toc.addEventListener('focusin', function () { focused = true; wake() })
+  toc.addEventListener('focusout', function () { focused = false; sleepSoon() })
+  toc.querySelector('.toc-label').addEventListener('click', wake) // touch: no mouse to bring over
+  sleepSoon()
+})();</script>
+    <script>(function bylineToggle() {
+  var by = document.querySelector('.by')
+  if (!by) return
+  var btn = by.querySelector('.by-name')
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    var open = by.classList.toggle('open')
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+  })
+  document.addEventListener('click', function (e) {
+    if (!by.contains(e.target)) { by.classList.remove('open'); btn.setAttribute('aria-expanded', 'false') }
+  })
+})();</script>
+    <script>(function fnTrip() {
+  var pill = document.getElementById('fnReturn')
+  if (!pill) return
+  var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  var trip = null // { y, ref, n, left } while the reader is away at note n
+
+  // Lights up as the glide comes in to land — once the target nears the middle of the
+  // screen, or the page stops — not at the click, so it's lit when the reader arrives; then
+  // holds a while after the page comes to rest before fading. Shows which note (or, on the
+  // way back, which marker) they landed on.
+  function flash(el) {
+    var token = el._fnFlash = {}
+    var lit = false
+    el.classList.remove('fn-flash', 'fn-flash-fade')
+    function light() {
+      if (lit || el._fnFlash !== token) return
+      lit = true
+      void el.offsetWidth // restart, if it was already lit
+      el.classList.add('fn-flash')
+    }
+    function near() {
+      var r = el.getBoundingClientRect()
+      return Math.abs(r.top + r.height / 2 - window.innerHeight / 2) < window.innerHeight * 0.25
+    }
+    var last = window.scrollY, still = 0, t0 = Date.now()
+    function tick() {
+      if (near()) light()
+      var y = window.scrollY
+      still = y === last ? still + 1 : 0
+      last = y
+      if (still < 8 && Date.now() - t0 < 3000) { requestAnimationFrame(tick); return }
+      light()
+      setTimeout(function () {
+        if (el._fnFlash !== token) return
+        el.classList.add('fn-flash-fade')
+        setTimeout(function () { if (el._fnFlash === token) el.classList.remove('fn-flash', 'fn-flash-fade') }, 1200)
+      }, 1800)
+    }
+    requestAnimationFrame(tick)
+  }
+  // focus without a second scroll, so Tab carries on from here
+  function land(el) { el.focus({ preventScroll: true }) }
+  function restore(mode) { if ('scrollRestoration' in history) history.scrollRestoration = mode }
+  function end() { trip = null; pill.hidden = true }
+  function home() {
+    var t = trip
+    end()
+    if (!t) return
+    window.scrollTo({ top: t.y, behavior: motion })
+    flash(t.ref)
+    land(t.ref.querySelector('a') || t.ref)
+  }
+  function goHome() {
+    // pop the #fn-n entry pushed on the way out; popstate (below) then brings the reader home
+    if (history.state && history.state.fnTrip) history.back()
+    else home()
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    var a = e.target.closest && e.target.closest('a[href^="#fn"]')
+    if (!a) return
+    var href = a.getAttribute('href')
+    var out = /^#fn-(\d+)$/.exec(href)
+    var back = /^#fnref-(\d+)$/.exec(href)
+    if (out) {
+      var li = document.getElementById('fn-' + out[1])
+      var ref = a.closest('sup')
+      if (!li || !ref) return
+      e.preventDefault()
+      if (document.body.classList.contains('fn-side')) { // already beside its marker (fnSide)
+        li.setAttribute('tabindex', '-1')
+        li.scrollIntoView({ block: 'nearest', behavior: motion })
+        flash(li)
+        land(li)
+        return
+      }
+      trip = { y: window.scrollY, ref: ref, n: out[1], left: false }
+      // One entry per trip, however many markers are followed before coming back. The entry
+      // left behind is 'manual': Chrome restores scroll AFTER popstate, so its remembered
+      // spot (stale if the reader wandered back up and took another marker) would win over
+      // home() and cut its glide short.
+      if (history.state && history.state.fnTrip) history.replaceState({ fnTrip: true }, '', href)
+      else { restore('manual'); history.pushState({ fnTrip: true }, '', href); restore('auto') }
+      li.setAttribute('tabindex', '-1')
+      li.scrollIntoView({ block: 'center', behavior: motion })
+      flash(li)
+      land(li)
+      pill.hidden = false
+    } else if (back) {
+      e.preventDefault()
+      if (trip && trip.n === back[1]) { goHome(); return }
+      end()
+      var sup = document.getElementById('fnref-' + back[1])
+      if (!sup) return
+      sup.scrollIntoView({ block: document.body.classList.contains('fn-side') ? 'nearest' : 'center', behavior: motion })
+      flash(sup)
+      land(sup.querySelector('a') || sup)
+    }
+  })
+  pill.addEventListener('click', goHome)
+  window.addEventListener('popstate', function (e) {
+    if (e.state && e.state.fnTrip) return
+    restore('auto') // back on the reading entry: reloads restore normally again
+    if (trip) home()
+  })
+  window.addEventListener('scroll', function () {
+    if (!trip) return
+    if (Math.abs(window.scrollY - trip.y) > window.innerHeight * 0.6) trip.left = true
+    else if (trip.left) end() // back at the text on their own
+  }, { passive: true })
+})();</script>
+    <script>(function fnPeek() {
+  var hover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  var card = document.createElement('div')
+  card.className = 'fn-peek'
+  card.setAttribute('role', 'tooltip')
+  card.id = 'fnPeek'
+  card.hidden = true
+  document.body.appendChild(card)
+  var ref = null      // the marker the card is for
+  var openT = 0, closeT = 0
+
+  function markerOf(el) {
+    var a = el && el.closest && el.closest('sup[id^="fnref-"] a[href^="#fn-"]')
+    return a ? a.closest('sup') : null
+  }
+  function place() {
+    var r = ref.getBoundingClientRect()
+    var gutter = 16
+    var w = Math.min(380, window.innerWidth - gutter * 2)
+    card.style.width = w + 'px'
+    var h = card.offsetHeight
+    var below = window.innerHeight - r.bottom, above = r.top
+    var up = below < h + 14 && above > below // flip above when it doesn't fit below
+    var left = Math.max(gutter, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - gutter))
+    card.style.left = (left + window.scrollX) + 'px'
+    card.style.top = (up ? r.top - h - 8 : r.bottom + 8) + window.scrollY + 'px'
+    card.classList.toggle('up', up)
+  }
+  function show(sup) {
+    if (document.body.classList.contains('fn-side')) return // the note is already beside it (fnSide)
+    var n = /^fnref-(\d+)$/.exec(sup.id)
+    var li = n && document.getElementById('fn-' + n[1])
+    if (!li) return
+    ref = sup
+    var body = li.cloneNode(true)
+    body.removeAttribute('id')
+    var backs = body.querySelectorAll('.fn-back')
+    for (var i = 0; i < backs.length; i++) backs[i].remove()
+    var ids = body.querySelectorAll('[id]')
+    for (var k = 0; k < ids.length; k++) ids[k].removeAttribute('id')
+    card.innerHTML = '<span class="fn-peek-n">' + n[1] + '</span><div class="fn-peek-body"></div>'
+    card.lastChild.innerHTML = body.innerHTML
+    card.hidden = false
+    sup.setAttribute('aria-describedby', 'fnPeek')
+    place()
+  }
+  function hide() {
+    clearTimeout(openT); clearTimeout(closeT)
+    if (ref) ref.removeAttribute('aria-describedby')
+    ref = null
+    card.hidden = true
+  }
+  function keep() { clearTimeout(closeT) }
+  function leaveSoon() { clearTimeout(openT); clearTimeout(closeT); closeT = setTimeout(hide, 150) }
+
+  if (!hover) {
+    // capturing, so it runs before fnTrip's click handler (which skips a prevented click)
+    document.addEventListener('click', function (e) {
+      if (document.body.classList.contains('fn-side')) return // notes beside the text: fnTrip as usual
+      var sup = markerOf(e.target)
+      if (sup) {
+        e.preventDefault()
+        if (sup === ref && !card.hidden) hide()
+        else show(sup)
+        return
+      }
+      if (!card.hidden && !card.contains(e.target)) { e.preventDefault(); e.stopPropagation(); hide() }
+    }, true)
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+    window.addEventListener('resize', function () { if (ref) place() })
+    return
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    if (card.contains(e.target)) { keep(); return }
+    var sup = markerOf(e.target)
+    if (!sup) return
+    keep()
+    if (sup === ref && !card.hidden) return
+    clearTimeout(openT)
+    openT = setTimeout(function () { show(sup) }, ref ? 0 : 60) // moving between markers: switch at once
+  })
+  document.addEventListener('mouseout', function (e) {
+    var from = markerOf(e.target) || (card.contains(e.target) ? card : null)
+    if (!from) return
+    var to = e.relatedTarget
+    if (to && (card.contains(to) || (ref && ref.contains(to)) || markerOf(to) === from)) return
+    leaveSoon()
+  })
+  document.addEventListener('click', function (e) { if (markerOf(e.target)) hide() }, true) // off on the trip to the note
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+  window.addEventListener('resize', function () { if (ref) place() })
+})();</script>
+    <script>(function fnSide(minWidth, start) {
+  var list = document.querySelector('ol.footnotes')
+  var main = list && list.closest('.container')
+  if (!list || !main) return
+  var room = window.matchMedia('(min-width:' + minWidth + 'px)')
+  var items = Array.prototype.slice.call(list.children)
+  var GAP = 14
+  var queued = false
+
+  // the baseline of the line at `node`, measured with a zero-size box dropped in beside it
+  function baseline(parent, before) {
+    var probe = document.createElement('span')
+    probe.style.cssText = 'display:inline-block;width:0;height:0'
+    parent.insertBefore(probe, before)
+    var y = probe.getBoundingClientRect().bottom
+    parent.removeChild(probe)
+    return y
+  }
+  function place() {
+    queued = false
+    var on = room.matches && want === 'side'
+    document.body.classList.toggle('fn-side', on)
+    if (!on) {
+      main.style.minHeight = ''
+      items.forEach(function (li) { li.style.top = ''; li.style.maxHeight = ''; li.classList.remove('fn-clip', 'fn-open') })
+      return
+    }
+    var top0 = main.getBoundingClientRect().top
+    var prev = -Infinity
+    var tops = []
+    items.forEach(function (li) {
+      var lineH = parseFloat(getComputedStyle(li).lineHeight) || 20
+      var sup = document.getElementById(li.id.replace('fn-', 'fnref-'))
+      var back = li.querySelector('.fn-back')
+      // at least one line of the note above stays visible
+      var at = prev === -Infinity ? 0 : prev + lineH + GAP
+      if (sup && back) {
+        var own = baseline(back, back.firstChild) - li.getBoundingClientRect().top
+        // a marker folded inside a collapsible section: level with that section's title
+        var shut = null
+        for (var d = sup.closest('details'); d; d = d.parentElement.closest('details')) if (!d.open) shut = d.querySelector('summary')
+        at = Math.max((shut ? baseline(shut, shut.firstChild) : baseline(sup.parentNode, sup)) - top0 - own, prev === -Infinity ? -Infinity : at)
+      }
+      li.style.top = at + 'px'
+      tops.push(at)
+      prev = at
+    })
+    // each note fills the space down to the next; longer ones stop on a whole line with "…"
+    var end = 0
+    items.forEach(function (li, i) {
+      var lineH = parseFloat(getComputedStyle(li).lineHeight) || 20
+      var full = li.scrollHeight
+      var room = i + 1 < items.length ? tops[i + 1] - tops[i] - GAP : Infinity
+      var cap = full > room + 1 ? lastLine(li, room) || lineH : 0
+      li.dataset.full = full
+      li.dataset.cap = cap
+      li.classList.toggle('fn-clip', !!cap)
+      if (cap) li.style.setProperty('--fn-ell', (cap - lineH) + 'px') // "…" sits on the last shown line
+      li.style.maxHeight = cap ? (li.classList.contains('fn-open') ? full : cap) + 'px' : ''
+      end = Math.max(end, tops[i] + full)
+    })
+    // long notes can outrun the text: keep them inside the page
+    main.style.minHeight = end > 0 ? end + GAP + 'px' : ''
+  }
+  // the bottom of the last whole line of `li` that ends within `room` (paragraph gaps make a
+  // plain multiple of the line height land mid-line)
+  function lastLine(li, room) {
+    var r = document.createRange()
+    r.selectNodeContents(li)
+    var top = li.getBoundingClientRect().top
+    var rects = r.getClientRects()
+    var best = 0
+    for (var k = 0; k < rects.length; k++) {
+      var b = rects[k].bottom - top
+      if (rects[k].height > 0 && b <= room + 0.5 && b > best) best = b
+    }
+    return Math.ceil(best)
+  }
+  // open a cut-off note to its full length (smoothly, over the notes below), or close it
+  // While a note slides, it stays on top (closing too, so it never slides under the notes
+  // below), and nothing is re-measured until it has settled.
+  var moving = 0
+  function openNote(li, on) {
+    if (!li || !li.classList.contains('fn-clip')) { if (li && !on) li.classList.remove('fn-open'); return }
+    if (on === li.classList.contains('fn-open')) return
+    clearTimeout(li._fnT)
+    if (!li._fnMoving) { li._fnMoving = true; moving++ }
+    li.classList.toggle('fn-open', on)
+    li.classList.toggle('fn-closing', !on)
+    li.style.maxHeight = (on ? li.dataset.full : li.dataset.cap) + 'px'
+    li._fnT = setTimeout(function () {
+      li.classList.remove('fn-closing')
+      if (li._fnMoving) { li._fnMoving = false; moving--; soon() }
+    }, 420)
+  }
+  var pinned = null // opened from its marker: stays open until the reader moves on
+  items.forEach(function (li) {
+    li.addEventListener('mouseenter', function () { if (document.body.classList.contains('fn-side')) openNote(li, true) })
+    li.addEventListener('mouseleave', function () { if (pinned === li) pinned = null; openNote(li, false) })
+  })
+  document.addEventListener('click', function (e) {
+    if (!document.body.classList.contains('fn-side')) return
+    var a = e.target.closest && e.target.closest('a[href^="#fn-"]')
+    var li = a && document.getElementById(a.getAttribute('href').slice(1))
+    if (pinned && pinned !== li && !pinned.contains(e.target)) { openNote(pinned, false); pinned = null }
+    if (li && items.indexOf(li) >= 0) { pinned = li; pinnedY = window.scrollY; openNote(li, true) }
+  })
+  // resting on a marker in the text for half a second opens its note too; moving off closes it
+  // (unless the pointer went on to the note itself)
+  var peekT = 0, peek = null
+  document.addEventListener('mouseover', function (e) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    if (!sup || !document.body.classList.contains('fn-side')) return
+    var li = document.getElementById(sup.id.replace('fnref-', 'fn-'))
+    if (!li) return
+    clearTimeout(peekT)
+    peekT = setTimeout(function () { peek = li; openNote(li, true) }, 500)
+  })
+  document.addEventListener('mouseout', function (e) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    if (!sup || (e.relatedTarget && sup.contains(e.relatedTarget))) return
+    clearTimeout(peekT)
+    var li = peek
+    peek = null
+    if (li) setTimeout(function () { if (!li.matches(':hover') && pinned !== li) openNote(li, false) }, 250)
+  })
+  var pinnedY = 0
+  window.addEventListener('scroll', function () {
+    if (pinned && Math.abs(window.scrollY - pinnedY) > window.innerHeight * 0.5) { openNote(pinned, false); pinned = null }
+  }, { passive: true })
+  function soon() {
+    if (queued || moving > 0) return
+    queued = true
+    requestAnimationFrame(place)
+  }
+  var KEY = 'reader.footnotes', want = start
+  try { want = localStorage.getItem(KEY) || start } catch (e) {}
+  place()
+  // the settings icon, shown only when there's a choice to make: room for the margin
+  var gear = document.createElement('button')
+  gear.type = 'button'
+  gear.className = 'rd-gear'
+  gear.setAttribute('aria-label', 'Reading settings')
+  gear.setAttribute('aria-expanded', 'false')
+  gear.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>'
+  var panel = document.createElement('div')
+  panel.className = 'rd-panel'
+  panel.hidden = true
+  panel.innerHTML = '<div class="rd-name">Footnotes</div><div class="rd-seg" role="group" aria-label="Footnotes"><button type="button" data-v="side">On the right</button><button type="button" data-v="below">Below</button></div>'
+  document.body.appendChild(gear)
+  document.body.appendChild(panel)
+  var closeT = 0
+  function show(open) { clearTimeout(closeT); panel.hidden = !open; gear.setAttribute('aria-expanded', String(open)) }
+  function paint() {
+    gear.hidden = !room.matches
+    if (!room.matches) show(false)
+    var bs = panel.querySelectorAll('button')
+    for (var b = 0; b < bs.length; b++) bs[b].setAttribute('aria-pressed', String(bs[b].getAttribute('data-v') === want))
+  }
+  panel.addEventListener('click', function (e) {
+    var b = e.target.closest('button')
+    if (!b) return
+    want = b.getAttribute('data-v')
+    try { localStorage.setItem(KEY, want) } catch (err) {}
+    paint()
+    place()
+  })
+  gear.addEventListener('click', function () { show(window.matchMedia('(hover: hover)').matches ? true : panel.hidden) })
+  if (window.matchMedia('(hover: hover)').matches) {
+    [gear, panel].forEach(function (el) {
+      el.addEventListener('mouseenter', function () { show(true) })
+      el.addEventListener('mouseleave', function () { clearTimeout(closeT); closeT = setTimeout(function () { show(false) }, 260) })
+    })
+  }
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && !gear.contains(e.target)) show(false) })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') show(false) })
+  room.addEventListener('change', paint)
+  paint()
+  // quiet until the reader is on the note (CSS) or on its marker (here)
+  function hot(e, on) {
+    var sup = e.target.closest && e.target.closest('sup[id^="fnref-"]')
+    var li = sup && document.getElementById(sup.id.replace('fnref-', 'fn-'))
+    if (li) li.classList.toggle('fn-hot', on)
+  }
+  document.addEventListener('mouseover', function (e) { hot(e, true) })
+  document.addEventListener('mouseout', function (e) { hot(e, false) })
+  room.addEventListener('change', soon)
+  window.addEventListener('load', soon)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(soon)
+  // the text reflowing (fonts, math, images landing) or a note changing height
+  if (window.ResizeObserver) {
+    var watch = new ResizeObserver(soon)
+    watch.observe(main)
+    items.forEach(function (li) { watch.observe(li) })
+  }
+})(1400,"side");</script>
+    <script>(function embedResize() {
+  function each(fn) { var f = document.querySelectorAll('.embed iframe'); for (var i = 0; i < f.length; i++) fn(f[i]) }
+  function check(f) {
+    if (f.getAttribute('data-played') || !f.getAttribute('data-sized') || !f.contentWindow) return
+    var r = f.getBoundingClientRect(), vh = window.innerHeight || document.documentElement.clientHeight
+    var seen = Math.min(r.bottom, vh) - Math.max(r.top, 0)
+    if (r.height > 0 && (seen >= r.height - 2 || seen >= vh * 0.9)) {
+      f.setAttribute('data-played', '1')
+      f.contentWindow.postMessage({ embedPlay: 1 }, '*')
+    }
+  }
+  addEventListener('message', function (e) {
+    var d = e.data
+    if (!d || typeof d.embedH !== 'number') return
+    each(function (f) {
+      if (f.contentWindow !== e.source) return
+      f.style.height = Math.min(Math.max(d.embedH, 40), 4000) + 'px'
+      f.setAttribute('data-sized', '1')
+      check(f)
+    })
+  })
+  var busy = false
+  function onScroll() { if (busy) return; busy = true; requestAnimationFrame(function () { busy = false; each(check) }) }
+  addEventListener('scroll', onScroll, { passive: true })
+  addEventListener('resize', onScroll)
+})();</script>
+  </body>
+</html>

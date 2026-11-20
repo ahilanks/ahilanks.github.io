@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><script>(function holdDiagram() {
+  var W = window, P = W.performance
+  var raw = {
+    setTimeout: W.setTimeout.bind(W), setInterval: W.setInterval.bind(W),
+    clearTimeout: W.clearTimeout.bind(W), clearInterval: W.clearInterval.bind(W),
+    raf: W.requestAnimationFrame.bind(W), caf: W.cancelAnimationFrame.bind(W),
+    now: P.now.bind(P),
+  }
+  W.__embedRaw = raw
+  if (W.parent === W) return
+  var playing = false, frozen = raw.now(), offset = 0, q = [], ids = {}, next = -1, anims = []
+  var css = document.createElement('style')
+  css.textContent = '*,*::before,*::after{animation-play-state:paused!important}'
+  document.documentElement.appendChild(css)
+  P.now = function () { return playing ? raw.now() - offset : frozen }
+  function fake(kind, cb, ms, args) { var id = next--; q.push({ id: id, kind: kind, cb: cb, ms: ms, args: args }); return id }
+  function drop(id) {
+    if (ids[id] != null) return ids[id]
+    for (var i = 0; i < q.length; i++) if (q[i].id === id) { q.splice(i, 1); return null }
+    return id
+  }
+  function wrapRaf(cb) { return function (t) { cb(t - offset) } }
+  W.requestAnimationFrame = function (cb) { return playing ? raw.raf(wrapRaf(cb)) : fake('raf', cb) }
+  W.setTimeout = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setTimeout.apply(null, [cb, ms].concat(a)) : fake('t', cb, ms, a) }
+  W.setInterval = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setInterval.apply(null, [cb, ms].concat(a)) : fake('i', cb, ms, a) }
+  W.cancelAnimationFrame = function (id) { id = drop(id); if (id != null) raw.caf(id) }
+  W.clearTimeout = function (id) { id = drop(id); if (id != null) raw.clearTimeout(id) }
+  W.clearInterval = function (id) { id = drop(id); if (id != null) raw.clearInterval(id) }
+  var animate = W.Element && Element.prototype.animate
+  if (animate) Element.prototype.animate = function () {
+    var a = animate.apply(this, arguments)
+    if (!playing) { try { a.pause(); anims.push(a) } catch (e) {} }
+    return a
+  }
+  function svgs(fn) { var s = document.getElementsByTagName('svg'); for (var i = 0; i < s.length; i++) try { s[i][fn]() } catch (e) {} }
+  document.addEventListener('DOMContentLoaded', function () { if (!playing) svgs('pauseAnimations') })
+  function play() {
+    if (playing) return
+    playing = true
+    offset = raw.now() - frozen
+    css.remove()
+    svgs('unpauseAnimations')
+    anims.forEach(function (a) { try { a.play() } catch (e) {} })
+    var list = q; q = []
+    list.forEach(function (o) {
+      var f = typeof o.cb === 'function' ? o.cb : function () {}
+      if (o.kind === 'raf') ids[o.id] = raw.raf(wrapRaf(f))
+      else if (o.kind === 't') ids[o.id] = raw.setTimeout.apply(null, [f, o.ms].concat(o.args))
+      else ids[o.id] = raw.setInterval.apply(null, [f, o.ms].concat(o.args))
+    })
+  }
+  addEventListener('message', function (e) { if (e.source === W.parent && e.data && (e.data.embedPlay || e.data.embedClick)) play() })
+  addEventListener('pointerdown', play, true)
+  addEventListener('keydown', play, true)
+})()</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"><style>:root{--ink:#27323f;--muted:#6b7280;--accent:#e8743b;--line:rgba(39,50,63,0.15);--tint-green:#e6f2e6;--tint-red:#f8e4df;--tint-orange:#fbe3d4;--font:"Newsreader",Georgia,serif;--sans:system-ui,-apple-system,sans-serif}html,body{margin:0;background:transparent}body{font-family:var(--font);color:var(--ink)}svg,img,canvas{max-width:100%}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink: #27323f; --muted: #6b7280; --accent: #e8743b;
+    --line: rgba(39,50,63,0.15);
+    --tint-green: #e6f2e6; --tint-red: #f8e4df; --tint-orange: #fbe3d4;
+    --font: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--font); color: var(--ink); }
+  .fig { width: 100%; max-width: 560px; margin: 0 auto; padding: 8px 4px 0; box-sizing: border-box; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin-bottom: 18px; }
+  .controls button {
+    font-family: var(--font); font-size: 14px; color: var(--ink);
+    background: transparent; border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 12px; cursor: pointer; line-height: 1.3;
+  }
+  .controls button[aria-pressed="true"] { border-color: var(--ink); }
+  .controls button:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 2px; }
+  .controls .step { color: var(--muted); font-size: 14px; }
+
+  .matrix {
+    display: grid; grid-template-columns: auto 1fr 1fr;
+    align-items: stretch;
+  }
+  .colhead, .rowhead { font-size: 15px; color: var(--muted); }
+  .colhead { text-align: center; padding: 0 4px 8px; }
+  .rowhead { display: flex; align-items: center; justify-content: flex-end; padding-right: 12px; white-space: nowrap; }
+  .who { color: var(--ink); }
+  .cell {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 72px; font-size: 17px; white-space: nowrap;
+    border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+  .cell.c2 { border-right: 1px solid var(--line); }
+  .cell.r2 { border-bottom: 1px solid var(--line); }
+  .cell .a { color: var(--ink); }
+  .cell .b { color: var(--muted); }
+  .cell.eq { background: var(--tint-orange); }
+  .cell.eq .a, .cell.eq .b { color: var(--accent); }
+
+  /* The outcome the reader should watch: (restrain, restrain) */
+  .cell.goal { outline: 1.5px dashed var(--accent); outline-offset: -6px; }
+  .cell.goal.eq { outline-style: solid; }
+  .tag { font-size: 13px; color: var(--accent); margin-top: 3px; }
+
+  .verdict { text-align: center; font-size: 17px; color: var(--ink); margin: 16px 8px 0; transition: color 0.35s ease; }
+  .verdict.open { color: var(--accent); }
+
+  /* All three explanations share one grid cell, so the block is exactly as tall
+     as the longest one: no jumping between states, no reserved empty lines. */
+  .outcome { display: grid; text-align: center; font-size: 15px; color: var(--muted); margin: 6px 8px 0; line-height: 1.35; }
+  .outcome span { grid-area: 1 / 1; visibility: hidden; }
+  .outcome span.on { visibility: visible; }
+
+  @media (max-width: 420px) {
+    .cell { font-size: 15px; min-height: 62px; }
+    .colhead, .rowhead { font-size: 13px; }
+    .rowhead { padding-right: 8px; }
+    .verdict { font-size: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cell, .verdict { transition: none; } }
+</style>
+</head>
+<body>
+<div class="fig">
+  <div class="controls" role="group" aria-label="Who believes building is destructive">
+    <button data-s="0" aria-pressed="true">Neither convinced</button>
+    <span class="step" aria-hidden="true">→</span>
+    <button data-s="1" aria-pressed="false">Only A convinced</button>
+    <span class="step" aria-hidden="true">→</span>
+    <button data-s="2" aria-pressed="false">Both convinced</button>
+  </div>
+
+  <div class="matrix" aria-live="polite">
+    <div></div>
+    <div class="colhead"><span class="who">B</span> restrains</div>
+    <div class="colhead"><span class="who">B</span> builds</div>
+
+    <div class="rowhead"><span class="who">A</span>&nbsp;restrains</div>
+    <div class="cell goal" id="rr"></div>
+    <div class="cell c2" id="rb"></div>
+
+    <div class="rowhead"><span class="who">A</span>&nbsp;builds</div>
+    <div class="cell r2" id="br"></div>
+    <div class="cell c2 r2" id="bb"></div>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+  <div class="outcome" id="outcome" aria-live="polite"></div>
+</div>
+
+<script>
+(function () {
+  var NEG_INF = "\u2212\u221E";
+
+  // Believed payoff for a player.
+  // Convinced: any building is -inf for everyone.
+  // Unconvinced: build alone = win, restrain alone = lose, both build = race.
+  function pay(me, other, convinced) {
+    if (me === "R" && other === "R") return "0";
+    if (convinced) return NEG_INF;
+    if (me === "B" && other === "R") return "win";
+    if (me === "R" && other === "B") return "lose";
+    return "race";
+  }
+
+  var states = [
+    { a: false, b: false, eq: ["bb"], open: false,
+      verdict: "Mutual restraint: out of reach",
+      text: "Whatever the other side does, building looks better, so both build." },
+    { a: true, b: false, eq: ["rb", "bb"], open: false,
+      verdict: "Mutual restraint: still out of reach",
+      text: "B still finds building better whatever A does. A gets \u2212\u221E either way." },
+    { a: true, b: true, eq: ["rr", "bb"], open: true,
+      verdict: "Mutual restraint: possible, not guaranteed",
+      text: "Restraint is now stable, but so is building. Restraint holds only if each side can check the other." }
+  ];
+
+  var cells = { rr: ["R","R"], rb: ["R","B"], br: ["B","R"], bb: ["B","B"] };
+  var buttons = document.querySelectorAll(".controls button");
+  var outcome = document.getElementById("outcome");
+  var verdict = document.getElementById("verdict");
+
+  var lines = states.map(function (s) {
+    var sp = document.createElement("span");
+    sp.textContent = s.text;
+    outcome.appendChild(sp);
+    return sp;
+  });
+
+  function render(i) {
+    var s = states[i];
+    Object.keys(cells).forEach(function (id) {
+      var a = cells[id][0], b = cells[id][1];
+      var el = document.getElementById(id);
+      var html = '<span><span class="a">(' + pay(a, b, s.a) + '</span>,&nbsp;<span class="b">' + pay(b, a, s.b) + ')</span></span>';
+      if (id === "rr") html += '<span class="tag">mutual restraint</span>';
+      el.innerHTML = html;
+      el.classList.toggle("eq", s.eq.indexOf(id) !== -1);
+    });
+    verdict.textContent = s.verdict;
+    verdict.classList.toggle("open", s.open);
+    lines.forEach(function (sp, k) { sp.classList.toggle("on", k === i); });
+    buttons.forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-s") === String(i) ? "true" : "false");
+    });
+  }
+
+  buttons.forEach(function (btn) {
+    btn.addEventListener("click", function () { render(+btn.getAttribute("data-s")); });
+  });
+  render(0);
+})();
+</script>
+<script>(function bareBg() {
+  function plain(c) { // light and grey-ish (white, off-white, light grey)
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || '')
+    if (!m) return false
+    var r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4]
+    if (a === 0) return false
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 26
+  }
+  function run() {
+    var body = document.body
+    if (!body) return
+    var root = document.documentElement
+    var W = Math.max(root.scrollWidth, 1), H = Math.max(root.scrollHeight, 1)
+    var els = [root, body].concat(Array.prototype.slice.call(body.querySelectorAll('div,section,main,article,figure,header,svg,canvas,rect')))
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i]
+      var big = el === root || el === body
+      if (!big) {
+        var r = el.getBoundingClientRect()
+        big = r.width >= W * 0.85 && r.height >= H * 0.6
+      }
+      if (!big) continue
+      if (el.tagName.toLowerCase() === 'rect') {
+        if (plain(getComputedStyle(el).fill)) el.style.setProperty('fill', 'transparent', 'important')
+        continue
+      }
+      var cs = getComputedStyle(el)
+      if (plain(cs.backgroundColor) && (cs.backgroundImage === 'none' || !cs.backgroundImage)) {
+        el.style.setProperty('background-color', 'transparent', 'important')
+        el.style.setProperty('box-shadow', 'none', 'important')
+        if (el !== root && el !== body) el.style.setProperty('border-color', 'transparent', 'important')
+      }
+    }
+  }
+  run()
+  addEventListener('DOMContentLoaded', run)
+  addEventListener('load', function () { run(); (window.__embedRaw || window).setTimeout(run, 400) })
+})()</script><script>(function(){var d=document.documentElement,last=0,busy=0,R=window.__embedRaw||{raf:requestAnimationFrame.bind(window),setInterval:setInterval.bind(window)};function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}addEventListener("resize",fit);addEventListener("load",fit);fit();addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key||"").toLowerCase()==="s"){e.preventDefault();parent.postMessage({embedSave:1},"*")}});addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;if(el.focus)try{el.focus({preventScroll:true})}catch(x){}["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script></body>
+</html>

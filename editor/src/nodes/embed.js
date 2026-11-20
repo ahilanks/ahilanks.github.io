@@ -237,7 +237,12 @@ export const HtmlEmbed = Node.create({
       const box = document.createElement('div') // the diagram itself; the caption sits below it
       box.className = 'he-box'
       box.setAttribute('contenteditable', 'false')
-      box.append(frame, shield, ask, edit, grip, working)
+      const handle = document.createElement('div') // always there: click selects, drag moves
+      handle.className = 'he-grip'
+      handle.title = 'Drag to move · click to select'
+      handle.textContent = '⠿'
+      handle.draggable = true
+      box.append(frame, shield, handle, ask, edit, grip, working)
       const caption = document.createElement('figcaption')
       dom.append(box, caption)
 
@@ -256,10 +261,17 @@ export const HtmlEmbed = Node.create({
       })
       // dragging the cover moves the block (ProseMirror moves the selected node)
       shield.draggable = true
-      shield.addEventListener('dragstart', (e) => {
+      const startDrag = (e) => {
         if (!editor.isEditable || dom.classList.contains('resizing') || !e.dataTransfer) { e.preventDefault(); return }
         selectSelf()
-      })
+        // iframes swallow dragover/drop, so no frame may sit under the pointer while moving
+        document.body.classList.add('he-dragging')
+        setTimeout(() => dom.classList.add('drag-source'), 0)
+      }
+      const endDrag = () => { document.body.classList.remove('he-dragging'); dom.classList.remove('drag-source') }
+      for (const h of [shield, handle]) { h.addEventListener('dragstart', startDrag); h.addEventListener('dragend', endDrag) }
+      handle.addEventListener('mousedown', (e) => { if (e.button === 0) e.stopPropagation() })
+      handle.addEventListener('click', (e) => { e.preventDefault(); selectSelf(); editor.view.focus() })
       const setW = (w) => { dom.style.width = w + '%' }
       setW(cur.attrs.width)
 
@@ -365,9 +377,9 @@ export const HtmlEmbed = Node.create({
         contentDOM: caption,
         // ProseMirror handles the caption; the diagram box is ours (its cover only lets
         // ProseMirror see a drag, so the block can be moved)
-        stopEvent(e) { return box.contains(e.target) && !(e.target === shield && /^drag|^drop/.test(e.type)) },
+        stopEvent(e) { return box.contains(e.target) && !((e.target === shield || e.target === handle) && /^drag|^drop/.test(e.type)) },
         ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
-        destroy() { window.removeEventListener('message', onMsg); window.removeEventListener('resize', onScroll); if (scroller) scroller.removeEventListener('scroll', onScroll); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
+        destroy() { endDrag(); window.removeEventListener('message', onMsg); window.removeEventListener('resize', onScroll); if (scroller) scroller.removeEventListener('scroll', onScroll); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
       }
     }
   },

@@ -269,8 +269,20 @@ export const HtmlEmbed = Node.create({
         setTimeout(() => dom.classList.add('drag-source'), 0)
       }
       const endDrag = () => { document.body.classList.remove('he-dragging'); dom.classList.remove('drag-source') }
-      for (const h of [shield, handle]) { h.addEventListener('dragstart', startDrag); h.addEventListener('dragend', endDrag) }
-      handle.addEventListener('mousedown', (e) => { if (e.button === 0) e.stopPropagation() })
+      shield.addEventListener('dragstart', startDrag)
+      // Once the block is selected, a drag from the handle starts on the selected text (the
+      // browser drags the DOM selection, target = a text node), so catch any drag that began
+      // with a press on the handle and let ProseMirror move the selected block.
+      let downOnHandle = false
+      handle.addEventListener('mousedown', (e) => { if (e.button === 0) { e.stopPropagation(); downOnHandle = true } })
+      const onUp = () => { downOnHandle = false }
+      document.addEventListener('mouseup', onUp)
+      dom.addEventListener('dragstart', (e) => {
+        if (!downOnHandle) return
+        startDrag(e)
+        if (e.dataTransfer) e.dataTransfer.setDragImage(handle, 11, 10)
+      }, true)
+      dom.addEventListener('dragend', () => { downOnHandle = false; endDrag() })
       handle.addEventListener('click', (e) => { e.preventDefault(); selectSelf(); editor.view.focus() })
       const setW = (w) => { dom.style.width = w + '%' }
       setW(cur.attrs.width)
@@ -377,9 +389,12 @@ export const HtmlEmbed = Node.create({
         contentDOM: caption,
         // ProseMirror handles the caption; the diagram box is ours (its cover only lets
         // ProseMirror see a drag, so the block can be moved)
-        stopEvent(e) { return box.contains(e.target) && !((e.target === shield || e.target === handle) && /^drag|^drop/.test(e.type)) },
+        stopEvent(e) {
+          if (e.type === 'dragstart' && downOnHandle) return false
+          return box.contains(e.target) && !((e.target === shield || e.target === handle) && /^drag|^drop/.test(e.type))
+        },
         ignoreMutation(m) { return !caption.contains(m.target) || m.target === caption },
-        destroy() { endDrag(); window.removeEventListener('message', onMsg); window.removeEventListener('resize', onScroll); if (scroller) scroller.removeEventListener('scroll', onScroll); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
+        destroy() { endDrag(); document.removeEventListener('mouseup', onUp); window.removeEventListener('message', onMsg); window.removeEventListener('resize', onScroll); if (scroller) scroller.removeEventListener('scroll', onScroll); window.removeEventListener('diagram-pending', showWorking); clearInterval(wtick) },
       }
     }
   },

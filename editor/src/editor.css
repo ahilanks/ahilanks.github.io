@@ -710,8 +710,8 @@ body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focu
 
 /* ----------------------------- CONTENTS PANEL ----------------------------- */
 .toc-panel {
-  position: fixed; z-index: 40; top: 92px; left: 28px; /* 218px of text + a 52px column for the row icons, never reaching the text column */
-  width: min(270px, calc((100vw - var(--maxw)) / 2 - 12px));
+  position: fixed; z-index: 40; top: 92px; left: 28px; /* up to 268px of text + a 52px column for the row icons, never reaching the text column */
+  width: min(320px, calc((100vw - var(--maxw)) / 2 - 12px));
   max-height: calc(100vh - 140px); overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none;
 }

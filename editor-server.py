@@ -773,7 +773,8 @@ def set_version_mark(draft_id, sha, star=None, name=None):
 
 def load_publish_state():
     """Per-draft publish bookkeeping that must NOT be public: the unlisted share token
-    of each draft ({"shares": {draft_id: token}}). Lives in drafts/ (private repo)."""
+    of each draft ({"shares": {draft_id: latest token},
+    "shareVersions": {draft_id: [{n, token, created}]}}). Lives in drafts/ (private repo)."""
     try:
         with open(PUBLISH_STATE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -1501,6 +1502,17 @@ class Handler(SimpleHTTPRequestHandler):
                 for k, v in (incoming.get("shares") or {}).items():
                     if SAFE_ID_RE.match(str(k)) and re.match(r"^[0-9a-f]{16,64}$", str(v)):
                         st["shares"][k] = v
+                # every draft-link version of a draft, each with its own token (old links stay)
+                for k, lst in (incoming.get("shareVersions") or {}).items():
+                    if not SAFE_ID_RE.match(str(k)) or not isinstance(lst, list):
+                        continue
+                    clean = []
+                    for e in lst:
+                        if (isinstance(e, dict) and isinstance(e.get("n"), int) and e["n"] > 0
+                                and re.match(r"^[0-9a-f]{16,64}$", str(e.get("token", "")))):
+                            clean.append({"n": e["n"], "token": e["token"], "created": str(e.get("created") or "")[:40]})
+                    if clean:
+                        st.setdefault("shareVersions", {})[k] = clean
                 save_publish_state(st)
             return self._send_json(st)
         if path != "/api/drafts":

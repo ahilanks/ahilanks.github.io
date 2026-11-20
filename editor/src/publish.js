@@ -1592,7 +1592,7 @@ function bylineToggle() {
   })
 }
 
-function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, style, bodyHtml, footHtml, toc, slug, version, draft }) {
+function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, style, bodyHtml, footHtml, toc, slug, version, draft, draftN }) {
   const draftCreated = new Date().toISOString() // when this draft link was (re)generated
   const title = escapeHtml(titleText)
   const subtitle = escapeHtml(subtitleText)
@@ -1684,7 +1684,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
       '<button class="prov-line" type="button" aria-expanded="false" title="Bitcoin timestamp"><span class="prov-dot"></span><span class="prov-text"></span><span class="prov-caret"><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>' +
       '<span class="prov-panel" hidden></span></span>'
     : draft
-      ? '      <p class="draft-note"><strong>Draft preview</strong> · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
+      ? '      <p class="draft-note"><strong>Draft preview</strong>' + (draftN ? ' · v' + draftN : '') + ' · created <time datetime="' + escapeHtml(draftCreated) + '">' + escapeHtml(longDateTime(draftCreated)) + '</time></p>'
       : ''
   const provScript = version ? '    <script>(' + provWidget.toString() + ')();</script>' : ''
   const looks = normalizeStyle(style)
@@ -1988,15 +1988,33 @@ async function readManifest(slug) {
   } catch (e) { /* no manifest yet / server down */ }
   return { slug, versions: [] }
 }
-// Stable unlisted token for a draft id, kept privately by the server (drafts/.publish-state.json).
-async function shareTokenFor(docId) {
+// Draft-link versions of a draft id, kept privately by the server (drafts/.publish-state.json):
+// [{ n, token, created }], oldest first. Each version is its own unlisted URL, so making a new
+// one leaves the old links working. A draft linked before versions existed is v1.
+async function shareVersionsFor(docId) {
   const state = await apiJson('/api/publish-state')
-  let token = state.shares && state.shares[docId]
-  if (!token) {
-    token = randomToken()
-    await apiJson('/api/publish-state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: { [docId]: token } }) })
+  const list = (state.shareVersions && state.shareVersions[docId]) || []
+  if (list.length) return list.slice().sort((a, b) => a.n - b.n)
+  const old = state.shares && state.shares[docId]
+  return old ? [{ n: 1, token: old, created: '' }] : []
+}
+// which: a version number to update in place, or 'new'. Returns { n, token }.
+async function claimShareVersion(docId, which) {
+  const list = await shareVersionsFor(docId)
+  const now = new Date().toISOString()
+  let entry = which === 'new' ? null : list.find((v) => v.n === which)
+  if (entry) entry.created = now
+  else {
+    entry = { n: list.reduce((a, v) => Math.max(a, v.n), 0) + 1, token: randomToken(), created: now }
+    list.push(entry)
   }
-  return token
+  const latest = list.reduce((a, v) => (v.n > a.n ? v : a), list[0])
+  await apiJson('/api/publish-state', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shares: { [docId]: latest.token }, shareVersions: { [docId]: list } }),
+  })
+  return entry
 }
 
 /* --------------------------------------------------------------------- wire up */
@@ -2015,6 +2033,35 @@ export function setupPublish({ editor, currentSnapshot }) {
   let pendingThumb = null   // { dataUrl, ext } | { path } | null
   let mode = 'draft'        // 'draft' (the default) | 'publish'
   let busy = false
+  let draftVersions = []    // this draft's draft-link versions [{ n, token, created }]
+
+  const site = () => (CONFIG.siteUrl || '').replace(/\/$/, '')
+  const draftLinkUrl = (token) => site() + '/writings/p/' + token + '.html'
+
+  // Version picker: update one of the existing links in place, or make a new one.
+  function renderDraftVersions(select) {
+    const sel = $('draftVersion')
+    const next = draftVersions.reduce((a, v) => Math.max(a, v.n), 0) + 1
+    sel.innerHTML = draftVersions.slice().reverse().map((v) =>
+      '<option value="' + v.n + '">v' + v.n + (v.created ? ' · ' + escapeHtml(longDate(v.created)) : '') + ' — update this link</option>'
+    ).join('') + '<option value="new">v' + next + ' — new link (keeps the old ones)</option>'
+    sel.value = select != null ? String(select) : (draftVersions.length ? String(draftVersions[draftVersions.length - 1].n) : 'new')
+    showDraftVersion()
+  }
+  function showDraftVersion() {
+    const v = $('draftVersion').value
+    const entry = draftVersions.find((x) => String(x.n) === v)
+    $('draftUrl').value = entry ? draftLinkUrl(entry.token) : ''
+    $('draftVersionDesc').textContent = entry
+      ? 'Replaces v' + entry.n + ' at the same link.'
+      : draftVersions.length ? 'A new link. Earlier versions stay up at their own links.' : ''
+  }
+  async function loadDraftVersions(docId) {
+    draftVersions = []
+    renderDraftVersions()
+    try { draftVersions = await shareVersionsFor(docId || 'doc') } catch (e) {}
+    renderDraftVersions()
+  }
 
   const readingMinutes = () => {
     return Math.max(1, Math.round(wordCount() / 200))
@@ -2103,6 +2150,7 @@ export function setupPublish({ editor, currentSnapshot }) {
         (held.deadLinks ? ' ' + (held.deadLinks === 1 ? 'A link' : held.deadLinks + ' links') + ' into that text become plain words.' : '')
       : '') + (held.suggestions ? (held.titles.length ? '<br>' : '') + '<b>Suggestions:</b> there are suggested edits you haven\u2019t accepted or rejected. Readers get the text without them.' : '')
     setMode('draft')
+    loadDraftVersions(snap.id)
     showVersionInfo(slugify(titleText))
     seedTechnical(slugify(titleText), snap.id)
     $('publishOverlay').classList.remove('hidden')
@@ -2182,14 +2230,15 @@ export function setupPublish({ editor, currentSnapshot }) {
 
       /* ---------------------------------------------------------- draft link */
       if (draft) {
-        const token = await shareTokenFor(snap.id || 'doc')
-        const html = buildArticleHtml(Object.assign({}, common, { draft: true }))
+        const pick = $('draftVersion').value
+        const { n: dn, token } = await claimShareVersion(snap.id || 'doc', pick === 'new' ? 'new' : Number(pick))
+        const html = buildArticleHtml(Object.assign({}, common, { draft: true, draftN: dn }))
         const rel = 'writings/p/' + token + '.html'
         await sink.add(rel, html)
-        const url = site + '/' + rel
-        $('draftUrl').value = url
         const written = await sink.flush()
-        await sitePush(written, 'Draft preview: ' + titleText)
+        await sitePush(written, 'Draft preview: ' + titleText + ' (v' + dn + ')')
+        draftVersions = await shareVersionsFor(snap.id || 'doc').catch(() => draftVersions)
+        renderDraftVersions(dn)
         setMsg(msg, 'Live in a minute.', 'ok')
         toast('Draft link pushed')
         if (window.__drafts && snap.id) window.__drafts.markOutbound(snap.id) // first draft link: into the Outbound folder
@@ -2287,6 +2336,7 @@ export function setupPublish({ editor, currentSnapshot }) {
   $('publishConfirm').addEventListener('click', doPublish)
   $('thumbDrop').addEventListener('click', chooseThumb)
   document.querySelectorAll('#pubMode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
+  $('draftVersion').addEventListener('change', showDraftVersion)
   $('draftCopy').addEventListener('click', async () => {
     const v = $('draftUrl').value
     if (!v) return

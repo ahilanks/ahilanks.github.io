@@ -170,7 +170,7 @@ body.poem .doc-body-pm > p:empty, body.poem .collapsible-body > p:empty { line-h
 /* every main section after the first opens with a rule, so readers see where one ends */
 .doc-body h2 ~ h2 { margin-top: 2.2rem; padding-top: 1.6rem; border-top: 1px solid rgba(39, 50, 63, 0.15); }
 .doc-body h3 { font-size: 1.32rem; font-weight: 600; line-height: 1.3; margin: 1.6rem 0 0.35rem; }
-.doc-body h4 { font-size: 1.12rem; font-weight: 700; line-height: 1.35; margin: 1.8rem 0 0.3rem; padding-left: 1rem; } /* sub-subheadings sit slightly in */
+.doc-body h4 { font-size: 1.12rem; font-weight: 700; line-height: 1.35; margin: 1.8rem 0 0.3rem; }
 /* Not force-italic: quotes are set off by the border/size/color, and italic stays a
    real mark you control (so italicizing text inside a quote actually shows and the
    toolbar button reads correctly). */

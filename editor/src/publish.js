@@ -1741,7 +1741,7 @@ function buildArticleHtml({ titleText, subtitleText, dateStr, minutes, font, sty
     '      h2 { font-size:1.7rem; line-height:1.25; margin:2rem 0 0.45rem; letter-spacing:-0.01em; }',
     '      h2 ~ h2 { margin-top:2.2rem; padding-top:1.6rem; border-top:1px solid rgba(39,50,63,0.15); }',
     '      h3 { font-size:1.32rem; line-height:1.3; margin:1.6rem 0 0.35rem; }',
-    '      h4 { font-size:1.12rem; line-height:1.35; margin:1.8rem 0 0.3rem; padding-left:1rem; }',
+    '      h4 { font-size:1.12rem; line-height:1.35; margin:1.8rem 0 0.3rem; }',
     '      blockquote { margin:1.2rem 0; padding:0.2rem 0 0.2rem 1.2rem; position:relative; }',
     '      blockquote::before { content:""; position:absolute; left:0; top:0.4rem; bottom:0.4rem; width:3px; border-radius:2px; background:var(--accent); }',
     '      a { color:var(--text-color); text-decoration:underline; text-decoration-skip-ink:none; }',

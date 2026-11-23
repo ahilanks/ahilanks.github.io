@@ -563,6 +563,11 @@ body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focu
 .cl-text { color: var(--text); word-break: break-word; }
 .cl-quote { color: var(--faint); font-size: 0.76rem; margin-top: 0.1rem; font-family: "Newsreader", serif; font-style: italic; }
 .cl-stale .cl-text { color: var(--muted); }
+/* History → Deleted: a still preview of each deleted diagram (diagram-bin.js) */
+.bin-preview { position: relative; height: 120px; overflow: hidden; border-radius: 6px; background: var(--bg); margin: 0.3rem 0 0.25rem; }
+.bin-preview iframe { position: absolute; left: 0; top: 0; width: 200%; height: 240px; border: 0; transform: scale(0.5); transform-origin: 0 0; pointer-events: none; }
+.bin-forget { border: none; background: none; color: var(--faint); font-size: 1rem; line-height: 1; padding: 0 2px; flex: none; }
+.bin-forget:hover { color: var(--text); }
 #closedBtn.active { background: rgba(39, 50, 63, 0.1); }
 
 /* ----------------------------- AI SUGGESTIONS ----------------------------- */

@@ -22,7 +22,7 @@ import { $, toast } from '../dom.js'
 import { openChat, ensureId, isPending, pendingSince, startNewDiagram, addAttachments, chipsHtml, pastedAsFile, PASTE_AS_FILE } from './diagram-chat.js'
 
 const clampW = (v) => Math.max(20, Math.min(100, Math.round(parseFloat(v) || 100)))
-const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
+export const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
 const MAX_H = 4000
 
 // Runs inside the frame. A diagram drawn wider than its frame (a fixed-width chart) is laid

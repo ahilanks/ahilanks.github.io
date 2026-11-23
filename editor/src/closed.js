@@ -3,6 +3,7 @@
  *   Comments — every comment you've left on this draft: the open ones (in document order;
  *              click to jump to it), then every resolved one, newest first, each with
  *              Reopen; then AI suggestions dismissed / cleared / replaced this session.
+ *   Deleted  — diagrams deleted from this draft, kept to add back (diagram-bin.js).
  *   Versions — the draft at each push to the drafts repo (versions.js): pick one to see
  *              what changed since, and restore it.
  *
@@ -23,7 +24,7 @@ function when(t) {
 }
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
 
-export function setupClosedList(sources, comments, getVersions) {
+export function setupClosedList(sources, comments, getVersions, getBin) {
   const btn = $('closedBtn')
   const menu = $('closedMenu')
   const list = $('closedList')
@@ -83,6 +84,11 @@ export function setupClosedList(sources, comments, getVersions) {
         if (ai.length) { section('Closed AI suggestions · ' + ai.length); ai.forEach((e) => list.appendChild(row(e))) }
       }
       if (foot) foot.textContent = 'Comments are saved with the draft. Reopen puts one back on its words. (AI suggestions last until you reload.)'
+    } else if (tab === 'bin') {
+      const b = getBin && getBin()
+      if (!b) list.innerHTML = '<div class="cl-empty">Not available.</div>'
+      else b.renderInto(list, close)
+      if (foot) foot.textContent = 'Deleted diagrams are kept with the draft and its backup. Add back puts one where it was.'
     } else {
       const v = getVersions && getVersions()
       if (!v) list.innerHTML = '<div class="cl-empty">Versions aren’t available.</div>'

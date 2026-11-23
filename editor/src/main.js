@@ -34,6 +34,7 @@ import { CommentMark, setupComments } from './comments.js'
 import { TrackInsert, TrackDelete, TrackChanges, setupTrackChanges } from './track-changes.js'
 import { Suggestions, setupSuggestions } from './ai-suggest.js'
 import { setupClosedList } from './closed.js'
+import { setupDiagramBin } from './diagram-bin.js'
 import { setupVersions } from './versions.js'
 
 setupMathLive()
@@ -474,6 +475,7 @@ function currentSnapshot() {
     footnotes: footnotesHTML(),
     comments: comments.data(),
     closedComments: comments.closedData(),
+    diagramBin: diagramBin ? diagramBin.data() : [], // deleted diagrams, to add back (diagram-bin.js); never published
     notes: notes.get(), // private sticky note — publish.js must never read it
     style: style.get(), // per-article look (style.js); read by publish.js
     font: CONFIG.font,
@@ -548,6 +550,7 @@ function applySnapshot(s) {
   if (canvasToDoc(editor)) scheduleSave()
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
+  if (diagramBin) diagramBin.load(s.diagramBin)
   notes.set(s.notes)
   sectionFocus.restore(s.id || doc.id)
   refreshPlaceholders()
@@ -631,11 +634,13 @@ window.__suggest = setupSuggestions(editor, comments, { getDocId })
 // past versions (each push to the drafts repo → diff against now, Restore). `versions` is
 // set up below, once the drafts module (which owns backing up) exists.
 let versions = null
-window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean), comments, () => versions)
+window.__closed = setupClosedList([comments.closedSource, window.__suggest.closedSource].filter(Boolean), comments, () => versions, () => diagramBin)
 
 // Figures: image + video toolbar buttons, file inputs, clipboard image paste, drag-resize, crop.
 setupFigures(editor, { getDocId })
 setupEmbeds(editor)
+// deleted diagrams are kept with the draft so they can be added back (History → Deleted)
+var diagramBin = setupDiagramBin(editor, { onChange: () => scheduleSave() })
 setupDiagramChat(editor)
 
 // Links: ⌘K / toolbar / bubble link popover + hover URL preview chip.

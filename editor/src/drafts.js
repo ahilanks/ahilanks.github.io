@@ -587,7 +587,8 @@ export function setupDrafts({ editor, currentSnapshot, applySnapshot, getDocId, 
                       cur.body !== s.body || cur.footnotes !== s.footnotes || cur.font !== s.font ||
                       JSON.stringify(cur.style || {}) !== JSON.stringify(s.style || {}) ||
                       JSON.stringify(cur.comments || {}) !== JSON.stringify(s.comments || {}) ||
-                      JSON.stringify(cur.closedComments || []) !== JSON.stringify(s.closedComments || [])
+                      JSON.stringify(cur.closedComments || []) !== JSON.stringify(s.closedComments || []) ||
+                      JSON.stringify(cur.diagramBin || []) !== JSON.stringify(s.diagramBin || [])
         if (!s.created && cur) s.created = cur.created
         if (dirty) {
           drafts[s.id] = s

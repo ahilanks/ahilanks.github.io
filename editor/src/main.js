@@ -2,6 +2,7 @@
  * sandboxed persistence. Later phases add math, footnotes, figures, publish, sync.) */
 
 import { Editor, Extension, StarterKit, Link, Placeholder, NodeSelection, Selection, TextSelection } from '../vendor/lib.bundle.js'
+import { SubsectionIndent } from './subsection-indent.js'
 import { CONFIG, LS, SANDBOX } from './config.js'
 import { $, debounce, toast } from './dom.js'
 import { InlineMath, BlockMath, insertAndEditMath, selectAndEditMath, isMathNode } from './nodes/math.js'
@@ -140,6 +141,7 @@ export const editor = new Editor({
     TrackChanges,
     Suggestions,
     SectionFocus,
+    SubsectionIndent,
   ],
   editorProps: {
     scrollThreshold: CONFIG.scroll.threshold,

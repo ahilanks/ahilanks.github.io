@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><script>(function holdDiagram() {
+  var W = window, P = W.performance
+  var raw = {
+    setTimeout: W.setTimeout.bind(W), setInterval: W.setInterval.bind(W),
+    clearTimeout: W.clearTimeout.bind(W), clearInterval: W.clearInterval.bind(W),
+    raf: W.requestAnimationFrame.bind(W), caf: W.cancelAnimationFrame.bind(W),
+    now: P.now.bind(P),
+  }
+  W.__embedRaw = raw
+  if (W.parent === W) return
+  var playing = false, frozen = raw.now(), offset = 0, q = [], ids = {}, next = -1, anims = []
+  var css = document.createElement('style')
+  css.textContent = '*,*::before,*::after{animation-play-state:paused!important}'
+  document.documentElement.appendChild(css)
+  P.now = function () { return playing ? raw.now() - offset : frozen }
+  function fake(kind, cb, ms, args) { var id = next--; q.push({ id: id, kind: kind, cb: cb, ms: ms, args: args }); return id }
+  function drop(id) {
+    if (ids[id] != null) return ids[id]
+    for (var i = 0; i < q.length; i++) if (q[i].id === id) { q.splice(i, 1); return null }
+    return id
+  }
+  function wrapRaf(cb) { return function (t) { cb(t - offset) } }
+  W.requestAnimationFrame = function (cb) { return playing ? raw.raf(wrapRaf(cb)) : fake('raf', cb) }
+  W.setTimeout = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setTimeout.apply(null, [cb, ms].concat(a)) : fake('t', cb, ms, a) }
+  W.setInterval = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setInterval.apply(null, [cb, ms].concat(a)) : fake('i', cb, ms, a) }
+  W.cancelAnimationFrame = function (id) { id = drop(id); if (id != null) raw.caf(id) }
+  W.clearTimeout = function (id) { id = drop(id); if (id != null) raw.clearTimeout(id) }
+  W.clearInterval = function (id) { id = drop(id); if (id != null) raw.clearInterval(id) }
+  var animate = W.Element && Element.prototype.animate
+  if (animate) Element.prototype.animate = function () {
+    var a = animate.apply(this, arguments)
+    if (!playing) { try { a.pause(); anims.push(a) } catch (e) {} }
+    return a
+  }
+  function svgs(fn) { var s = document.getElementsByTagName('svg'); for (var i = 0; i < s.length; i++) try { s[i][fn]() } catch (e) {} }
+  document.addEventListener('DOMContentLoaded', function () { if (!playing) svgs('pauseAnimations') })
+  function play() {
+    if (playing) return
+    playing = true
+    offset = raw.now() - frozen
+    css.remove()
+    svgs('unpauseAnimations')
+    anims.forEach(function (a) { try { a.play() } catch (e) {} })
+    var list = q; q = []
+    list.forEach(function (o) {
+      var f = typeof o.cb === 'function' ? o.cb : function () {}
+      if (o.kind === 'raf') ids[o.id] = raw.raf(wrapRaf(f))
+      else if (o.kind === 't') ids[o.id] = raw.setTimeout.apply(null, [f, o.ms].concat(o.args))
+      else ids[o.id] = raw.setInterval.apply(null, [f, o.ms].concat(o.args))
+    })
+  }
+  addEventListener('message', function (e) { if (e.source === W.parent && e.data && (e.data.embedPlay || e.data.embedClick)) play() })
+  addEventListener('pointerdown', play, true)
+  addEventListener('keydown', play, true)
+})()</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"><style>:root{--ink:#27323f;--muted:#6b7280;--accent:#e8743b;--line:rgba(39,50,63,0.15);--tint-green:#e6f2e6;--tint-red:#f8e4df;--tint-orange:#fbe3d4;--font:"Newsreader",Georgia,serif;--sans:system-ui,-apple-system,sans-serif}html,body{margin:0;background:transparent}body{font-family:var(--font);color:var(--ink)}svg,img,canvas{max-width:100%}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+  body { color: var(--ink, #27323f); font-family: var(--font, 'Newsreader', Georgia, serif); }
+  #wrap { width: 100%; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  text { font-family: var(--font, 'Newsreader', Georgia, serif); }
+  .muted { fill: var(--muted, #6b7280); }
+  .ink { fill: var(--ink, #27323f); }
+  .acc { fill: var(--accent, #e8743b); }
+  .clk { cursor: pointer; }
+  .hit { fill: none; stroke: transparent; stroke-width: 22; pointer-events: stroke; cursor: pointer; }
+
+  #panel { margin: 14px 0 0; min-height: 7.2em; }
+  #pname { font-size: 16px; font-weight: 600; margin: 0 0 3px; }
+  #pdate { font-weight: 400; color: var(--muted, #6b7280); font-size: 14px; margin-left: 6px; }
+  #pbody { font-size: 15px; line-height: 1.5; margin: 0; }
+
+  #ctl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .btn {
+    font-family: var(--font, 'Newsreader', Georgia, serif); font-size: 14px;
+    background: none; color: var(--ink, #27323f);
+    border: 1px solid var(--line, rgba(39,50,63,0.15)); border-radius: 3px;
+    padding: 4px 12px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--ink, #27323f); }
+  .btn:disabled { opacity: .35; cursor: default; border-color: var(--line, rgba(39,50,63,0.15)); }
+  .btn[aria-pressed="true"] { border-color: var(--ink, #27323f); font-weight: 600; }
+  .btn.fut { display: none; }
+  .futmode .btn.fut { display: inline-block; }
+  .futmode #next { display: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <svg id="c" role="img" aria-label="Share of people with a say in each era's biggest decision: high in forager bands, low under chiefs and kings, back up with democracy, near none for the AI decision, then two possible futures: handover, where actual say is none and what we are allowed keeps shifting, or decided together, where some say returns and the point of no return is pushed later."></svg>
+  <div id="panel" aria-live="polite">
+    <p id="pname"><span id="ptitle"></span><span id="pdate"></span></p>
+    <p id="pbody"></p>
+  </div>
+  <div id="ctl">
+    <button class="btn" id="back">← Back</button>
+    <button class="btn" id="next">Next →</button>
+    <button class="btn fut" id="fOver" aria-pressed="true">Handover</button>
+    <button class="btn fut" id="fTog" aria-pressed="false">Decided together</button>
+  </div>
+</div>
+<script>
+(function () {
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.getElementById("c");
+  var wrap = document.getElementById("wrap");
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Rough share with a say (0 = none, 1 = all), from the source chart. Illustrative.
+  var ERAS = [
+    { n: "Bands",       s: "Bands",     d: "~300,000 BCE",      x: 0.05,  v: 0.71 },
+    { n: "Chiefdoms",   s: "Chiefs",    d: "~5000 BCE",         x: 0.209, v: 0.20 },
+    { n: "Kings",       s: "Kings",     d: "~3000 BCE – 1700s", x: 0.373, v: 0.05 },
+    { n: "Democracy",   s: "Democracy", d: "1789 → today",      x: 0.567, v: 0.51 },
+    { n: "AI decision", s: "AI",        d: "2020s",             x: 0.746, v: 0.03 }
+  ];
+  var END_X = 0.985, NR_X = 0.80, NR_PUSHED = 1.0, TOGETHER = 0.31;
+
+  var TEXT = [
+    { t: "Bands", d: "~300,000 BCE", b: "Groups of a few dozen generally decided things by talking. Most adults had a say, but only over their own band." },
+    { t: "Chiefdoms", d: "~5000 BCE", b: "Farming brought surplus, and surplus brought chiefs. Most villagers lost their say, though elders often kept some. Each chief ruled only a valley." },
+    { t: "Kings", d: "~3000 BCE – 1700s", b: "One crown and its court decided for millions. But no empire held all of humanity, and every dynasty fell." },
+    { t: "Democracy", d: "1789 → today", b: "The vote brought the share back up: about half the world lived in democracies at the 2012 peak, about a quarter today. Apart from the bomb, every decision had borders and could be tried again." },
+    { t: "The AI decision", d: "2020s", b: "Most issues still go through elections. The biggest one, how to build AI, sits with a few labs and governments. It reaches everyone alive, and everyone after." }
+  ];
+  var FUT = {
+    over: { t: "Handover", d: "all of time", b: "Life might go on as normal. But we'd never have a say again, and what we're allowed could change at any moment. Freedom could land anywhere." },
+    together: { t: "Decided together", d: "for now", b: "Enough people understand the risk to convince <em>all</em> parties, labs and governments included. Power has pooled in the labs, so our say lands lower than democracy's, but we keep it, and the point of no return moves into the future, for now." }
+  };
+
+  var st = { cur: 0, seen: 0, path: "over" };
+  var E = {};          // element refs for the current build
+  var G = null;        // ghost line, in fraction space
+  var geo = null;      // current scales
+
+  var ink = "var(--ink, #27323f)", acc = "var(--accent, #e8743b)",
+      muted = "var(--muted, #6b7280)", line = "var(--line, rgba(39,50,63,0.15))";
+
+  function el(tag, attrs, text, parent) {
+    var e = document.createElementNS(ns, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    (parent || svg).appendChild(e);
+    return e;
+  }
+
+  function genGhost() {
+    var x = NR_X, v = 0.2 + Math.random() * 0.5, ops = [{ t: "m", x: x, v: v }];
+    while (x < END_X) {
+      var nx = Math.min(END_X, x + 0.02 + Math.random() * 0.035);
+      var nv = 0.15 + Math.random() * 0.8;
+      if (Math.random() < 0.5) {
+        ops.push({ t: "h", x: nx, v: v });
+        if (nx < END_X) { ops.push({ t: "v", x: nx, v: nv }); v = nv; }
+      } else {
+        ops.push({ t: "c", x0: x, v0: v, x: nx, v: nv }); v = nv;
+      }
+      x = nx;
+    }
+    return ops;
+  }
+  function ghostPath(ops) {
+    var X = geo.X, Y = geo.Y, d = "";
+    ops.forEach(function (o) {
+      if (o.t === "m") d += "M" + X(o.x) + " " + Y(o.v);
+      else if (o.t === "h") d += " H" + X(o.x);
+      else if (o.t === "v") d += " V" + Y(o.v);
+      else { var mx = (X(o.x0) + X(o.x)) / 2; d += " C" + mx + " " + Y(o.v0) + ", " + mx + " " + Y(o.v) + ", " + X(o.x) + " " + Y(o.v); }
+    });
+    return d;
+  }
+  function placeGhost() {
+    E.ghost.setAttribute("d", ghostPath(G));
+    var last = G[G.length - 1];
+    E.ghostL.setAttribute("y", Math.max(geo.T + 24, geo.Y(last.v) - 8));
+  }
+
+  // Reserve room for the longest text so the figure's height never changes
+  // between steps (a growing panel made the frame show a scrollbar strip).
+  function fitPanel() {
+    var p = $("panel");
+    p.style.minHeight = "0px";
+    var all = TEXT.concat([FUT.over, FUT.together]), max = 0;
+    all.forEach(function (s) {
+      $("ptitle").textContent = s.t;
+      $("pdate").textContent = s.d;
+      $("pbody").innerHTML = s.b;
+      max = Math.max(max, p.offsetHeight);
+    });
+    p.style.minHeight = max + "px";
+  }
+
+  function build() {
+    var w = Math.max(300, Math.round(wrap.clientWidth || 760));
+    var narrow = w < 560;
+    var H = Math.round(Math.max(250, Math.min(370, w * 0.46)));
+    var L = 36, R = w - 4;
+    var T = 36, B = H - (narrow ? 46 : 50);
+    var X = function (f) { return L + f * (R - L); };
+    var Y = function (v) { return B - v * (B - T); };
+    geo = { X: X, Y: Y, T: T, B: B, R: R, narrow: narrow };
+
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute("viewBox", "0 0 " + w + " " + H);
+    E = { hseg: [], nodes: [], labs: [] };
+
+    // axes
+    el("line", { x1: L, x2: L, y1: T - 4, y2: B, stroke: line, "stroke-width": 1 });
+    el("line", { x1: L, x2: R, y1: B, y2: B, stroke: line, "stroke-width": 1 });
+    el("text", { x: L - 6, y: T + 4, "text-anchor": "end", class: "muted", "font-size": 13 }, "all");
+    el("text", { x: L - 6, y: B - 2, "text-anchor": "end", class: "muted", "font-size": 13 }, "none");
+    el("text", { x: L, y: 14, class: "muted", "font-size": 13 }, "share of people with a say");
+
+    // breaks on the time axis: not to scale
+    var brk = [];
+    for (var i = 0; i < ERAS.length - 1; i++) brk.push((ERAS[i].x + ERAS[i + 1].x) / 2);
+    brk.push((ERAS[4].x + NR_X) / 2 - 0.005);
+    brk.forEach(function (f) {
+      var bx = X(f);
+      el("path", { d: "M" + (bx - 5) + " " + (B + 5) + " L" + (bx - 1) + " " + (B - 5) + " M" + (bx + 1) + " " + (B + 5) + " L" + (bx + 5) + " " + (B - 5),
+        stroke: muted, "stroke-opacity": 0.5, "stroke-width": 1, fill: "none", "stroke-linecap": "round" });
+    });
+
+    // history segments
+    for (var j = 1; j < ERAS.length; j++) {
+      var a = ERAS[j - 1], b = ERAS[j], mx = (X(a.x) + X(b.x)) / 2;
+      E.hseg[j] = el("path", { d: "M" + X(a.x) + " " + Y(a.v) + " C" + mx + " " + Y(a.v) + ", " + mx + " " + Y(b.v) + ", " + X(b.x) + " " + Y(b.v),
+        fill: "none", stroke: ink, "stroke-width": 1.5, "stroke-linecap": "round" });
+    }
+
+    var ax = X(ERAS[4].x), ay = Y(ERAS[4].v), ex = X(END_X), nx = X(NR_X);
+
+    // point of no return (moves when decided together)
+    E.nr = el("g", {});
+    el("line", { x1: nx, x2: nx, y1: T - 6, y2: B, stroke: acc, "stroke-width": 1, "stroke-dasharray": "2 4", "stroke-linecap": "round" }, null, E.nr);
+    E.nrL = el("text", { x: nx - 6, y: T + 2, "text-anchor": "end", class: "acc", "font-size": 13 }, "no return", E.nr);
+    E.nrShift = X(NR_PUSHED) - nx;
+
+    // ghost: what we're allowed, shifting at its whim
+    E.gG = el("g", { class: "clk" });
+    E.ghost = el("path", { fill: "none", stroke: muted, "stroke-width": 1.2, "stroke-dasharray": "3 4", "stroke-linecap": "round" }, null, E.gG);
+    E.ghostL = el("text", { x: R, y: T + 24, "text-anchor": "end", class: "muted", "font-size": 13 }, narrow ? "allowed" : "representation allowed", E.gG);
+    E.gG.addEventListener("click", function () { pick("over"); });
+    if (!G) G = genGhost();
+    placeGhost();
+
+    // future: decided together
+    var ty = Y(TOGETHER), m2 = (ax + ex) / 2;
+    var dTog = "M" + ax + " " + ay + " C" + m2 + " " + ay + ", " + m2 + " " + ty + ", " + ex + " " + ty;
+    E.tog = el("path", { d: dTog, fill: "none", stroke: ink, "stroke-width": 1.5, "stroke-linecap": "round" });
+    E.togN = el("circle", { cx: ex, cy: ty, r: 3.5, fill: ink, class: "clk" });
+    E.togL = el("text", { x: R, y: ty - 10, "text-anchor": "end", class: "ink clk", "font-size": 13 }, "decided together");
+
+    // future: handover
+    var m1 = (ax + nx) / 2;
+    var dOver = "M" + ax + " " + ay + " C" + m1 + " " + ay + ", " + m1 + " " + B + ", " + nx + " " + B + " L" + ex + " " + B;
+    E.over = el("path", { d: dOver, fill: "none", stroke: acc, "stroke-width": 1.5, "stroke-linecap": "round" });
+    E.overN = el("circle", { cx: ex, cy: B, r: 3.5, fill: acc, class: "clk" });
+    E.overL = el("text", { x: R, y: B - 9, "text-anchor": "end", class: "acc clk", "font-size": 13 }, narrow ? "actual say: none" : "actual representation: 0");
+
+    // click targets for the futures
+    E.hits = [["over", dOver], ["together", dTog]].map(function (p) {
+      var h = el("path", { d: p[1], class: "hit" });
+      h.addEventListener("click", function () { pick(p[0]); });
+      return h;
+    });
+    [E.togN, E.togL].forEach(function (n) { n.addEventListener("click", function () { pick("together"); }); });
+    [E.overN, E.overL].forEach(function (n) { n.addEventListener("click", function () { pick("over"); }); });
+
+    // era points and labels
+    ERAS.forEach(function (e, k) {
+      var isAI = k === 4;
+      var n = el("circle", { cx: X(e.x), cy: Y(e.v), r: 3.5, fill: isAI ? acc : ink, class: "clk" });
+      n.addEventListener("click", function () { if (k <= st.seen) go(k); });
+      E.nodes[k] = n;
+      var g = el("g", { class: "clk" });
+      g.addEventListener("click", function () { if (k <= st.seen) go(k); });
+      var cls = isAI ? "acc" : "ink";
+      if (narrow) {
+        g.t = el("text", { x: X(e.x), y: B + 18 + (k % 2) * 16, "text-anchor": "middle", class: cls, "font-size": 13 }, e.s, g);
+      } else {
+        g.t = el("text", { x: X(e.x), y: B + 20, "text-anchor": "middle", class: cls, "font-size": 14 }, e.n, g);
+        el("text", { x: X(e.x), y: B + 37, "text-anchor": "middle", class: "muted", "font-size": 12 }, e.d, g);
+      }
+      E.labs[k] = g;
+    });
+    var fg = el("g", { class: "clk" });
+    fg.addEventListener("click", function () { if (st.seen >= 5) go(5); });
+    if (narrow) {
+      fg.t = el("text", { x: R, y: B + 34, "text-anchor": "end", class: "ink", "font-size": 13 }, "Future", fg);
+    } else {
+      fg.t = el("text", { x: X(0.93), y: B + 20, "text-anchor": "middle", class: "ink", "font-size": 14 }, "Future", fg);
+      E.futD = el("text", { x: X(0.93), y: B + 37, "text-anchor": "middle", class: "muted", "font-size": 12 }, "all of time", fg);
+    }
+    E.labs[5] = fg;
+
+    // prepare draw-on lengths
+    E.hseg.concat([E.over, E.tog]).forEach(function (p) {
+      if (!p) return;
+      p.len = p.getTotalLength();
+      p.style.strokeDasharray = p.len;
+    });
+
+    fitPanel();
+    update(false);
+  }
+
+  function setT(node, css, anim) { node.style.transition = (anim && !reduce) ? css : "none"; }
+
+  function update(anim) {
+    var cur = st.cur, seen = st.seen, fork = seen >= 5, path = st.path;
+    var fadeOther = function (which) { return (cur === 5 && which !== path) ? 0.18 : 1; };
+
+    // history segments
+    for (var j = 1; j < 5; j++) {
+      var p = E.hseg[j];
+      setT(p, "stroke-dashoffset .9s ease", anim);
+      p.style.strokeDashoffset = j <= Math.min(seen, 4) ? 0 : p.len;
+    }
+    // futures
+    [["over", E.over, E.overN, E.overL], ["together", E.tog, E.togN, E.togL]].forEach(function (f) {
+      setT(f[1], "stroke-dashoffset .9s ease, opacity .4s", anim);
+      f[1].style.strokeDashoffset = fork ? 0 : f[1].len;
+      f[1].style.opacity = fork ? fadeOther(f[0]) : 1;
+      setT(f[2], "opacity .4s", anim); setT(f[3], "opacity .4s", anim);
+      f[2].style.opacity = fork ? fadeOther(f[0]) : 0;
+      f[3].style.opacity = (fork && path === f[0]) ? 1 : 0;
+    });
+    E.hits.forEach(function (h) { h.style.display = fork ? "" : "none"; });
+
+    // nodes
+    E.nodes.forEach(function (n, k) {
+      setT(n, "opacity .4s", anim);
+      n.style.opacity = k <= Math.min(seen, 4) ? 1 : 0;
+      n.setAttribute("r", k === cur ? 6 : (k === 4 ? 5 : 3.5));
+    });
+
+    // era labels
+    E.labs.forEach(function (g, k) {
+      setT(g, "opacity .5s", anim);
+      g.style.opacity = k <= seen ? 1 : 0;
+      g.t.setAttribute("font-weight", k === cur ? 600 : 400);
+    });
+
+    // point of no return
+    var pushed = cur === 5 && path === "together";
+    setT(E.nr, "opacity .5s, transform .8s ease", anim);
+    E.nr.style.opacity = fork ? (pushed ? 0.55 : 1) : 0;
+    E.nr.style.transform = pushed ? "translateX(" + E.nrShift + "px)" : "translateX(0px)";
+    E.nrL.textContent = pushed ? (geo.narrow ? "no return, later" : "no return, pushed into the future") : "no return";
+    if (E.futD) E.futD.textContent = pushed ? "for now" : "all of time";
+
+    // ghost
+    setT(E.gG, "opacity .5s", anim);
+    E.gG.style.opacity = fork ? (pushed ? 0.08 : 1) : 0;
+    E.gG.style.pointerEvents = fork ? "" : "none";
+    E.ghostL.style.visibility = pushed ? "hidden" : "visible";
+
+    // text panel
+    var s = cur < 5 ? TEXT[cur] : FUT[path];
+    $("ptitle").textContent = s.t;
+    $("pdate").textContent = s.d;
+    $("pbody").innerHTML = s.b;
+
+    // controls
+    $("ctl").classList.toggle("futmode", cur === 5);
+    $("back").disabled = cur === 0;
+    $("fOver").setAttribute("aria-pressed", path === "over");
+    $("fTog").setAttribute("aria-pressed", path === "together");
+  }
+
+  function go(i) {
+    st.cur = Math.max(0, Math.min(5, i));
+    st.seen = Math.max(st.seen, st.cur);
+    update(true);
+  }
+  function pick(p) { st.path = p; go(5); }
+
+  $("next").onclick = function () { go(st.cur + 1); };
+  $("back").onclick = function () { go(st.cur - 1); };
+  $("fOver").onclick = function () { pick("over"); };
+  $("fTog").onclick = function () { pick("together"); };
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") go(st.cur + 1);
+    if (e.key === "ArrowLeft") go(st.cur - 1);
+  });
+
+  // What we're allowed keeps changing. This is the point of the line, so it
+  // always runs; with reduced motion it swaps instantly and less often
+  // instead of fading (previously it was switched off entirely).
+  function shuffle() {
+    if (st.seen >= 5 && !(st.cur === 5 && st.path === "together") && E.ghost) {
+      if (reduce) {
+        G = genGhost(); placeGhost();
+      } else {
+        var gh = E.ghost, gl = E.ghostL;
+        gh.style.transition = "opacity .35s"; gl.style.transition = "opacity .35s";
+        gh.style.opacity = 0; gl.style.opacity = 0;
+        setTimeout(function () {
+          G = genGhost(); placeGhost();
+          E.ghost.style.transition = "opacity .35s"; E.ghostL.style.transition = "opacity .35s";
+          E.ghost.style.opacity = 0.9; E.ghostL.style.opacity = 1;
+        }, 350);
+      }
+    }
+    setTimeout(shuffle, reduce ? 3000 : 2200);
+  }
+  setTimeout(shuffle, reduce ? 3000 : 2200);
+
+  build();
+  var lastW = 0;
+  function onResize() {
+    var w = Math.round(wrap.clientWidth);
+    if (w && w !== lastW) { lastW = w; build(); }
+  }
+  if (window.ResizeObserver) new ResizeObserver(onResize).observe(wrap);
+  else window.addEventListener("resize", onResize);
+})();
+</script>
+<script>(function bareBg() {
+  function plain(c) { // light and grey-ish (white, off-white, light grey)
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || '')
+    if (!m) return false
+    var r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4]
+    if (a === 0) return false
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 26
+  }
+  function run() {
+    var body = document.body
+    if (!body) return
+    var root = document.documentElement
+    var W = Math.max(root.scrollWidth, 1), H = Math.max(root.scrollHeight, 1)
+    var els = [root, body].concat(Array.prototype.slice.call(body.querySelectorAll('div,section,main,article,figure,header,svg,canvas,rect')))
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i]
+      var big = el === root || el === body
+      if (!big) {
+        var r = el.getBoundingClientRect()
+        big = r.width >= W * 0.85 && r.height >= H * 0.6
+      }
+      if (!big) continue
+      if (el.tagName.toLowerCase() === 'rect') {
+        if (plain(getComputedStyle(el).fill)) el.style.setProperty('fill', 'transparent', 'important')
+        continue
+      }
+      var cs = getComputedStyle(el)
+      if (plain(cs.backgroundColor) && (cs.backgroundImage === 'none' || !cs.backgroundImage)) {
+        el.style.setProperty('background-color', 'transparent', 'important')
+        el.style.setProperty('box-shadow', 'none', 'important')
+        if (el !== root && el !== body) el.style.setProperty('border-color', 'transparent', 'important')
+      }
+    }
+  }
+  run()
+  addEventListener('DOMContentLoaded', run)
+  addEventListener('load', function () { run(); (window.__embedRaw || window).setTimeout(run, 400) })
+})()</script><script>(function(){var d=document.documentElement,last=0,busy=0,R=window.__embedRaw||{raf:requestAnimationFrame.bind(window),setInterval:setInterval.bind(window)};function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}addEventListener("resize",fit);addEventListener("load",fit);fit();addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key||"").toLowerCase()==="s"){e.preventDefault();parent.postMessage({embedSave:1},"*")}});addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;if(el.focus)try{el.focus({preventScroll:true})}catch(x){}["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script></body>
+</html>

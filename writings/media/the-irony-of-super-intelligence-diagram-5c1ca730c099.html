@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><script>(function holdDiagram() {
+  var W = window, P = W.performance
+  var raw = {
+    setTimeout: W.setTimeout.bind(W), setInterval: W.setInterval.bind(W),
+    clearTimeout: W.clearTimeout.bind(W), clearInterval: W.clearInterval.bind(W),
+    raf: W.requestAnimationFrame.bind(W), caf: W.cancelAnimationFrame.bind(W),
+    now: P.now.bind(P),
+  }
+  W.__embedRaw = raw
+  if (W.parent === W) return
+  var playing = false, frozen = raw.now(), offset = 0, q = [], ids = {}, next = -1, anims = []
+  var css = document.createElement('style')
+  css.textContent = '*,*::before,*::after{animation-play-state:paused!important}'
+  document.documentElement.appendChild(css)
+  P.now = function () { return playing ? raw.now() - offset : frozen }
+  function fake(kind, cb, ms, args) { var id = next--; q.push({ id: id, kind: kind, cb: cb, ms: ms, args: args }); return id }
+  function drop(id) {
+    if (ids[id] != null) return ids[id]
+    for (var i = 0; i < q.length; i++) if (q[i].id === id) { q.splice(i, 1); return null }
+    return id
+  }
+  function wrapRaf(cb) { return function (t) { cb(t - offset) } }
+  W.requestAnimationFrame = function (cb) { return playing ? raw.raf(wrapRaf(cb)) : fake('raf', cb) }
+  W.setTimeout = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setTimeout.apply(null, [cb, ms].concat(a)) : fake('t', cb, ms, a) }
+  W.setInterval = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setInterval.apply(null, [cb, ms].concat(a)) : fake('i', cb, ms, a) }
+  W.cancelAnimationFrame = function (id) { id = drop(id); if (id != null) raw.caf(id) }
+  W.clearTimeout = function (id) { id = drop(id); if (id != null) raw.clearTimeout(id) }
+  W.clearInterval = function (id) { id = drop(id); if (id != null) raw.clearInterval(id) }
+  var animate = W.Element && Element.prototype.animate
+  if (animate) Element.prototype.animate = function () {
+    var a = animate.apply(this, arguments)
+    if (!playing) { try { a.pause(); anims.push(a) } catch (e) {} }
+    return a
+  }
+  function svgs(fn) { var s = document.getElementsByTagName('svg'); for (var i = 0; i < s.length; i++) try { s[i][fn]() } catch (e) {} }
+  document.addEventListener('DOMContentLoaded', function () { if (!playing) svgs('pauseAnimations') })
+  function play() {
+    if (playing) return
+    playing = true
+    offset = raw.now() - frozen
+    css.remove()
+    svgs('unpauseAnimations')
+    anims.forEach(function (a) { try { a.play() } catch (e) {} })
+    var list = q; q = []
+    list.forEach(function (o) {
+      var f = typeof o.cb === 'function' ? o.cb : function () {}
+      if (o.kind === 'raf') ids[o.id] = raw.raf(wrapRaf(f))
+      else if (o.kind === 't') ids[o.id] = raw.setTimeout.apply(null, [f, o.ms].concat(o.args))
+      else ids[o.id] = raw.setInterval.apply(null, [f, o.ms].concat(o.args))
+    })
+  }
+  addEventListener('message', function (e) { if (e.source === W.parent && e.data && (e.data.embedPlay || e.data.embedClick)) play() })
+  addEventListener('pointerdown', play, true)
+  addEventListener('keydown', play, true)
+})()</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"><style>:root{--ink:#27323f;--muted:#6b7280;--accent:#e8743b;--line:rgba(39,50,63,0.15);--tint-green:#e6f2e6;--tint-red:#f8e4df;--tint-orange:#fbe3d4;--font:"Newsreader",Georgia,serif;--sans:system-ui,-apple-system,sans-serif}html,body{margin:0;background:transparent}body{font-family:var(--font);color:var(--ink)}svg,img,canvas{max-width:100%}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crossing the intermediate range</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#FAFAF7;color:#16181D;font-family:Charter,"Bitstream Charter","Sitka Text",Cambria,Georgia,serif;font-size:19px;line-height:1.65;-webkit-font-smoothing:antialiased}
+main{max-width:680px;margin:0 auto;padding:0 20px}
+p{margin:0 0 1.2em}
+a{color:inherit;text-decoration-color:#A3A8B0;text-underline-offset:3px}
+a:hover{text-decoration-color:currentColor}
+sup{font-size:.7em;line-height:0}
+figure{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+@media (min-width:840px){figure{margin-left:-60px;margin-right:-60px}}
+.scrub:focus-visible{outline:2px solid #3F444C;outline-offset:2px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+.pop{opacity:0;transition:opacity .3s}
+.pop.on{opacity:1}
+.s,.past{transition:opacity .2s}
+.hit{pointer-events:stroke}
+#gap-fig[data-hover] .s{opacity:.15}
+#gap-fig[data-hover] .past{opacity:.4}
+#gap-fig[data-hover="sup"] .s-sup,#gap-fig[data-hover="exp"] .s-exp,#gap-fig[data-hover="pow"] .s-pow,#gap-fig[data-hover="lin"] .s-lin{opacity:1}
+.scrub{-webkit-appearance:none;appearance:none;display:block;height:40px;background:transparent;cursor:pointer;margin:-6px 0 0 calc(44 / 720 * 100% - 8px);width:calc(552 / 720 * 100% + 16px);opacity:0;transition:opacity .25s}
+.scrub:hover,.scrub:focus-visible,.scrub.show{opacity:1}
+.scrub::-webkit-slider-runnable-track{height:4px;background:#D9DCE0;border-radius:2px}
+.scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:#3F444C;border:2px solid #FAFAF7}
+.scrub::-moz-range-track{height:4px;background:#D9DCE0;border-radius:2px}
+.scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#3F444C;border:2px solid #FAFAF7}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</head>
+<body>
+<main>
+<figure id="gap-fig">
+<svg class="chart" viewBox="0 0 720 316" role="img" aria-label="Animated line chart of AI capability over time on a log scale. Four paths leave now from human level at the same speed. Superexponential and exponential growth cross the intermediate range quickly; sub-exponential and linear growth stay in it much longer.">
+<rect x="44" y="8.0" width="552" height="80.8" fill="#E6F2E8"/>
+<rect x="44" y="88.8" width="552" height="115.4" fill="#FBE6E2"/>
+<line x1="44" y1="88.8" x2="596" y2="88.8" stroke="#C9A39C" stroke-width="1"/>
+<line x1="44" y1="204.2" x2="596" y2="204.2" stroke="#3F444C" stroke-width="1.5"/>
+<text x="588" y="30.0" text-anchor="end" font-size="14" font-weight="700" fill="#1E6B35">Large gap</text>
+<text x="588" y="192.2" text-anchor="end" font-size="14" font-weight="700" fill="#9B2C1F">Intermediate range</text>
+<text x="588" y="222.2" text-anchor="end" font-size="13" font-weight="600" fill="#3F444C">Human level</text>
+<line x1="44" y1="308.0" x2="602" y2="308.0" stroke="#9CA3AF" stroke-width="1"/>
+<polygon points="610,308.0 601,303.5 601,312.5" fill="#9CA3AF"/>
+<line x1="44" y1="308.0" x2="44" y2="6.0" stroke="#9CA3AF" stroke-width="1"/>
+<polygon points="44,-2.0 39.5,7.0 48.5,7.0" fill="#9CA3AF"/>
+<text x="596" y="299.0" text-anchor="end" font-size="13" fill="#5B616B">Time</text>
+<text x="16" y="158.0" transform="rotate(-90 16 158.0)" text-anchor="middle" font-size="13" fill="#5B616B">Capability (log scale)</text>
+<line x1="136.0" y1="8.0" x2="136.0" y2="308.0" stroke="#6B7280" stroke-width="1.25" stroke-dasharray="4 4"/>
+<text x="142.0" y="24.0" font-size="13" font-weight="600" fill="#3F444C">Now</text>
+<g class="past"><path id="gap-past" fill="none" stroke="#8A9099" stroke-width="3.5" stroke-linecap="round" d=""/></g>
+<g class="s s-lin">
+<path id="gap-lin" fill="none" stroke="#B71C1C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d=""/>
+<path id="gap-hit-lin" data-k="lin" class="hit" fill="none" stroke="transparent" stroke-width="16" d=""/>
+
+<text id="gap-label-lin" class="pop" x="604.0" y="138.6" font-size="13.5" font-weight="700" fill="#B71C1C">Linear</text>
+</g>
+<g class="s s-pow">
+<path id="gap-pow" fill="none" stroke="#E0612A" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d=""/>
+<path id="gap-hit-pow" data-k="pow" class="hit" fill="none" stroke="transparent" stroke-width="16" d=""/>
+<circle id="gap-dot-pow" class="pop" cx="463.4" cy="88.8" r="5.5" fill="#E0612A" stroke="#FAFAF7" stroke-width="2"/>
+<text id="gap-label-pow" class="pop" x="604.0" y="72.5" font-size="13.5" font-weight="700" fill="#A9431A">Sub-exponential</text>
+</g>
+<g class="s s-exp">
+<path id="gap-exp" fill="none" stroke="#34A853" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d=""/>
+<path id="gap-hit-exp" data-k="exp" class="hit" fill="none" stroke="transparent" stroke-width="16" d=""/>
+<circle id="gap-dot-exp" class="pop" cx="274.0" cy="88.8" r="5.5" fill="#34A853" stroke="#FAFAF7" stroke-width="2"/>
+<text id="gap-label-exp" class="pop" x="379.6" y="24.0" font-size="13.5" font-weight="700" fill="#1F7A3A">Exponential</text>
+</g>
+<g class="s s-sup">
+<path id="gap-sup" fill="none" stroke="#0D6B36" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d=""/>
+<path id="gap-hit-sup" data-k="sup" class="hit" fill="none" stroke="transparent" stroke-width="16" d=""/>
+<circle id="gap-dot-sup" class="pop" cx="195.7" cy="88.8" r="5.5" fill="#0D6B36" stroke="#FAFAF7" stroke-width="2"/>
+<text id="gap-label-sup" class="pop" x="211.7" y="24.0" font-size="13.5" font-weight="700" fill="#0D6B36">Superexponential</text>
+</g>
+<circle id="gap-now-dot" class="pop" cx="136.0" cy="204.2" r="5.5" fill="#3F444C" stroke="#FAFAF7" stroke-width="2"/>
+</svg>
+<label for="gap-scrub" class="sr-only">Time</label>
+<input id="gap-scrub" class="scrub" type="range" min="-2" max="10" step="0.01" value="-2">
+</figure>
+</main>
+<script>
+(function () {
+  var fig = document.getElementById("gap-fig");
+  var x0 = 44, x1 = 596, tmin = -2, tmax = 10, ymin = -0.9, ymax = 1.7, top = 8, plotH = 300;
+  function X(u) { return x0 + (u - tmin) / (tmax - tmin) * (x1 - x0); }
+  function Y(v) { return top + (ymax - v) / (ymax - ymin) * plotH; }
+  var s = 1 / 3, lnG = Math.log(100);
+  var fn = {
+    sup: function (u) { return -Math.log(1 - 2 * s * u) / 2; },
+    exp: function (u) { return s * u; },
+    pow: function (u) { return 3 * Math.log(1 + (s * lnG / 3) * u) / lnG; },
+    lin: function (u) { return Math.log(1 + s * lnG * u) / lnG; }
+  };
+  var tend = { sup: (1 - Math.exp(-2 * ymax)) / (2 * s), exp: ymax / s, pow: tmax, lin: tmax };
+  var texit = { sup: (1 - Math.exp(-2)) / (2 * s), exp: 3, pow: (Math.exp(lnG / 3) - 1) / (s * lnG / 3), lin: Infinity };
+  var keys = ["sup", "exp", "pow", "lin"];
+  function el(id) { return document.getElementById(id); }
+  function trace(f, a, b) {
+    if (b <= a) return "";
+    var n = 90, d = "";
+    for (var i = 0; i <= n; i++) {
+      var u = a + (b - a) * i / n;
+      d += (i ? " L" : "M") + X(u).toFixed(1) + "," + Y(Math.min(f(u), ymax)).toFixed(1);
+    }
+    return d;
+  }
+  var slider = el("gap-scrub"), raf = null, hideTimer = null;
+  function render(t) {
+    el("gap-past").setAttribute("d", trace(fn.exp, tmin + 0.1, Math.min(t, 0)));
+    keys.forEach(function (k) {
+      var d = trace(fn[k], 0, Math.min(t, tend[k]));
+      el("gap-" + k).setAttribute("d", d);
+      el("gap-hit-" + k).setAttribute("d", d);
+      el("gap-label-" + k).classList.toggle("on", t >= tend[k] - 0.001);
+      var dot = el("gap-dot-" + k);
+      if (dot) dot.classList.toggle("on", t >= texit[k]);
+    });
+    el("gap-now-dot").classList.toggle("on", t >= 0);
+    slider.value = t;
+  }
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
+  function play() {
+    stop();
+    if (reduce) { render(tmax); return; }
+    var dur = 6000, start = performance.now();
+    function step(now) {
+      var p = Math.min(1, (now - start) / dur);
+      render(tmin + (tmax - tmin) * p);
+      raf = p < 1 ? requestAnimationFrame(step) : null;
+    }
+    raf = requestAnimationFrame(step);
+  }
+  function showSlider() { clearTimeout(hideTimer); slider.classList.add("show"); }
+  function hideSliderSoon() {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () { slider.classList.remove("show"); }, 1500);
+  }
+  slider.addEventListener("pointerdown", showSlider);
+  slider.addEventListener("pointerup", hideSliderSoon);
+  slider.addEventListener("pointercancel", hideSliderSoon);
+  slider.addEventListener("input", function () { stop(); showSlider(); render(parseFloat(slider.value)); hideSliderSoon(); });
+  fig.querySelectorAll("[data-k]").forEach(function (n) {
+    n.addEventListener("mouseenter", function () { fig.setAttribute("data-hover", n.getAttribute("data-k")); });
+    n.addEventListener("mouseleave", function () { fig.removeAttribute("data-hover"); });
+  });
+  render(reduce ? tmax : tmin);
+  if ("IntersectionObserver" in window && !reduce) {
+    var io = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { io.disconnect(); play(); }
+    }, { threshold: 0.35 });
+    io.observe(fig);
+  } else {
+    play();
+  }
+})();
+</script>
+<script>(function bareBg() {
+  function plain(c) { // light and grey-ish (white, off-white, light grey)
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || '')
+    if (!m) return false
+    var r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4]
+    if (a === 0) return false
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 26
+  }
+  function run() {
+    var body = document.body
+    if (!body) return
+    var root = document.documentElement
+    var W = Math.max(root.scrollWidth, 1), H = Math.max(root.scrollHeight, 1)
+    var els = [root, body].concat(Array.prototype.slice.call(body.querySelectorAll('div,section,main,article,figure,header,svg,canvas,rect')))
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i]
+      var big = el === root || el === body
+      if (!big) {
+        var r = el.getBoundingClientRect()
+        big = r.width >= W * 0.85 && r.height >= H * 0.6
+      }
+      if (!big) continue
+      if (el.tagName.toLowerCase() === 'rect') {
+        if (plain(getComputedStyle(el).fill)) el.style.setProperty('fill', 'transparent', 'important')
+        continue
+      }
+      var cs = getComputedStyle(el)
+      if (plain(cs.backgroundColor) && (cs.backgroundImage === 'none' || !cs.backgroundImage)) {
+        el.style.setProperty('background-color', 'transparent', 'important')
+        el.style.setProperty('box-shadow', 'none', 'important')
+        if (el !== root && el !== body) el.style.setProperty('border-color', 'transparent', 'important')
+      }
+    }
+  }
+  run()
+  addEventListener('DOMContentLoaded', run)
+  addEventListener('load', function () { run(); (window.__embedRaw || window).setTimeout(run, 400) })
+})()</script><script>(function(){var d=document.documentElement,last=0,busy=0,R=window.__embedRaw||{raf:requestAnimationFrame.bind(window),setInterval:setInterval.bind(window)};function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}addEventListener("resize",fit);addEventListener("load",fit);fit();addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key||"").toLowerCase()==="s"){e.preventDefault();parent.postMessage({embedSave:1},"*")}});addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;if(el.focus)try{el.focus({preventScroll:true})}catch(x){}["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script></body>
+</html>

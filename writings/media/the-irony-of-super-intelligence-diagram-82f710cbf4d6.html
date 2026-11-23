@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><script>(function holdDiagram() {
+  var W = window, P = W.performance
+  var raw = {
+    setTimeout: W.setTimeout.bind(W), setInterval: W.setInterval.bind(W),
+    clearTimeout: W.clearTimeout.bind(W), clearInterval: W.clearInterval.bind(W),
+    raf: W.requestAnimationFrame.bind(W), caf: W.cancelAnimationFrame.bind(W),
+    now: P.now.bind(P),
+  }
+  W.__embedRaw = raw
+  if (W.parent === W) return
+  var playing = false, frozen = raw.now(), offset = 0, q = [], ids = {}, next = -1, anims = []
+  var css = document.createElement('style')
+  css.textContent = '*,*::before,*::after{animation-play-state:paused!important}'
+  document.documentElement.appendChild(css)
+  P.now = function () { return playing ? raw.now() - offset : frozen }
+  function fake(kind, cb, ms, args) { var id = next--; q.push({ id: id, kind: kind, cb: cb, ms: ms, args: args }); return id }
+  function drop(id) {
+    if (ids[id] != null) return ids[id]
+    for (var i = 0; i < q.length; i++) if (q[i].id === id) { q.splice(i, 1); return null }
+    return id
+  }
+  function wrapRaf(cb) { return function (t) { cb(t - offset) } }
+  W.requestAnimationFrame = function (cb) { return playing ? raw.raf(wrapRaf(cb)) : fake('raf', cb) }
+  W.setTimeout = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setTimeout.apply(null, [cb, ms].concat(a)) : fake('t', cb, ms, a) }
+  W.setInterval = function (cb, ms) { var a = [].slice.call(arguments, 2); return playing ? raw.setInterval.apply(null, [cb, ms].concat(a)) : fake('i', cb, ms, a) }
+  W.cancelAnimationFrame = function (id) { id = drop(id); if (id != null) raw.caf(id) }
+  W.clearTimeout = function (id) { id = drop(id); if (id != null) raw.clearTimeout(id) }
+  W.clearInterval = function (id) { id = drop(id); if (id != null) raw.clearInterval(id) }
+  var animate = W.Element && Element.prototype.animate
+  if (animate) Element.prototype.animate = function () {
+    var a = animate.apply(this, arguments)
+    if (!playing) { try { a.pause(); anims.push(a) } catch (e) {} }
+    return a
+  }
+  function svgs(fn) { var s = document.getElementsByTagName('svg'); for (var i = 0; i < s.length; i++) try { s[i][fn]() } catch (e) {} }
+  document.addEventListener('DOMContentLoaded', function () { if (!playing) svgs('pauseAnimations') })
+  function play() {
+    if (playing) return
+    playing = true
+    offset = raw.now() - frozen
+    css.remove()
+    svgs('unpauseAnimations')
+    anims.forEach(function (a) { try { a.play() } catch (e) {} })
+    var list = q; q = []
+    list.forEach(function (o) {
+      var f = typeof o.cb === 'function' ? o.cb : function () {}
+      if (o.kind === 'raf') ids[o.id] = raw.raf(wrapRaf(f))
+      else if (o.kind === 't') ids[o.id] = raw.setTimeout.apply(null, [f, o.ms].concat(o.args))
+      else ids[o.id] = raw.setInterval.apply(null, [f, o.ms].concat(o.args))
+    })
+  }
+  addEventListener('message', function (e) { if (e.source === W.parent && e.data && (e.data.embedPlay || e.data.embedClick)) play() })
+  addEventListener('pointerdown', play, true)
+  addEventListener('keydown', play, true)
+})()</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"><style>:root{--ink:#27323f;--muted:#6b7280;--accent:#e8743b;--line:rgba(39,50,63,0.15);--tint-green:#e6f2e6;--tint-red:#f8e4df;--tint-orange:#fbe3d4;--font:"Newsreader",Georgia,serif;--sans:system-ui,-apple-system,sans-serif}html,body{margin:0;background:transparent}body{font-family:var(--font);color:var(--ink)}svg,img,canvas{max-width:100%}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden;scrollbar-width:none}
+html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
+body{color:var(--ink,#27323f);font-family:var(--font,'Newsreader',Georgia,serif);font-size:15px;line-height:1.5}
+*{box-sizing:border-box}
+.fig{width:100%;padding:2px 0 0}
+.legend{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:13px;color:var(--muted,#6b7280);margin:0 0 6px}
+.legend span{white-space:nowrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:0}
+#map{width:100%;height:auto;display:block}
+.strip{position:relative;margin-top:8px}
+.rl{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted,#6b7280);margin:0}
+.scrub{padding:0 8px}
+.track{position:relative;height:40px;cursor:ew-resize;touch-action:pan-y;outline:none;-webkit-user-select:none;user-select:none}
+.track.drag{cursor:grabbing}
+.track:focus-visible .knob{box-shadow:0 0 0 3px rgba(39,50,63,0.15)}
+#risk{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:hidden}
+.knob{position:absolute;left:0;top:94%;width:13px;height:13px;border-radius:50%;background:#f1ebdf;border:1.5px solid var(--ink,#27323f);transform:translate(-50%,-50%);pointer-events:none}
+.phases{position:relative;height:20px;margin-top:2px;overflow:hidden}
+.phases span{position:absolute;top:0;transform:translateX(-50%);font-size:13px;color:var(--muted,#6b7280);white-space:nowrap;cursor:pointer}
+.phases span.first{transform:none}
+.phases span.on{color:var(--ink,#27323f)}
+@media (max-width:600px){.phases{display:none}}
+.row{margin-top:8px}
+.story{min-width:0}
+.story p{margin:0}
+.mt{font-size:16px;color:var(--ink,#27323f)}
+.mb{margin-top:2px !important;font-size:15px}
+.ev{font-size:15px;font-style:italic;color:var(--ink,#27323f)}
+.ev:not(:empty){margin-top:4px !important}
+</style>
+</head>
+<body>
+<div class="fig">
+<div class="legend">
+<span><i style="background:#8fae8a"></i>jungle</span>
+<span><i style="background:#27323f"></i>cared for</span>
+<span><i style="background:#d4a86a"></i>zoo</span>
+<span><i style="background:#a1453a"></i>lab</span>
+<span><i style="background:#d6cebf"></i>cleared</span>
+<span><i style="background:#e8743b"></i>it</span>
+</div>
+<canvas id="map" width="760" height="361" role="img" aria-label="Animated dot map of the world: people sorted into jungle, cared for, zoo, lab, or cleared as one made-up scenario plays out"></canvas>
+<div class="strip">
+<div class="rl"><span>danger to us</span><span>drag to rewind</span></div>
+<div class="scrub">
+<div class="track" id="track" tabindex="0" role="slider" aria-label="Scenario time" aria-valuemin="0" aria-valuemax="43" aria-valuenow="0">
+<svg id="risk" viewBox="0 0 760 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+<div class="knob" id="knob"></div>
+</div>
+<div class="phases" id="phases"></div>
+</div>
+</div>
+<div class="row">
+<div class="story" id="story">
+<div id="storyIn">
+<p class="mt" id="mt"></p>
+<p class="mb" id="mb"></p>
+<p class="ev" id="ev"></p>
+</div>
+</div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const ns="http://www.w3.org/2000/svg";
+function el(t,a,p){const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e}
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const D={"S":6.4,"y0":-222.1,"H":406.4,"rows":[[],[31,1,34,13,56,2],[20,2,26,1,28,1,31,1,38,9,67,1,74,10,89,1],[8,5,17,1,21,4,26,1,29,5,37,9,58,2,70,25],[2,2,7,23,32,3,38,5,56,8,66,37],[6,23,31,2,37,3,46,2,55,3,59,3,63,40],[3,22,30,1,38,2,54,4,59,45],[3,2,10,13,28,3,32,1,54,4,59,37,98,1,101,1],[3,1,11,14,29,5,51,1,55,3,59,37,101,2],[11,15,27,7,49,1,51,1,57,38,101,2],[11,15,27,8,51,2,54,45,103,1],[11,21,33,1,50,1,53,45],[12,17,30,1,33,2,51,48],[10,22,52,10,63,1,65,4,70,29],[10,19,30,1,52,5,58,4,66,3,70,29,101,1],[9,18,49,4,56,1,58,4,67,2,70,28],[9,17,49,4,55,1,58,3,63,7,71,24,96,2,102,1],[8,17,49,3,59,1,62,7,71,23,97,1,102,1],[9,16,50,2,55,2,60,1,62,9,72,25,98,1,102,1],[8,16,50,6,61,1,65,31,98,1,100,3],[9,14,49,8,66,31,100,2],[10,12,48,10,59,3,65,32,100,1],[9,10,21,1,49,49],[9,7,21,1,47,23,71,27],[11,5,21,1,47,18,66,6,74,24],[9,1,11,4,46,19,66,6,73,1,78,19,98,1],[12,3,21,1,46,20,67,8,79,18],[11,3,18,1,45,21,67,8,79,7,88,7],[12,3,17,2,24,1,46,21,68,7,81,5,89,5,95,1],[12,6,46,21,68,6,81,4,89,5,99,1],[14,4,46,22,69,4,81,4,89,1,91,4],[16,3,45,23,69,3,81,3,91,4,99,1],[18,2,46,23,82,2,91,5,101,1],[18,1,23,2,46,23,82,2,91,1,93,2,100,2],[19,1,23,5,47,26,83,1,94,1,101,1],[19,1,21,7,47,25,91,1,101,1],[22,8,48,24,84,1,92,1,102,1],[21,10,48,2,51,1,54,17,90,1,92,1,98,1],[22,10,56,15,91,1,93,1,98,1],[21,11,56,14,91,3,96,3],[21,11,56,14,92,2,96,3,100,1],[20,14,56,13,92,2,96,3,100,1,104,2],[21,16,57,12,93,2,97,2,100,1,104,2,107,2],[20,17,57,11,93,1,106,4],[20,19,57,11,95,1,108,3,114,1],[20,18,57,11,96,2,107,2,110,1],[21,17,58,10,111,1],[21,16,58,10,104,1,108,1],[22,15,58,11,104,3],[22,15,57,11,71,1,101,1,103,2,108,1],[24,13,57,11,70,2,101,5,108,2],[24,13,57,10,69,2,100,9],[25,12,58,8,70,2,100,10],[25,11,57,9,69,2,97,13],[26,10,58,8,69,2,96,15],[25,9,58,7,69,1,95,15],[26,8,58,7,96,15],[25,9,58,6,95,15],[26,8,59,5,96,14],[25,8,59,4,95,14],[26,7,59,4,95,3,102,6],[26,5,94,1,103,4],[26,6,103,4],[26,5,103,2,114,2],[27,4,114,1],[27,3,103,1,112,1],[27,3,111,1],[27,2,109,1],[27,4],[27,3],[28,2],[29,2],[]],"ai":[52.7,-124.1],"res":[[154.9,-127.2],[97.7,-104],[604.5,-104],[629.6,-81.4],[455.3,-84.6],[163.6,78.1],[399.4,27.5],[628.6,84.6],[361.6,-189.4],[525.8,-185],[523.2,-74.8],[214.4,41.2]]};
+const MW=760,MH=Math.ceil(D.H+12);
+// gentle vertical compression of the map
+const SQ=.86,MHs=Math.ceil(MH*SQ);
+const JU=0,CA=1,ZO=2,LA=3,CL=4;
+const INK='#27323f',ACC='#e8743b';
+const hex=h=>{h=h.replace('#','');return[0,2,4].map(i=>parseInt(h.substr(i,2),16))};
+const PAL=['#8fae8a',INK,'#d4a86a','#a1453a','#d6cebf'].map(hex);
+
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(11);
+const dots=[];
+D.rows.forEach((runs,r)=>{const off=(r%2)*D.S/2,y=r*D.S*.866+6;for(let k=0;k<runs.length;k+=2)for(let c=runs[k];c<runs[k]+runs[k+1];c++)dots.push({x:c*D.S+off,y,r:[R(),R(),R(),R(),R(),R()]})});
+const sp=p=>[p[0],p[1]-D.y0+6];
+const AI=sp(D.ai),RES=D.res.map(sp).concat([AI]);
+const dist=(d,s)=>Math.hypot(d.x-s[0],d.y-s[1]);
+function nearest(d,ss){let b=0,bd=1e9;ss.forEach((s,i)=>{const q=dist(d,s);if(q<bd){bd=q;b=i}});return[b,bd]}
+const seedsFrom=n=>Array.from({length:n},()=>{const p=dots[Math.floor(R()*dots.length)];return[p.x,p.y]});
+const REG1=seedsFrom(16),REG2=seedsFrom(16);
+const CATS1=[JU,CA,ZO,LA,JU,CA,ZO,JU,LA,CA,JU,ZO,CA,LA,JU,ZO];
+const CATS2=[ZO,JU,LA,CA,JU,ZO,CA,LA,JU,CA,ZO,JU,LA,CA,JU,ZO];
+const E0R=new Set([0,5,9,11]);
+const PH=[0,3,6,13,16.5,22],T=43;
+const TE=[22.5,25.7,28.9,32.1,35.3,38.5,41.4];
+const PT=[
+{t:"Now",b:"Eight billion people, living roughly as we always have. Call it the jungle."},
+{t:"The moment",b:"Something smarter than us shows up, and we can't control it."},
+{t:"Competition",b:"It needs energy, land and matter. So do we. This is the most dangerous part, and the most certain. We don't hate monkeys. We just clear their forest."},
+{t:"Settling",b:"Once it has what it needs, we stop being in the way. The danger drops."},
+{t:"Sorted",b:"What's left gets sorted by its values, not ours. Some places it ignores, some it spoils, some it keeps, some it studies."},
+{t:"Anything",b:"The danger stays low. But anything can happen."}];
+const EV=["It decides we were hypocrites.","It likes satire, and spoils whoever makes it laugh.","It sorts us at random.","It wants to see where it came from, so the whole world gets watched.","A ship takes you. There's noise. You wake up at home and remember nothing.","It ends us and brings us back later. We can't do that for the species we lost. It could.","And it can change its mind again, at any time."];
+
+dots.forEach(d=>{d.dr=Math.min(...RES.map(s=>dist(d,s)))*(.7+.6*d.r[0]);[d.g1,d.g1d]=nearest(d,REG1);[d.g2,d.g2d]=nearest(d,REG2)});
+const Rq=dots.map(d=>d.dr).sort((a,b)=>a-b)[Math.floor(dots.length*.3)];
+const n180=v=>Math.min(1,v/220);
+dots.forEach(d=>{
+const tl=[];
+if(d.dr<Rq){tl.push([6.2+d.dr/Rq*6.4,CL])}
+else{
+tl.push([16.8+n180(d.g1d)*3.6+d.r[1]*.6,CATS1[d.g1]]);
+if(E0R.has(d.g1))tl.push([TE[0]+n180(d.g1d)*1.6,LA]);
+if(d.r[2]<.12)tl.push([TE[1]+d.r[3]*1.8,CA]);
+tl.push([TE[2]+d.x/MW*2.2,Math.floor(d.r[4]*4)]);
+tl.push([TE[3]+dist(d,AI)/MW*2.2,ZO]);
+}
+tl.push([TE[5]+d.r[5]*.7,CL]);
+tl.push([TE[5]+1.6+n180(d.g2d)*1.6+d.r[0]*.3,CATS2[d.g2]]);
+tl.sort((a,b)=>a[0]-b[0]);d.tl=tl});
+const ABD=dots.filter(d=>d.dr>=Rq).sort((a,b)=>a.r[3]-b.r[3]).slice(0,12).map((d,k)=>{d.ta=TE[4]+k*.15;return d});
+function state(d,t){let c=JU,p=JU,tc=-9;for(const s of d.tl){if(s[0]>t)break;p=c;c=s[1];tc=s[0]}return[c,p,tc]}
+
+const cv=$('map'),ctx=cv.getContext('2d');
+let t=0,playing=false,last=null,started=false,dragging=false;
+function draw(){
+const dpr=window.devicePixelRatio||1,w=cv.clientWidth||MW,W=Math.round(w*dpr),H=Math.round(w*MHs/MW*dpr);
+if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+ctx.setTransform(W/MW,0,0,W/MW,0,0);ctx.clearRect(0,0,MW,MH);
+const k=w<520?1.3:1;
+for(const d of dots){
+const[c,p,tc]=state(d,t),dt=t-tc;let rgb=PAL[c],rad=(c==CL?1.5:2.3)*k;
+if(dt<.45){const f=dt/.45;rgb=PAL[p].map((a,i)=>Math.round(a+(PAL[c][i]-a)*f));if(c!=CL)rad+=1.6*(1-f)}
+let y=d.y*SQ;
+if(d.ta!==undefined&&t>=d.ta&&t<d.ta+1.4){y-=Math.sin(Math.PI*(t-d.ta)/1.4)*14}
+ctx.fillStyle=`rgb(${rgb})`;ctx.beginPath();ctx.arc(d.x,y,rad,0,7);ctx.fill()}
+for(const d of ABD){if(t<d.ta||t>=d.ta+1.4)continue;const q=(t-d.ta)/1.4,a=Math.sin(Math.PI*q),by=d.y*SQ;
+ctx.globalAlpha=a*.15;ctx.fillStyle=INK;ctx.beginPath();ctx.moveTo(d.x-2,by-21);ctx.lineTo(d.x+2,by-21);ctx.lineTo(d.x+6,by+3);ctx.lineTo(d.x-6,by+3);ctx.fill();
+ctx.globalAlpha=a;ctx.beginPath();ctx.ellipse(d.x,by-22,6,2.2,0,0,7);ctx.fill();ctx.globalAlpha=1}
+const ay=AI[1]*SQ;
+if(t>=3){
+if(!RM&&(t<13||(t>=TE[3]&&t<TE[3]+2.5))){for(let j=0;j<2;j++){const f=((t*.7)+j/2)%1;ctx.globalAlpha=(1-f)*.6;ctx.strokeStyle=ACC;ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(AI[0],ay,4+f*26,0,7);ctx.stroke()}ctx.globalAlpha=1}
+ctx.fillStyle=ACC;ctx.beginPath();ctx.arc(AI[0],ay,4*k,0,7);ctx.fill()}
+}
+
+// danger strip
+const rk=$('risk'),RX=t=>t/T*760,RY=v=>94-v*84;
+const AMP=[.35,.2,.3,.25,.3,.6,0];
+function risk(t){if(t<3)return .04;if(t<6){const f=(t-3)/3;return .04+.86*f*f*(3-2*f)}if(t<13)return .9+.04*Math.sin((t-6)*2.3)+.02*Math.sin((t-6)*5.7);let v=t<16.5?.15+.75*Math.exp(-(t-13)*1.3):.15;TE.forEach((e,i)=>v+=AMP[i]*Math.exp(-((t-e-.6)**2)/(2*.35*.35)));return Math.min(1,v)}
+let pd='';for(let s=0;s<=T;s+=.1)pd+=(s?'L':'M')+RX(s).toFixed(1)+' '+RY(risk(s)).toFixed(1);
+const cp=el('clipPath',{id:'rc'},rk),crect=el('rect',{x:-2,y:-10,width:0,height:120},cp);
+const NS={'vector-effect':'non-scaling-stroke','stroke-linecap':'round','stroke-linejoin':'round',fill:'none'};
+el('line',Object.assign({x1:0,x2:760,y1:96,y2:96,stroke:'rgba(39,50,63,0.15)','stroke-width':1},NS),rk);
+el('path',Object.assign({d:pd,stroke:'rgba(39,50,63,0.18)','stroke-width':1.5},NS),rk);
+el('path',Object.assign({d:pd,stroke:ACC,'stroke-width':1.5,'clip-path':'url(#rc)'},NS),rk);
+const head=el('line',Object.assign({x1:0,x2:0,y1:4,y2:96,stroke:'#6b7280','stroke-width':1,'stroke-dasharray':'2 3'},NS),rk);
+const knob=$('knob'),track=$('track');
+
+function play(){if(RM)return;if(t>=T)t=0;playing=true;last=null;loop()}
+function seek(nt){t=Math.max(0,Math.min(T,nt));if(!playing){draw();ui()}}
+
+const phBox=$('phases');
+const phL=PT.map((p,i)=>{const e=i<5?PH[i+1]:T,m=(PH[i]+e)/2;const s=document.createElement('span');s.textContent=p.t;s.setAttribute('role','button');s.tabIndex=0;
+if(i==0){s.className='first';s.style.left='0'}else s.style.left=(m/T*100)+'%';
+const goTo=()=>{started=true;if(RM){playing=false;seek(Math.min(T,e-.01))}else{t=PH[i]+.01;play()}};
+s.addEventListener('click',goTo);s.addEventListener('keydown',ev=>{if(ev.key=='Enter'||ev.key==' '){ev.preventDefault();goTo()}});
+phBox.appendChild(s);return s});
+
+// dragging the strip scrubs; letting go plays on from there
+const tAt=x=>{const r=track.getBoundingClientRect();return (x-r.left)/r.width*T};
+track.addEventListener('pointerdown',e=>{dragging=true;started=true;playing=false;track.classList.add('drag');try{track.setPointerCapture(e.pointerId)}catch(_){}seek(tAt(e.clientX))});
+track.addEventListener('pointermove',e=>{if(dragging)seek(tAt(e.clientX))});
+const release=()=>{if(!dragging)return;dragging=false;track.classList.remove('drag');if(t<T)play();else{draw();ui()}};
+track.addEventListener('pointerup',release);track.addEventListener('pointercancel',release);
+track.addEventListener('keydown',e=>{const st={ArrowLeft:-1.5,ArrowRight:1.5,Home:-T,End:T}[e.key];if(st===undefined)return;e.preventDefault();started=true;const was=playing;playing=false;seek(t+st);if((was||!RM)&&t<T&&!RM)play()});
+
+// reserve exactly the height of the tallest text state the scenario actually shows
+const story=$('story'),storyIn=$('storyIn');
+function fitStory(){
+const mt=$('mt'),mb=$('mb'),ev=$('ev'),keep=[mt.textContent,mb.textContent,ev.textContent];
+story.style.minHeight='0';let mx=0;
+const m=(a,b,c)=>{mt.textContent=a;mb.textContent=b;ev.textContent=c;mx=Math.max(mx,storyIn.offsetHeight)};
+PT.forEach((p,i)=>{m(p.t,p.b,'');if(i==5)EV.forEach(e=>m(p.t,p.b,e))});
+mt.textContent=keep[0];mb.textContent=keep[1];ev.textContent=keep[2];
+story.style.minHeight=Math.ceil(mx)+'px';
+}
+
+let lastKey='';
+function ui(){
+let ph=0;PH.forEach((s,i)=>{if(t>=s)ph=i});
+let ei=-1;if(ph==5)TE.forEach((e,i)=>{if(t>=e)ei=i});
+const key=ph+'|'+ei;
+if(key!==lastKey){lastKey=key;$('mt').textContent=PT[ph].t;$('mb').textContent=PT[ph].b;$('ev').textContent=ei>=0?EV[ei]:'';phL.forEach((x,i)=>x.classList.toggle('on',i==ph))}
+crect.setAttribute('width',RX(t)+2);head.setAttribute('x1',RX(t));head.setAttribute('x2',RX(t));
+knob.style.left=(t/T*100)+'%';knob.style.top=RY(risk(t))+'%';
+track.setAttribute('aria-valuenow',t.toFixed(1));track.setAttribute('aria-valuetext',PT[ph].t);
+}
+let raf=0;
+function frame(ts){raf=0;if(playing){if(last!=null)t+=(ts-last)/1000;last=ts;if(t>=T){t=T;playing=false}}draw();ui();if(playing)raf=requestAnimationFrame(frame);else last=null}
+function loop(){if(!raf)raf=requestAnimationFrame(frame)}
+
+// autoplay once the map is fully in view
+if(!RM&&'IntersectionObserver' in window){new IntersectionObserver(es=>{es.forEach(e=>{if(e.intersectionRatio>=.97&&!started){started=true;play()}})},{threshold:[0,.5,.97,1]}).observe(cv)}
+let rw=window.innerWidth;
+window.addEventListener('resize',()=>{if(window.innerWidth!==rw){rw=window.innerWidth;fitStory()}if(!playing){draw();ui()}});
+draw();ui();fitStory();
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitStory);
+</script>
+<script>(function bareBg() {
+  function plain(c) { // light and grey-ish (white, off-white, light grey)
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || '')
+    if (!m) return false
+    var r = +m[1], g = +m[2], b = +m[3], a = m[4] == null ? 1 : +m[4]
+    if (a === 0) return false
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 26
+  }
+  function run() {
+    var body = document.body
+    if (!body) return
+    var root = document.documentElement
+    var W = Math.max(root.scrollWidth, 1), H = Math.max(root.scrollHeight, 1)
+    var els = [root, body].concat(Array.prototype.slice.call(body.querySelectorAll('div,section,main,article,figure,header,svg,canvas,rect')))
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i]
+      var big = el === root || el === body
+      if (!big) {
+        var r = el.getBoundingClientRect()
+        big = r.width >= W * 0.85 && r.height >= H * 0.6
+      }
+      if (!big) continue
+      if (el.tagName.toLowerCase() === 'rect') {
+        if (plain(getComputedStyle(el).fill)) el.style.setProperty('fill', 'transparent', 'important')
+        continue
+      }
+      var cs = getComputedStyle(el)
+      if (plain(cs.backgroundColor) && (cs.backgroundImage === 'none' || !cs.backgroundImage)) {
+        el.style.setProperty('background-color', 'transparent', 'important')
+        el.style.setProperty('box-shadow', 'none', 'important')
+        if (el !== root && el !== body) el.style.setProperty('border-color', 'transparent', 'important')
+      }
+    }
+  }
+  run()
+  addEventListener('DOMContentLoaded', run)
+  addEventListener('load', function () { run(); (window.__embedRaw || window).setTimeout(run, 400) })
+})()</script><script>(function(){var d=document.documentElement,last=0,busy=0,R=window.__embedRaw||{raf:requestAnimationFrame.bind(window),setInterval:setInterval.bind(window)};function fit(){if(busy)return;busy=1;var st=d.style;st.transform="";st.width="";st.transformOrigin="0 0";var W=d.clientWidth||innerWidth,sw=Math.max(d.scrollWidth,document.body?document.body.scrollWidth:0);if(sw>W+1){var b=document.body;if(b){var cs=getComputedStyle(b);sw+=Math.min(80,b.getBoundingClientRect().left+parseFloat(cs.paddingLeft)||0)}var k=W/sw;st.width=sw+"px";st.transform="scale("+k+")";st.overflow="hidden"}else st.overflow="";busy=0;s()}function s(){var h=Math.ceil(d.getBoundingClientRect().height);if(Math.abs(h-last)>1){last=h;parent.postMessage({embedH:h},"*")}}try{new ResizeObserver(function(){R.raf(fit)}).observe(document.body||d)}catch(e){R.setInterval(fit,500)}addEventListener("resize",fit);addEventListener("load",fit);fit();addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key||"").toLowerCase()==="s"){e.preventDefault();parent.postMessage({embedSave:1},"*")}});addEventListener("message",function(e){var c=e.source===parent&&e.data&&e.data.embedClick;if(!c)return;var el=document.elementFromPoint(c[0],c[1]);if(!el)return;if(el.focus)try{el.focus({preventScroll:true})}catch(x){}["pointerdown","mousedown","pointerup","mouseup","click"].forEach(function(t){var o={bubbles:true,cancelable:true,composed:true,clientX:c[0],clientY:c[1],button:0,view:window};el.dispatchEvent(t[0]==="p"&&window.PointerEvent?new PointerEvent(t,Object.assign({pointerId:1,isPrimary:true,pointerType:"mouse"},o)):new MouseEvent(t,o))})})})()</script></body>
+</html>

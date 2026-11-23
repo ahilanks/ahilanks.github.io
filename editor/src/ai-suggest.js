@@ -591,6 +591,7 @@ export const Suggestions = Extension.create({
               const at = Date.now()
               closed = [...gone.map((it) => ({ ...it, how, closedAt: at })), ...closed].slice(0, MAX_CLOSED)
             }
+            if (meta.set) items = meta.set.slice().sort((a, b) => a.from - b.from) // a draft loaded with its saved suggestions
             if (meta.clear) { close(items, 'Cleared'); items = [] }
             if (meta.remove) items = items.filter((it) => it.id !== meta.remove)
             if (meta.dismiss) { close(items.filter((it) => it.id === meta.dismiss), 'Dismissed'); items = items.filter((it) => it.id !== meta.dismiss) }
@@ -1052,7 +1053,7 @@ function answerHTML(text) {
  * @param comments  the comments controller — suggestion cards share its margin layout
  * @param getDocId  the current draft's id (a reply for another draft is discarded)
  */
-export function setupSuggestions(editor, comments, { getDocId }) {
+export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) {
   const btn = $('suggestBtn')
   const menu = $('sgMenu')
   const layer = comments.layer
@@ -1249,7 +1250,25 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     document.querySelectorAll('#askThread .ask-ref').forEach((b) => b.classList.toggle('gone', !live.has(b.dataset.sg)))
     comments.layout()
   }
-  onChange = sync
+  // open suggestions are saved with the draft (main.js), so a reload doesn't lose them
+  let savedItems = st().items
+  onChange = () => {
+    sync()
+    if (onItemsChange && st().items !== savedItems) { savedItems = st().items; onItemsChange() }
+  }
+
+  // A draft's saved suggestions, put back once its text is loaded: each only if its text is
+  // still exactly where it was (else it's dropped). Replaces whatever was showing.
+  function load(arr) {
+    const doc = editor.state.doc
+    const same = { map: (p) => p }
+    const ok = (Array.isArray(arr) ? arr : []).filter((it) => {
+      if (!it || !it.id || typeof it.from !== 'number' || typeof it.to !== 'number' || it.to > doc.content.size) return false
+      try { return !!mapItem(it, same, doc) } catch (e) { return false }
+    })
+    editor.view.dispatch(editor.state.tr.setMeta(key, { set: ok, active: null }).setMeta('addToHistory', false))
+    savedItems = st().items
+  }
 
   function anchorRect(it) {
     const el = editor.view.dom.querySelector('[data-sg="' + it.id + '"]')
@@ -1863,7 +1882,7 @@ export function setupSuggestions(editor, comments, { getDocId }) {
 
   // exposed for console debugging / verification
   return {
-    start, stop, ask, openAsk, clear: clearAll, items: () => st().items, accept, dismiss, keepAsComment, closedSource,
+    start, stop, ask, openAsk, clear: clearAll, items: () => st().items, load, accept, dismiss, keepAsComment, closedSource,
     reads, getStage, lastUnplaced,
     _internal: { requestRead, linkedWords, footnoteNumbers, locate, wordHunks, toItem, passageBlocks, scopeOf, documentText, verifyWebLinks, titleMatches, answerHTML },
   }

@@ -475,6 +475,7 @@ function currentSnapshot() {
     footnotes: footnotesHTML(),
     comments: comments.data(),
     closedComments: comments.closedData(),
+    suggestions: window.__suggest ? window.__suggest.items() : [], // open AI suggestions, so a reload keeps them; never published
     diagramBin: diagramBin ? diagramBin.data() : [], // deleted diagrams, to add back (diagram-bin.js); never published
     notes: notes.get(), // private sticky note — publish.js must never read it
     style: style.get(), // per-article look (style.js); read by publish.js
@@ -551,6 +552,7 @@ function applySnapshot(s) {
   loadFootnotesHTML(s.footnotes, editor)
   comments.load(s.comments, s.closedComments)
   if (diagramBin) diagramBin.load(s.diagramBin)
+  if (window.__suggest) window.__suggest.load(s.suggestions)
   notes.set(s.notes)
   sectionFocus.restore(s.id || doc.id)
   refreshPlaceholders()
@@ -628,7 +630,7 @@ const style = setupStyle({
 const sectionFocus = setupSectionFocus(editor, { getDocId, comments, onChange: () => { if (wordCount) wordCount.refresh() } })
 
 // AI suggestions: toolbar pen → Proofread / Review the selection or whole draft → margin cards.
-window.__suggest = setupSuggestions(editor, comments, { getDocId })
+window.__suggest = setupSuggestions(editor, comments, { getDocId, onItemsChange: () => scheduleSave() })
 
 // History: your comments (open + resolved, and closed AI suggestions → Reopen) and the draft's
 // past versions (each push to the drafts repo → diff against now, Restore). `versions` is

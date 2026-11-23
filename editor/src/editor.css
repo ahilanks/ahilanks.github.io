@@ -590,6 +590,15 @@ body.section-focus #docTitle, body.section-focus #docSubtitle, body.section-focu
 .doc-body .sg-note-block { outline: 2px dotted rgba(43, 138, 110, 0.55); outline-offset: 4px; border-radius: 4px; }
 .doc-body .sg-del.sg-on { background: rgba(185, 83, 59, 0.14); }
 .doc-body .sg-ins.sg-on, .doc-body .sg-note.sg-on { background: rgba(43, 138, 110, 0.18); }
+/* hovering one change of an edit: both its halves light up, with ✓ / ✕ for just it */
+.doc-body .sg-del.sg-hover { background: rgba(185, 83, 59, 0.2); }
+.doc-body .sg-ins.sg-hover { background: rgba(43, 138, 110, 0.24); }
+.sg-hunkbar { position: fixed; z-index: 96; display: flex; gap: 2px; padding: 2px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+.sg-hunkbar.hidden { display: none; }
+.sg-hunkbar button { border: none; background: none; width: 26px; height: 24px; border-radius: 6px; font-size: 0.85rem; line-height: 1; cursor: pointer; color: var(--muted); }
+.sg-hunkbar .sg-hb-ok { color: #2b8a6e; }
+.sg-hunkbar button:hover { background: rgba(39, 50, 63, 0.08); color: var(--text); }
+.sg-hunkbar .sg-hb-ok:hover { color: #2b8a6e; }
 .doc-body .sg-note-block.sg-on { outline-color: var(--sg); }
 
 /* In the margin: cards share the comment layout (and .cmt-card's look) */

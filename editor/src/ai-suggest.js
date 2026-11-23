@@ -522,11 +522,12 @@ function mapItem(it, mapping, doc) {
   return { ...it, from, to, hunks }
 }
 
-function insWidget(id, h, on) {
+function insWidget(id, h, on, i) {
   return () => {
     const span = document.createElement('span')
     span.className = 'sg-ins' + (h.delTo > h.delFrom ? ' after-del' : '') + on
     span.dataset.sg = id
+    span.dataset.sgh = String(i) // which change within the edit (hover → accept/dismiss just it)
     span.textContent = h.ins
     return span
   }
@@ -549,8 +550,9 @@ function buildDecorations(doc, items, active) {
     const on = it.id === active ? ' sg-on' : ''
     if (it.kind === 'edit') {
       it.hunks.forEach((h, i) => {
-        if (h.delTo > h.delFrom) decos.push(Decoration.inline(h.delFrom, h.delTo, { class: 'sg-del' + on, 'data-sg': it.id }))
-        if (h.ins) decos.push(Decoration.widget(h.delTo, insWidget(it.id, h, on), { side: 1, key: 'sg-' + it.id + '-' + i + on, ignoreSelection: true }))
+        if (h.delTo > h.delFrom) decos.push(Decoration.inline(h.delFrom, h.delTo, { class: 'sg-del' + on, 'data-sg': it.id, 'data-sgh': String(i) }))
+        // the key carries the change itself: after one change is taken, the indices shift
+        if (h.ins) decos.push(Decoration.widget(h.delTo, insWidget(it.id, h, on, i), { side: 1, key: 'sg-' + it.id + '-' + i + '-' + h.delTo + '-' + h.ins + on, ignoreSelection: true }))
       })
     } else if (it.kind === 'math') {
       decos.push(Decoration.inline(it.from, it.to, { class: 'sg-del' + on, 'data-sg': it.id }))
@@ -608,6 +610,8 @@ export const Suggestions = Extension.create({
                 closed = closed.filter((x) => x !== c)
               }
             }
+            // one change of an edit taken or dismissed: the rest of the edit, re-anchored
+            if (meta.update) items = items.filter((it) => it.id !== meta.update.id).concat(meta.update).sort((a, b) => a.from - b.from)
             if (meta.add) items = items.concat(meta.add).sort((a, b) => a.from - b.from)
             if (meta.active !== undefined) active = meta.active
           }
@@ -1106,6 +1110,32 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     }
     editor.view.dispatch(tr.setMeta(key, { remove: id })) // one undoable step
   }
+  // Just one change of an edit (a deletion and what replaces it go together). The rest of
+  // the edit stays, re-anchored on the new text; taking the last one closes the edit.
+  function acceptHunk(id, i) {
+    const it = find(id)
+    if (!it || it.kind !== 'edit' || !it.hunks[i]) return
+    if (it.hunks.length === 1) return accept(id)
+    const { state } = editor
+    if (textOf(state.doc, it.from, it.to) !== it.text) { dispatchMeta({ remove: id }); return }
+    const h = it.hunks[i]
+    const tr = state.tr
+    if (h.ins) tr.insertText(h.ins, h.delFrom, h.delTo)
+    else tr.delete(h.delFrom, h.delTo)
+    const m = tr.mapping
+    const hunks = it.hunks.filter((_, k) => k !== i).map((x) => {
+      if (x.delTo === x.delFrom) { const p = m.map(x.delFrom, 1); return { ...x, delFrom: p, delTo: p } }
+      return { ...x, delFrom: m.map(x.delFrom, 1), delTo: m.map(x.delTo, -1) }
+    })
+    const from = m.map(it.from, -1), to = m.map(it.to, 1)
+    editor.view.dispatch(tr.setMeta(key, { update: { ...it, from, to, text: textOf(tr.doc, from, to), hunks } }))
+  }
+  function dismissHunk(id, i) {
+    const it = find(id)
+    if (!it || it.kind !== 'edit' || !it.hunks[i]) return
+    if (it.hunks.length === 1) return dismiss(id)
+    dispatchMeta({ update: { ...it, hunks: it.hunks.filter((_, k) => k !== i) } })
+  }
   function dismiss(id) {
     const it = find(id)
     if (it) dismissed.add(fingerprint(it))
@@ -1267,6 +1297,43 @@ export function setupSuggestions(editor, comments, { getDocId }) {
     const el = e.target && e.target.closest && e.target.closest('.sg-ins')
     if (el) setTimeout(() => setActive(el.dataset.sg), 0)
   })
+
+  /* ---- hover one change of an edit: ✓ / ✕ for just that change ---- */
+  const bar = document.createElement('div')
+  bar.className = 'sg-hunkbar hidden'
+  bar.innerHTML = '<button type="button" class="sg-hb-ok" title="Accept this change">✓</button><button type="button" class="sg-hb-no" title="Dismiss this change">✕</button>'
+  document.body.appendChild(bar)
+  let hov = null, hideT = 0
+  const partsOf = (h) => editor.view.dom.querySelectorAll('[data-sg="' + CSS.escape(h.id) + '"][data-sgh="' + h.i + '"]')
+  const unmark = () => { if (hov) partsOf(hov).forEach((el) => el.classList.remove('sg-hover')) }
+  function hideBar() { clearTimeout(hideT); unmark(); hov = null; bar.classList.add('hidden') }
+  editor.view.dom.addEventListener('mouseover', (e) => {
+    const el = e.target && e.target.closest && e.target.closest('[data-sgh]')
+    if (!el) return
+    clearTimeout(hideT)
+    const h = { id: el.dataset.sg, i: +el.dataset.sgh }
+    if (hov && hov.id === h.id && hov.i === h.i) return
+    unmark()
+    hov = h
+    const parts = Array.from(partsOf(h))
+    parts.forEach((p) => p.classList.add('sg-hover'))
+    // above the start of the change (its deletion if it has one, else its insertion)
+    const r = (parts[0] || el).getClientRects()[0] || el.getBoundingClientRect()
+    bar.classList.remove('hidden')
+    bar.style.left = Math.max(8, Math.min(r.left, window.innerWidth - bar.offsetWidth - 8)) + 'px'
+    bar.style.top = Math.max(8, r.top - bar.offsetHeight - 4) + 'px'
+  })
+  editor.view.dom.addEventListener('mouseout', (e) => {
+    if (!hov || !e.target.closest || !e.target.closest('[data-sgh]')) return
+    clearTimeout(hideT)
+    hideT = setTimeout(hideBar, 300) // time to reach the bar
+  })
+  bar.addEventListener('mouseenter', () => clearTimeout(hideT))
+  bar.addEventListener('mouseleave', () => { hideT = setTimeout(hideBar, 200) })
+  bar.addEventListener('mousedown', (e) => e.preventDefault()) // keep the caret where it is
+  bar.querySelector('.sg-hb-ok').addEventListener('click', () => { const h = hov; hideBar(); if (h) acceptHunk(h.id, h.i) })
+  bar.querySelector('.sg-hb-no').addEventListener('click', () => { const h = hov; hideBar(); if (h) dismissHunk(h.id, h.i) })
+  editor.on('transaction', ({ transaction }) => { if (transaction.docChanged && hov) hideBar() })
 
   /* ---- scope: the selection, else the whole draft ---- */
   const countWords = (t) => t.split(/\s+/).filter(Boolean).length

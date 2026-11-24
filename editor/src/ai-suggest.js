@@ -38,6 +38,7 @@ import { $, uid, toast, escapeHtml } from './dom.js'
 import { aiSettings, openSettings } from './ai-math.js'
 import { freshContext, setupContextUI } from './ai-context.js'
 import { LEVEL_COLORS, levelsFor, sameEquation, colorsAllowed } from './equation-levels.js'
+import { focusRange } from './focus.js'
 
 const CATEGORY_LABELS = {
   grammar: 'Grammar', style: 'Style', flow: 'Flow', clarity: 'Clarity',
@@ -1354,14 +1355,26 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
   bar.querySelector('.sg-hb-no').addEventListener('click', () => { const h = hov; hideBar(); if (h) dismissHunk(h.id, h.i) })
   editor.on('transaction', ({ transaction }) => { if (transaction.docChanged && hov) hideBar() })
 
-  /* ---- scope: the selection, else the whole draft ---- */
+  /* ---- scope: the selection, else the focused section, else the whole draft ---- */
   const countWords = (t) => t.split(/\s+/).filter(Boolean).length
   const wordsLabel = (n) => n.toLocaleString('en-US') + (n === 1 ? ' word' : ' words')
   function scopeOf(state) {
     const { doc, selection } = state
+    const focus = focusRange(state)
     if (!selection.empty && !selection.node) {
-      const words = countWords(doc.textBetween(selection.from, selection.to, ' ', ' '))
-      return { from: selection.from, to: selection.to, label: 'Selection · ' + wordsLabel(words), where: 'the writer’s selection' }
+      // in focus mode, only the part of the selection inside the section
+      const from = focus ? Math.max(selection.from, focus.from) : selection.from
+      const to = focus ? Math.min(selection.to, focus.to) : selection.to
+      if (from < to) {
+        const words = countWords(doc.textBetween(from, to, ' ', ' '))
+        return { from, to, label: 'Selection · ' + wordsLabel(words), where: 'the writer’s selection' }
+      }
+    }
+    if (focus) {
+      const head = doc.nodeAt(focus.from)
+      const title = (head && head.type.name === 'heading' && head.textContent.trim()) || 'this section'
+      const words = countWords(doc.textBetween(focus.from, focus.to, ' ', ' '))
+      return { from: focus.from, to: focus.to, section: true, label: 'Section “' + title + '” · ' + wordsLabel(words), where: 'the section “' + title + '” (the writer is focused on it)' }
     }
     const words = countWords(doc.textBetween(0, doc.content.size, ' ', ' '))
     return { from: 0, to: doc.content.size, whole: true, label: 'Whole draft · ' + wordsLabel(words), where: 'the whole draft' }
@@ -1837,7 +1850,7 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
   /* ---- the menu ---- */
   function openMenu() {
     const scope = scopeOf(editor.state)
-    $('sgScope').textContent = scope.label + (scope.whole ? ' — select text to narrow it' : '')
+    $('sgScope').textContent = scope.label + (scope.whole || scope.section ? ' — select text to narrow it' : '')
     menu.querySelectorAll('[data-mode]').forEach((b) => { b.disabled = !!run })
     $('sgStop').hidden = !run
     $('sgClear').hidden = !st().items.length

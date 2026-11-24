@@ -935,6 +935,8 @@ async function requestRead(input, signal) {
   const user = notesBlock(input.notes) + sourcesBlock(input.sources) +
     'Title: ' + (input.title || '(untitled)') + '\n' + (input.subtitle ? 'Subtitle: ' + input.subtitle + '\n' : '') +
     (input.stage ? 'The author says the draft is at this stage: ' + STAGES[input.stage] + '\n' : '') +
+    (input.part ? '\nThe author asked you to look at only ' + input.part + ' of a longer draft. Read just that part ' +
+      '(below), and keep the summary, stage, unfinished and priorities about it alone.\n' : '') +
     '\n<document>\n' + input.docText + '\n</document>\n' + commentsBlock(input.authorComments)
   const r = await chatJSON(READ_PROMPT + (input.notes && input.notes.length ? NOTES : '') + (input.sources && input.sources.length ? SOURCES : ''),
     user, READ_SCHEMA, 'medium', signal)
@@ -1420,16 +1422,19 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
     const lo = part[0].pos, hi = part[part.length - 1].pos + part[part.length - 1].size
     return authorComments().filter((c) => c.from >= lo && c.from < hi)
   }
-  async function editorsRead(docText, footnotes, notes, sources, signal) {
+  // the read covers the scope: the whole draft, or just the focused section / selection
+  async function editorsRead(docText, footnotes, notes, sources, signal, scope) {
     const stage = getStage() === 'auto' ? '' : getStage()
     const words = countWords(docText)
-    const cached = reads.get(getDocId())
+    const rkey = getDocId() + (scope && !scope.whole ? '|' + docText.slice(0, 80) : '')
+    const cached = reads.get(rkey)
     if (cached && cached.stage === stage && Math.abs(cached.words - words) < Math.max(120, words * 0.04)) return { read: cached.read, fresh: false }
     const read = await requestRead({
       title: ($('docTitle') || {}).textContent || '', subtitle: ($('docSubtitle') || {}).textContent || '',
       docText: docText + footnotes, notes, sources, stage, authorComments: authorComments(),
+      part: scope && !scope.whole ? scope.where : '',
     }, signal)
-    reads.set(getDocId(), { words, stage, read })
+    reads.set(rkey, { words, stage, read })
     return { read, fresh: true }
   }
   const STAGE_NAMES = { rough: 'Rough draft', revising: 'Revising', polish: 'Final polish' }
@@ -1441,9 +1446,9 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
       (r.unfinished.length ? '**Still in progress (leaving these alone):**\n' + r.unfinished.map((x) => '- ' + x).join('\n') : '')
   }
   // put the read in the Ask thread, so it's visible and follow-up questions know it
-  function showRead(r) {
+  function showRead(r, scope) {
     if (threadDoc !== getDocId()) clearThread()
-    const el = askEntry('Editor’s read of the draft', 'Before the Review')
+    const el = askEntry('Editor’s read of ' + scopeName(scope), 'Before the Review')
     const a = readAnswer(r)
     fillEntry(el, a, [], '')
     thread.push({ q: 'What is your overall read of the draft?', a })
@@ -1452,10 +1457,11 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
   }
 
   /* ---- a run ---- */
-  function pendingCard(mode) {
+  const scopeName = (scope) => !scope || scope.whole ? 'the draft' : scope.section ? 'this section' : 'the selection'
+  function pendingCard(mode, scope) {
     const card = document.createElement('div')
     card.className = 'cmt-card sg-card sg-pending'
-    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : mode === 'equations' ? 'Drafting equation versions…' : mode === 'review' ? 'Reading the whole piece…' : 'Reading…') +
+    card.innerHTML = '<span class="sg-spin"></span><span>' + (mode === 'proofread' ? 'Proofreading…' : mode === 'links' ? 'Finding links…' : mode === 'equations' ? 'Drafting equation versions…' : mode === 'review' ? (!scope || scope.whole ? 'Reading the whole piece…' : 'Reading ' + scopeName(scope) + '…') : 'Reading…') +
       '</span><button class="sg-stop" type="button">Stop</button>'
     card.querySelector('.sg-stop').addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); stop() })
     card.addEventListener('mousedown', (e) => e.preventDefault())
@@ -1561,7 +1567,7 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
     const maps = []
     run = {
-      mode, scope, maps, controller, docId: getDocId(), card: pendingCard(mode),
+      mode, scope, maps, controller, docId: getDocId(), card: pendingCard(mode, scope),
       mapPos: (p, assoc) => maps.reduce((q, m) => m.map(q, assoc), p),
     }
     layer.appendChild(run.card)
@@ -1585,10 +1591,13 @@ export function setupSuggestions(editor, comments, { getDocId, onItemsChange }) 
       // go through it part by part with that read in hand
       let read = null
       if (mode === 'review') {
-        const r = await editorsRead(docText, footnotes, notes.parts, sources, controller.signal)
+        // the whole piece, or only the focused section / selection
+        const r = scope.whole
+          ? await editorsRead(docText, footnotes, notes.parts, sources, controller.signal, scope)
+          : await editorsRead(blocks.map((b) => b.str).join('\n\n'), '', notes.parts, sources, controller.signal, scope)
         read = r.read
         if (thisRun.docId !== getDocId()) return
-        if (r.fresh) showRead(read)
+        if (r.fresh) showRead(read, scope)
         thisRun.card.querySelector('span:not(.sg-spin)').textContent = parts.length > 1 ? 'Editing ' + parts.length + ' parts…' : 'Editing…'
       }
       // Review scales with length: ~1 suggestion per 90 words of a part, between 4 and 12
